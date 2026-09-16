@@ -1,19 +1,35 @@
 @import "tailwindcss";
 
-/* ── Lab design tokens (medical teal) ────────────────────────────────────── */
-@theme inline {
-  --color-brand: #0d9488;        /* teal-600 */
-  --color-brand-dark: #0f766e;   /* teal-700 */
-  --color-brand-light: #f0fdfa;  /* teal-50  */
-  --color-ink: #0f172a;          /* slate-900 */
-  --color-muted: #64748b;        /* slate-500 */
-  --color-line: #e2e8f0;         /* slate-200 */
+/* ── Lab design tokens (medical teal) ──────────────────────────────────────
+   Non-inline @theme so utilities reference the CSS variables, letting a
+   [data-theme="dark"] override re-theme the whole UI at runtime. */
+@theme {
+  --color-brand: #0d9488; /* teal-600 */
+  --color-brand-dark: #0f766e; /* teal-700 */
+  --color-brand-light: #f0fdfa; /* teal-50  */
+  --color-ink: #0f172a; /* slate-900 */
+  --color-muted: #64748b; /* slate-500 */
+  --color-line: #e2e8f0; /* slate-200 */
   --color-surface: #ffffff;
-  --color-canvas: #f8fafc;       /* slate-50 */
-  --color-high: #dc2626;         /* H flag red */
-  --color-low: #2563eb;          /* L flag blue */
+  --color-canvas: #f8fafc; /* slate-50 */
+  --color-high: #dc2626; /* H flag red */
+  --color-low: #2563eb; /* L flag blue */
   --font-sans: ui-sans-serif, system-ui, "Segoe UI", Tahoma, "Noto Sans Arabic",
     sans-serif;
+}
+
+/* Dark theme — steps chosen against the dark surface, not an automatic flip. */
+:root[data-theme="dark"] {
+  --color-brand: #2dd4bf; /* teal-400 (lifts on dark) */
+  --color-brand-dark: #14b8a6; /* teal-500 */
+  --color-brand-light: #0b3b36; /* deep teal tint */
+  --color-ink: #e2e8f0; /* slate-200 */
+  --color-muted: #94a3b8; /* slate-400 */
+  --color-line: #1e293b; /* slate-800 */
+  --color-surface: #0f172a; /* slate-900 */
+  --color-canvas: #0b1220; /* near-black navy */
+  --color-high: #f87171; /* red-400 */
+  --color-low: #60a5fa; /* blue-400 */
 }
 
 html,
@@ -29,7 +45,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Print: hide chrome, keep report clean on A4 */
+/* Print: hide chrome, force the report onto white regardless of theme */
 @media print {
   .no-print {
     display: none !important;

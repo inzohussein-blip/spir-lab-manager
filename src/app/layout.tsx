@@ -23,7 +23,15 @@ export default async function RootLayout({
   const user = isBare ? null : await getCurrentUser();
 
   return (
-    <html lang="ar" dir="rtl">
+    <html lang="ar" dir="rtl" suppressHydrationWarning>
+      <head>
+        {/* No-flash theme: apply the saved (or system) theme before paint. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{var t=localStorage.getItem('lab-theme');if(t==='dark'||(!t&&window.matchMedia&&matchMedia('(prefers-color-scheme:dark)').matches)){document.documentElement.setAttribute('data-theme','dark')}}catch(e){}`,
+          }}
+        />
+      </head>
       <body className="min-h-screen">
         <Toaster position="top-center" richColors />
         {isBare || !user ? (
