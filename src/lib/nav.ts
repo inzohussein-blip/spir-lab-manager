@@ -7,6 +7,7 @@ import {
   CalendarDays,
   Boxes,
   ShoppingCart,
+  ReceiptText,
   UserCog,
   ShieldCheck,
   Wrench,
@@ -45,8 +46,9 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    label: "المخزون والمشتريات",
+    label: "المالية والمخزون",
     items: [
+      { href: "/invoices", label: "الفواتير", icon: ReceiptText },
       { href: "/inventory", label: "المخزون والكواشف", icon: Boxes },
       { href: "/orders-expenses", label: "الطلبيات والمصروفات", icon: ShoppingCart },
     ],

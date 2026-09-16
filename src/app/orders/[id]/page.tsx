@@ -4,6 +4,7 @@ import { FileText } from "lucide-react";
 import { query, queryOne } from "@/lib/db";
 import { barcodeSvg } from "@/lib/barcode";
 import { saveResult, setOrderStatus } from "@/app/actions/orders";
+import { createInvoiceFromOrder } from "@/app/actions/invoices";
 import { PageHeader, Card, Button, FlagChip } from "@/components/ui/primitives";
 import { AiAssistant } from "@/components/AiAssistant";
 
@@ -49,6 +50,9 @@ export default async function OrderDetailPage({
             <Button href={`/orders/${order.id}/report`} variant="ghost">
               <FileText className="size-4" /> التقرير / الطباعة
             </Button>
+            <form action={createInvoiceFromOrder.bind(null, order.id)}>
+              <Button variant="ghost">إنشاء فاتورة</Button>
+            </form>
             <form action={setOrderStatus}>
               <input type="hidden" name="order_id" value={order.id} />
               <input type="hidden" name="status" value="completed" />
