@@ -7,6 +7,7 @@ import {
   ShoppingCart,
   CalendarDays,
   UserCog,
+  BarChart3,
   type LucideIcon,
 } from "lucide-react";
 
@@ -19,6 +20,7 @@ export interface NavItem {
 // Ordered to match the PDF specification sections, lab-management only.
 export const NAV: NavItem[] = [
   { href: "/", label: "لوحة التحكم", icon: LayoutDashboard },
+  { href: "/insights", label: "لوحة التحليلات", icon: BarChart3 },
   { href: "/patients", label: "المرضى", icon: Users },
   { href: "/orders", label: "الفحوصات والنتائج", icon: ClipboardList },
   { href: "/tests", label: "كتالوج الفحوصات", icon: FlaskConical },

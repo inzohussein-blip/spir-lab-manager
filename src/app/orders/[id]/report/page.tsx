@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
 import QRCode from "qrcode";
 import { query, queryOne } from "@/lib/db";
 import { PrintButton } from "@/components/PrintButton";
@@ -45,7 +46,16 @@ export default async function ReportPage({
   );
 
   const token = await getReportToken(order.id, order.patient_id);
-  const qr = await QRCode.toDataURL(`REPORT:${token}`, { margin: 1, width: 120 });
+  // Encode the absolute verification URL so scanning the QR opens the public
+  // /verify page (section 8: online report authenticity check).
+  const h = headers();
+  const base =
+    process.env.NEXT_PUBLIC_BASE_URL ||
+    (h.get("x-forwarded-host") || h.get("host")
+      ? `${h.get("x-forwarded-proto") || "https"}://${h.get("x-forwarded-host") || h.get("host")}`
+      : "");
+  const verifyUrl = `${base}/verify/${token}`;
+  const qr = await QRCode.toDataURL(verifyUrl, { margin: 1, width: 120 });
 
   return (
     <div>

@@ -9,6 +9,14 @@ export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const hasSession = req.cookies.has("lab_session");
   const isLogin = pathname === "/login";
+  // Public report verification (scanned from the QR) needs no login.
+  const isPublic = pathname.startsWith("/verify");
+
+  if (isPublic) {
+    const res = NextResponse.next();
+    res.headers.set("x-pathname", pathname);
+    return res;
+  }
 
   if (!hasSession && !isLogin) {
     const url = req.nextUrl.clone();
