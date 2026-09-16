@@ -10,6 +10,8 @@ import {
   ReceiptText,
   PackagePlus,
   Scale,
+  ScrollText,
+  Building2,
   UserCog,
   ShieldCheck,
   Wrench,
@@ -54,7 +56,14 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/inventory", label: "المخزون والكواشف", icon: Boxes },
       { href: "/reorder", label: "إعادة الطلب", icon: PackagePlus },
       { href: "/stock-balance", label: "أرصدة المخزون", icon: Scale },
-      { href: "/orders-expenses", label: "الطلبيات والمصروفات", icon: ShoppingCart },
+      { href: "/orders-expenses", label: "المصروفات", icon: ShoppingCart },
+    ],
+  },
+  {
+    label: "المشتريات",
+    items: [
+      { href: "/purchase-orders", label: "أوامر الشراء", icon: ScrollText },
+      { href: "/suppliers", label: "الموردون", icon: Building2 },
     ],
   },
   {
