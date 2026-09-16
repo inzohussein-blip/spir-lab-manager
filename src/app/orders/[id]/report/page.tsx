@@ -4,7 +4,6 @@ import QRCode from "qrcode";
 import { query, queryOne } from "@/lib/db";
 import { PrintButton } from "@/components/PrintButton";
 import { WhatsAppButton } from "@/components/WhatsAppButton";
-import { FlagChip } from "@/components/ui/primitives";
 
 export const dynamic = "force-dynamic";
 
@@ -37,12 +36,25 @@ export default async function ReportPage({
 
   const items = await query<any>(
     `select t.name_ar, t.name_en, t.unit, t.normal_low, t.normal_high, t.is_special,
+            coalesce(t.category, 'فحوصات عامة') as category, t.sample_type,
             r.value_numeric, r.value_text, r.flag, r.physical_inspection, r.microscopic
        from test_order_items i
        join test_catalog t on t.id = i.test_id
        left join test_results r on r.order_item_id = i.id
-      where i.order_id = $1 order by t.name_ar`,
+      where i.order_id = $1 order by t.category, t.name_ar`,
     [params.id]
+  );
+
+  // Group results by department/category (DiagLab-style report layout).
+  const groups = new Map<string, any[]>();
+  for (const it of items) {
+    const key = it.category as string;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(it);
+  }
+  const hasAbnormal = items.some((it: any) => it.flag === "H" || it.flag === "L");
+  const anyResult = items.some(
+    (it: any) => it.value_numeric != null || it.value_text || it.physical_inspection || it.microscopic
   );
 
   const token = await getReportToken(order.id, order.patient_id);
@@ -66,84 +78,135 @@ export default async function ReportPage({
 
       {/* A4 report sheet */}
       <div className="mx-auto max-w-[210mm] bg-white p-8 text-black shadow-sm print:shadow-none">
+        {/* Header */}
         <div className="flex items-start justify-between border-b-2 border-teal-700 pb-4">
-          <div>
-            <h1 className="text-2xl font-bold text-teal-800">مختبر التحاليل الطبية</h1>
-            <p className="text-sm text-gray-600">تقرير نتائج الفحوصات</p>
+          <div className="flex items-center gap-3">
+            <span className="grid size-12 place-items-center rounded-xl bg-teal-700 text-xl font-bold text-white">
+              م
+            </span>
+            <div>
+              <h1 className="text-2xl font-bold text-teal-800">مختبر التحاليل الطبية</h1>
+              <p className="text-sm text-gray-600">تقرير نتائج الفحوصات المرضية</p>
+            </div>
           </div>
-          <img src={qr} alt="QR" width={90} height={90} />
+          <div className="text-center">
+            <img src={qr} alt="QR" width={92} height={92} />
+            <div className="text-[10px] text-gray-500">امسح للتحقق</div>
+          </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
-          <div><b>المريض:</b> {order.full_name}</div>
-          <div><b>التاريخ:</b> {order.order_date}</div>
-          {order.accession_no && (
-            <div><b>رقم العيّنة:</b> {order.accession_no}</div>
-          )}
+        {/* Patient meta block */}
+        <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2 rounded-lg bg-gray-50 p-4 text-sm sm:grid-cols-3">
+          <div><span className="text-gray-500">المريض:</span> <b>{order.full_name}</b></div>
+          <div><span className="text-gray-500">رقم العيّنة:</span> {order.accession_no ?? "—"}</div>
+          <div><span className="text-gray-500">التاريخ:</span> {order.order_date}</div>
           <div>
-            <b>الجنس:</b>{" "}
+            <span className="text-gray-500">الجنس:</span>{" "}
             {order.gender === "male" ? "ذكر" : order.gender === "female" ? "أنثى" : "—"}
           </div>
-          <div><b>العمر:</b> {order.age_years ?? "—"}</div>
+          <div><span className="text-gray-500">العمر:</span> {order.age_years ?? "—"}</div>
+          <div><span className="text-gray-500">الهاتف:</span> {order.phone ?? "—"}</div>
         </div>
 
-        <table className="mt-5 w-full border-collapse text-sm">
-          <thead>
-            <tr className="border-b border-gray-300 text-right">
-              <th className="py-2">الفحص</th>
-              <th className="py-2">النتيجة</th>
-              <th className="py-2">الوحدة</th>
-              <th className="py-2">النطاق الطبيعي</th>
-              <th className="py-2">الحالة</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((it: any, i: number) => (
-              <tr key={i} className="border-b border-gray-100 align-top">
-                <td className="py-2 font-medium">
-                  {it.name_ar}
-                  {it.name_en && (
-                    <span className="block text-xs text-gray-500">{it.name_en}</span>
-                  )}
-                  {it.is_special && (it.physical_inspection || it.microscopic) && (
-                    <div className="mt-1 text-xs text-gray-600">
-                      {it.physical_inspection && (
-                        <div>
-                          فحص عيني: لون {it.physical_inspection.color ?? "—"}، مظهر{" "}
-                          {it.physical_inspection.appearance ?? "—"}، رواسب{" "}
-                          {it.physical_inspection.sediment ?? "—"}
+        {/* Results grouped by department */}
+        {Array.from(groups.entries()).map(([category, rows]) => (
+          <div key={category} className="mt-5">
+            <div className="mb-1 border-b border-teal-200 pb-1 text-sm font-bold text-teal-800">
+              {category}
+            </div>
+            <table className="w-full border-collapse text-sm">
+              <thead>
+                <tr className="text-right text-xs text-gray-500">
+                  <th className="py-1.5 font-medium">الفحص</th>
+                  <th className="py-1.5 font-medium">النتيجة</th>
+                  <th className="py-1.5 font-medium">الوحدة</th>
+                  <th className="py-1.5 font-medium">النطاق الطبيعي</th>
+                  <th className="py-1.5 font-medium">الحالة</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((it: any, i: number) => (
+                  <tr key={i} className="border-b border-gray-100 align-top">
+                    <td className="py-2 font-medium">
+                      {it.name_ar}
+                      {it.name_en && (
+                        <span className="block text-xs font-normal text-gray-500">{it.name_en}</span>
+                      )}
+                      {it.is_special && (it.physical_inspection || it.microscopic) && (
+                        <div className="mt-1 text-xs font-normal text-gray-600">
+                          {it.physical_inspection && (
+                            <div>
+                              فحص عيني: لون {it.physical_inspection.color ?? "—"}، مظهر{" "}
+                              {it.physical_inspection.appearance ?? "—"}، رواسب{" "}
+                              {it.physical_inspection.sediment ?? "—"}
+                            </div>
+                          )}
+                          {it.microscopic && (
+                            <div>
+                              مجهري: RBC {it.microscopic.rbc ?? "—"}، Pus{" "}
+                              {it.microscopic.pus_cells ?? "—"}، أملاح{" "}
+                              {it.microscopic.crystals ?? "—"}
+                            </div>
+                          )}
                         </div>
                       )}
-                      {it.microscopic && (
-                        <div>
-                          مجهري: RBC {it.microscopic.rbc ?? "—"}، Pus{" "}
-                          {it.microscopic.pus_cells ?? "—"}، أملاح{" "}
-                          {it.microscopic.crystals ?? "—"}
-                        </div>
+                    </td>
+                    <td className="py-2">
+                      <span className={it.flag === "H" || it.flag === "L" ? "font-bold" : ""}>
+                        {it.value_numeric ?? it.value_text ?? (it.is_special ? "↓ تفاصيل" : "—")}
+                      </span>
+                    </td>
+                    <td className="py-2 text-gray-600">{it.unit ?? "—"}</td>
+                    <td className="py-2 text-gray-600">
+                      {it.normal_low ?? ""}
+                      {it.normal_low != null || it.normal_high != null ? " – " : ""}
+                      {it.normal_high ?? ""}
+                    </td>
+                    <td className="py-2">
+                      {it.flag === "H" ? (
+                        <span className="rounded bg-red-50 px-1.5 py-0.5 text-xs font-bold text-red-600">H مرتفع</span>
+                      ) : it.flag === "L" ? (
+                        <span className="rounded bg-blue-50 px-1.5 py-0.5 text-xs font-bold text-blue-600">L منخفض</span>
+                      ) : it.flag === "N" ? (
+                        <span className="text-xs text-teal-700">طبيعي</span>
+                      ) : (
+                        <span className="text-gray-400">—</span>
                       )}
-                    </div>
-                  )}
-                </td>
-                <td className="py-2">
-                  {it.value_numeric ?? it.value_text ?? (it.is_special ? "↓ تفاصيل" : "—")}
-                </td>
-                <td className="py-2">{it.unit ?? "—"}</td>
-                <td className="py-2">
-                  {it.normal_low ?? ""}
-                  {it.normal_low != null || it.normal_high != null ? " – " : ""}
-                  {it.normal_high ?? ""}
-                </td>
-                <td className="py-2">
-                  <FlagChip flag={it.flag} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ))}
 
-        <div className="mt-8 flex justify-between text-xs text-gray-500">
-          <span>رمز التحقق: {token}</span>
-          <span>Spir Lab Manager</span>
+        {/* Interpretation */}
+        <div className="mt-6 rounded-lg border border-gray-200 p-4 text-sm">
+          <div className="mb-1 font-bold text-teal-800">التفسير</div>
+          <p className="leading-relaxed text-gray-700">
+            {!anyResult
+              ? "لم تُدخَل نتائج بعد لهذا الطلب."
+              : hasAbnormal
+              ? "توجد قراءات خارج النطاق الطبيعي (موسومة H/L). تُفسَّر هذه النتائج مع التاريخ المرضي والحالة السريرية والأدوية الحالية، ويعود القرار النهائي للطبيب المختص."
+              : "جميع القراءات المُبلَّغة تقع ضمن النطاقات الطبيعية. لا يُستدل من هذه النتائج وحدها على إجراء بعينه؛ تُقرأ مع الحالة السريرية."}
+          </p>
+        </div>
+
+        {/* Footer: signature + confidentiality + verification */}
+        <div className="mt-8 flex items-end justify-between gap-6 border-t border-gray-200 pt-5 text-xs text-gray-600">
+          <div>
+            <div className="mb-6">اعتمد النتائج:</div>
+            <div className="w-48 border-t border-gray-400 pt-1 text-center text-gray-500">
+              التوقيع / الختم
+            </div>
+          </div>
+          <div className="text-left">
+            <div>رمز التحقق: <span className="font-mono">{token}</span></div>
+            <div>أُصدر: {new Date().toISOString().slice(0, 16).replace("T", " ")}</div>
+            <div className="mt-2 max-w-xs text-gray-400">
+              وثيقة سرّية تخص المريض المذكور. يُتحقق من صحتها عبر مسح رمز QR.
+            </div>
+          </div>
         </div>
       </div>
     </div>
