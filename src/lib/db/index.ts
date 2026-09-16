@@ -23,16 +23,30 @@ export interface Db {
   ): Promise<{ rows: T[]; affectedRows?: number }>;
 }
 
-// On a serverless host the project dir is read-only, so PGlite must write to a
-// writable temp dir. This is ephemeral (per-instance, not shared) — a demo
-// fallback until DATABASE_URL points at a real database.
-const IS_SERVERLESS =
-  !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME;
-const DATA_DIR =
-  process.env.PGLITE_DATA_DIR ||
-  (IS_SERVERLESS
-    ? path.join(os.tmpdir(), "lab-pglite-data")
-    : path.join(process.cwd(), ".pglite-data"));
+// PGlite needs a writable data dir. The project dir works locally, but on a
+// serverless host (Vercel) it is read-only, so we must fall back to a writable
+// temp dir. Rather than trust env detection, actually TEST writability and fall
+// back on any failure — bulletproof against EROFS. The temp dir is ephemeral
+// (per-instance, not shared): a demo fallback until DATABASE_URL is set.
+function resolveDataDir(): string {
+  const candidates = [
+    process.env.PGLITE_DATA_DIR,
+    path.join(process.cwd(), ".pglite-data"),
+    path.join(os.tmpdir(), "lab-pglite-data"),
+  ].filter(Boolean) as string[];
+  for (const dir of candidates) {
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+      fs.accessSync(dir, fs.constants.W_OK);
+      return dir;
+    } catch {
+      // not writable here — try the next candidate
+    }
+  }
+  // Last resort: a unique temp dir (mkdtemp always targets a writable base).
+  return fs.mkdtempSync(path.join(os.tmpdir(), "lab-pglite-"));
+}
+
 const MIGRATIONS_DIR = path.join(process.cwd(), "supabase", "migrations");
 const SEED_FILE = path.join(process.cwd(), "supabase", "seed.sql");
 
@@ -72,13 +86,17 @@ async function initPg(url: string): Promise<Db> {
 async function initPglite(): Promise<Db> {
   const { PGlite } = await import("@electric-sql/pglite");
   const { pgcrypto } = await import("@electric-sql/pglite/contrib/pgcrypto");
-  const fresh = !fs.existsSync(DATA_DIR);
-  const pg = await PGlite.create(DATA_DIR, {
+  const pg = await PGlite.create(resolveDataDir(), {
     extensions: { pgcrypto },
     parsers: Object.fromEntries(DATE_OIDS.map((oid) => [oid, (v: string) => v])),
   });
 
-  if (fresh) {
+  // Apply migrations only when the schema is absent (freshness by content, not
+  // by dir existence — the temp dir may be recreated empty per instance).
+  const check = await pg.query<{ n: number }>(
+    `select count(*)::int as n from information_schema.tables where table_name = 'app_users'`
+  );
+  if (!check.rows[0] || check.rows[0].n === 0) {
     const files = fs
       .readdirSync(MIGRATIONS_DIR)
       .filter((f) => f.endsWith(".sql"))
