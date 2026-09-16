@@ -1,0 +1,50 @@
+@import "tailwindcss";
+
+/* ── Lab design tokens (medical teal) ────────────────────────────────────── */
+@theme inline {
+  --color-brand: #0d9488;        /* teal-600 */
+  --color-brand-dark: #0f766e;   /* teal-700 */
+  --color-brand-light: #f0fdfa;  /* teal-50  */
+  --color-ink: #0f172a;          /* slate-900 */
+  --color-muted: #64748b;        /* slate-500 */
+  --color-line: #e2e8f0;         /* slate-200 */
+  --color-surface: #ffffff;
+  --color-canvas: #f8fafc;       /* slate-50 */
+  --color-high: #dc2626;         /* H flag red */
+  --color-low: #2563eb;          /* L flag blue */
+  --font-sans: ui-sans-serif, system-ui, "Segoe UI", Tahoma, "Noto Sans Arabic",
+    sans-serif;
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Print: hide chrome, keep report clean on A4 */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: #fff;
+  }
+}
+
+/* Result flag chips */
+.flag-H {
+  color: var(--color-high);
+  font-weight: 700;
+}
+.flag-L {
+  color: var(--color-low);
+  font-weight: 700;
+}
