@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { NAV } from "@/lib/nav";
+import { NAV_GROUPS } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 
 export function Sidebar() {
@@ -18,28 +18,37 @@ export function Sidebar() {
           <div className="text-xs font-normal text-muted">Spir Lab Manager</div>
         </div>
       </div>
-      <nav className="flex flex-col gap-0.5 px-3 py-2">
-        {NAV.map((item) => {
-          const active =
-            item.href === "/"
-              ? pathname === "/"
-              : pathname.startsWith(item.href);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
-                active
-                  ? "bg-brand-light font-semibold text-brand-dark"
-                  : "text-ink hover:bg-canvas"
-              )}
-            >
-              <item.icon className="size-4.5 shrink-0" />
-              {item.label}
-            </Link>
-          );
-        })}
+      <nav className="flex flex-col gap-4 px-3 py-2">
+        {NAV_GROUPS.map((group) => (
+          <div key={group.label}>
+            <div className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted">
+              {group.label}
+            </div>
+            <div className="flex flex-col gap-0.5">
+              {group.items.map((item) => {
+                const active =
+                  item.href === "/"
+                    ? pathname === "/"
+                    : pathname.startsWith(item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={cn(
+                      "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+                      active
+                        ? "bg-brand-light font-semibold text-brand-dark"
+                        : "text-ink hover:bg-canvas"
+                    )}
+                  >
+                    <item.icon className="size-4.5 shrink-0" />
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
     </aside>
   );
