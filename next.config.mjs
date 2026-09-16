@@ -9,6 +9,7 @@ const nextConfig = {
       "@electric-sql/pglite",
       "pg",
       "@react-pdf/renderer",
+      "bwip-js",
     ],
     // The PGlite fallback reads these SQL files at runtime; make sure Vercel's
     // function bundle includes them (they aren't statically imported).

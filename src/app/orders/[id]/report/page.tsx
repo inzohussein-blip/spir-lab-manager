@@ -2,8 +2,10 @@ import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import QRCode from "qrcode";
 import { query, queryOne } from "@/lib/db";
+import { barcodeSvg } from "@/lib/barcode";
 import { PrintButton } from "@/components/PrintButton";
 import { WhatsAppButton } from "@/components/WhatsAppButton";
+import { ReportImageButton } from "@/components/ReportImageButton";
 
 export const dynamic = "force-dynamic";
 
@@ -68,16 +70,18 @@ export default async function ReportPage({
       : "");
   const verifyUrl = `${base}/verify/${token}`;
   const qr = await QRCode.toDataURL(verifyUrl, { margin: 1, width: 120 });
+  const barcode = order.accession_no ? await barcodeSvg(order.accession_no) : "";
 
   return (
     <div>
-      <div className="no-print mb-4 flex gap-2">
+      <div className="no-print mb-4 flex flex-wrap gap-2">
         <PrintButton />
+        <ReportImageButton targetId="report-sheet" fileName={order.accession_no || "report"} />
         {order.phone && <WhatsAppButton orderId={order.id} />}
       </div>
 
       {/* A4 report sheet */}
-      <div className="mx-auto max-w-[210mm] bg-white p-8 text-black shadow-sm print:shadow-none">
+      <div id="report-sheet" className="mx-auto max-w-[210mm] bg-white p-8 text-black shadow-sm print:shadow-none">
         {/* Header */}
         <div className="flex items-start justify-between border-b-2 border-teal-700 pb-4">
           <div className="flex items-center gap-3">
@@ -98,7 +102,15 @@ export default async function ReportPage({
         {/* Patient meta block */}
         <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2 rounded-lg bg-gray-50 p-4 text-sm sm:grid-cols-3">
           <div><span className="text-gray-500">المريض:</span> <b>{order.full_name}</b></div>
-          <div><span className="text-gray-500">رقم العيّنة:</span> {order.accession_no ?? "—"}</div>
+          <div>
+            <span className="text-gray-500">رقم العيّنة:</span> {order.accession_no ?? "—"}
+            {barcode && (
+              <span
+                className="mt-1 block h-6 w-40"
+                dangerouslySetInnerHTML={{ __html: barcode }}
+              />
+            )}
+          </div>
           <div><span className="text-gray-500">التاريخ:</span> {order.order_date}</div>
           <div>
             <span className="text-gray-500">الجنس:</span>{" "}

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { FileText } from "lucide-react";
 import { query, queryOne } from "@/lib/db";
+import { barcodeSvg } from "@/lib/barcode";
 import { saveResult, setOrderStatus } from "@/app/actions/orders";
 import { PageHeader, Card, Button, FlagChip } from "@/components/ui/primitives";
 import { AiAssistant } from "@/components/AiAssistant";
@@ -36,6 +37,8 @@ export default async function OrderDetailPage({
     [params.id]
   );
 
+  const barcode = order.accession_no ? await barcodeSvg(order.accession_no) : "";
+
   return (
     <div className="max-w-3xl">
       <PageHeader
@@ -54,6 +57,13 @@ export default async function OrderDetailPage({
           </div>
         }
       />
+
+      {barcode && (
+        <div className="mb-4 inline-flex flex-col items-center rounded-lg border border-line bg-surface p-2">
+          <span className="h-8 w-48" dangerouslySetInnerHTML={{ __html: barcode }} />
+          <span className="font-mono text-xs text-muted">{order.accession_no}</span>
+        </div>
+      )}
 
       <div className="flex flex-col gap-4">
         {items.map((it: any) => (

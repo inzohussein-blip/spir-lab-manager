@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Search } from "lucide-react";
+import { Search, Download } from "lucide-react";
 import { query } from "@/lib/db";
 import { PageHeader, Card } from "@/components/ui/primitives";
 
@@ -47,6 +47,13 @@ export default async function OrdersPage({
     where.push(`o.order_date <= $${params.length}`);
   }
   const whereSql = where.length ? `where ${where.join(" and ")}` : "";
+
+  // Preserve the active filters when exporting to CSV.
+  const exportQs = new URLSearchParams(
+    Object.fromEntries(
+      Object.entries({ q, status, from, to }).filter(([, v]) => v)
+    )
+  ).toString();
 
   const orders = await query<any>(
     `select o.id, o.order_date, o.status, o.total_amount, o.accession_no,
@@ -96,6 +103,12 @@ export default async function OrdersPage({
             <Link href="/orders" className="rounded-lg border border-line px-4 py-2 text-sm hover:bg-canvas">
               مسح
             </Link>
+            <a
+              href={`/orders/export${exportQs ? `?${exportQs}` : ""}`}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-line px-4 py-2 text-sm hover:bg-canvas"
+            >
+              <Download className="size-4" /> تصدير CSV
+            </a>
             <span className="ms-auto self-center text-xs text-muted">
               النتائج: {orders.length}
             </span>
