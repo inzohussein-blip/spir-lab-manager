@@ -1,11 +1,15 @@
 import { query, queryOne } from "@/lib/db";
-import { PageHeader, Card, StatTile } from "@/components/ui/primitives";
+import { PageHeader, Card, StatTile, Button } from "@/components/ui/primitives";
+import { addExpense, addSupplier, addPurchaseOrder } from "@/app/actions/expenses";
 import { money } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
+const field =
+  "w-full rounded-lg border border-line px-3 py-2 text-sm outline-none focus:border-brand";
+
 export default async function OrdersExpensesPage() {
-  const [expenses, totals, purchases] = await Promise.all([
+  const [expenses, totals, purchases, suppliers] = await Promise.all([
     query<any>(
       `select id, title, amount, spent_on, category from expenses
         order by spent_on desc limit 30`
@@ -23,6 +27,7 @@ export default async function OrdersExpensesPage() {
          left join suppliers s on s.id = po.supplier_id
         order by po.order_date desc limit 15`
     ),
+    query<any>(`select id, name from suppliers order by name`),
   ]);
 
   return (
@@ -41,6 +46,15 @@ export default async function OrdersExpensesPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <div className="mb-3 font-semibold">المصروفات</div>
+          <form action={addExpense} className="mb-4 grid gap-2 border-b border-line pb-4 sm:grid-cols-2">
+            <input name="title" placeholder="البيان" required className={field} />
+            <input name="amount" type="number" step="any" placeholder="القيمة" className={field} />
+            <input name="category" placeholder="التصنيف" className={field} />
+            <input name="spent_on" type="date" className={field} />
+            <div className="sm:col-span-2">
+              <Button>إضافة مصروف</Button>
+            </div>
+          </form>
           {expenses.length === 0 ? (
             <p className="text-sm text-muted">لا توجد مصروفات مسجّلة</p>
           ) : (
@@ -61,6 +75,25 @@ export default async function OrdersExpensesPage() {
 
         <Card>
           <div className="mb-3 font-semibold">أوامر الشراء (الطلبيات)</div>
+          <form action={addPurchaseOrder} className="mb-3 grid gap-2 border-b border-line pb-4 sm:grid-cols-2">
+            <select name="supplier_id" className={field} defaultValue="">
+              <option value="">المورّد…</option>
+              {suppliers.map((s: any) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+            <input name="total_amount" type="number" step="any" placeholder="القيمة الإجمالية" className={field} />
+            <input name="order_date" type="date" className={field} />
+            <input name="notes" placeholder="ملاحظات" className={field} />
+            <div className="sm:col-span-2">
+              <Button>تسجيل طلبية</Button>
+            </div>
+          </form>
+          <form action={addSupplier} className="mb-4 grid gap-2 border-b border-line pb-4 sm:grid-cols-3">
+            <input name="name" placeholder="اسم مورّد جديد" required className={field} />
+            <input name="phone" placeholder="الهاتف" className={field} />
+            <Button variant="ghost">إضافة مورّد</Button>
+          </form>
           {purchases.length === 0 ? (
             <p className="text-sm text-muted">لا توجد طلبيات مسجّلة</p>
           ) : (

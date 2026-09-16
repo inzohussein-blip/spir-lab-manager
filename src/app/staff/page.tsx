@@ -1,7 +1,11 @@
 import { query } from "@/lib/db";
-import { PageHeader, Card } from "@/components/ui/primitives";
+import { PageHeader, Card, Button } from "@/components/ui/primitives";
+import { addStaff, addCoverShift } from "@/app/actions/staff";
 
 export const dynamic = "force-dynamic";
+
+const field =
+  "w-full rounded-lg border border-line px-3 py-2 text-sm outline-none focus:border-brand";
 
 export default async function StaffPage() {
   const [staff, covers] = await Promise.all([
@@ -42,10 +46,40 @@ export default async function StaffPage() {
               ))}
             </tbody>
           </table>
+
+          <form action={addStaff} className="mt-4 grid gap-2 border-t border-line pt-4 sm:grid-cols-3">
+            <input name="full_name" placeholder="الاسم" required className={field} />
+            <input name="role" placeholder="الدور" className={field} />
+            <input name="phone" placeholder="الهاتف" className={field} />
+            <div className="sm:col-span-3">
+              <Button>إضافة موظف</Button>
+            </div>
+          </form>
         </Card>
 
         <Card>
           <div className="mb-3 font-semibold">سجل البدلاء (Cover Shifts)</div>
+
+          <form action={addCoverShift} className="mb-4 grid gap-2 border-b border-line pb-4 sm:grid-cols-2">
+            <input name="cover_date" type="date" required className={field} />
+            <input name="reason" placeholder="السبب" className={field} />
+            <select name="original_staff_id" className={field} defaultValue="">
+              <option value="">الموظف الأصلي…</option>
+              {staff.map((s: any) => (
+                <option key={s.id} value={s.id}>{s.full_name}</option>
+              ))}
+            </select>
+            <select name="cover_staff_id" className={field} defaultValue="">
+              <option value="">البديل…</option>
+              {staff.map((s: any) => (
+                <option key={s.id} value={s.id}>{s.full_name}</option>
+              ))}
+            </select>
+            <div className="sm:col-span-2">
+              <Button>تسجيل بديل</Button>
+            </div>
+          </form>
+
           {covers.length === 0 ? (
             <p className="text-sm text-muted">لا توجد بدلاء مسجّلة</p>
           ) : (

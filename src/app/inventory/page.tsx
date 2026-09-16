@@ -1,8 +1,12 @@
 import { query } from "@/lib/db";
-import { PageHeader, Card } from "@/components/ui/primitives";
+import { PageHeader, Card, Button } from "@/components/ui/primitives";
+import { addReagent, restock } from "@/app/actions/inventory";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
+
+const field =
+  "w-full rounded-lg border border-line px-3 py-2 text-sm outline-none focus:border-brand";
 
 export default async function InventoryPage() {
   const products = await query<{
@@ -26,6 +30,21 @@ export default async function InventoryPage() {
         title="المخزون والكواشف"
         subtitle="القسم 3 — يُخصم تلقائياً عند إجراء الفحوصات"
       />
+
+      <Card className="mb-4">
+        <div className="mb-3 text-sm font-semibold">إضافة مادة / كاشف جديد</div>
+        <form
+          action={addReagent}
+          className="grid gap-2 sm:grid-cols-2 lg:grid-cols-6"
+        >
+          <input name="name" placeholder="اسم المادة" required className={cn(field, "lg:col-span-2")} />
+          <input name="quantity" type="number" step="any" placeholder="الكمية" className={field} />
+          <input name="min_quantity" type="number" step="any" placeholder="الحد الأدنى" className={field} />
+          <input name="expiry_date" type="date" className={field} />
+          <Button>إضافة</Button>
+        </form>
+      </Card>
+
       <Card className="p-0">
         <table className="w-full text-sm">
           <thead className="border-b border-line text-right text-muted">
@@ -35,6 +54,7 @@ export default async function InventoryPage() {
               <th className="px-4 py-3 font-medium">الحد الأدنى</th>
               <th className="px-4 py-3 font-medium">تاريخ الانتهاء</th>
               <th className="px-4 py-3 font-medium">الحالة</th>
+              <th className="px-4 py-3 font-medium">إعادة تعبئة</th>
             </tr>
           </thead>
           <tbody>
@@ -72,6 +92,21 @@ export default async function InventoryPage() {
                         جيد
                       </span>
                     )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <form action={restock} className="flex items-center gap-1">
+                      <input type="hidden" name="product_id" value={p.id} />
+                      <input
+                        name="amount"
+                        type="number"
+                        step="any"
+                        placeholder="+"
+                        className="w-16 rounded-lg border border-line px-2 py-1 text-sm outline-none focus:border-brand"
+                      />
+                      <button className="rounded-lg bg-brand-light px-2 py-1 text-xs font-semibold text-brand-dark hover:bg-teal-100">
+                        تعبئة
+                      </button>
+                    </form>
                   </td>
                 </tr>
               );

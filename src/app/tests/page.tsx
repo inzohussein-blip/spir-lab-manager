@@ -1,7 +1,11 @@
 import { query } from "@/lib/db";
-import { PageHeader, Card } from "@/components/ui/primitives";
+import { PageHeader, Card, Button } from "@/components/ui/primitives";
+import { addTest } from "@/app/actions/tests";
 
 export const dynamic = "force-dynamic";
+
+const field =
+  "w-full rounded-lg border border-line px-3 py-2 text-sm outline-none focus:border-brand";
 
 export default async function TestsPage() {
   const tests = await query<{
@@ -25,6 +29,27 @@ export default async function TestsPage() {
         title="كتالوج الفحوصات"
         subtitle="النطاقات الطبيعية تُستخدم لترميز H/L تلقائياً"
       />
+
+      <Card className="mb-4">
+        <div className="mb-3 text-sm font-semibold">إضافة فحص جديد</div>
+        <form action={addTest} className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <input name="name_ar" placeholder="اسم الفحص (عربي)" required className={field} />
+          <input name="name_en" placeholder="Name (English)" className={field} />
+          <input name="code" placeholder="الرمز" className={field} />
+          <input name="category" placeholder="التصنيف" className={field} />
+          <input name="sample_type" placeholder="نوع العينة" className={field} />
+          <input name="unit" placeholder="الوحدة" className={field} />
+          <input name="normal_low" type="number" step="any" placeholder="أدنى طبيعي" className={field} />
+          <input name="normal_high" type="number" step="any" placeholder="أعلى طبيعي" className={field} />
+          <input name="price" type="number" step="any" placeholder="السعر" className={field} />
+          <label className="flex items-center gap-2 text-sm">
+            <input name="is_special" type="checkbox" className="size-4" />
+            فحص خاص (بول/براز)
+          </label>
+          <Button>إضافة الفحص</Button>
+        </form>
+      </Card>
+
       <Card className="p-0">
         <table className="w-full text-sm">
           <thead className="border-b border-line text-right text-muted">

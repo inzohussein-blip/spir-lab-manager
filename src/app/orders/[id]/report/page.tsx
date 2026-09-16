@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import QRCode from "qrcode";
 import { query, queryOne } from "@/lib/db";
 import { PrintButton } from "@/components/PrintButton";
+import { WhatsAppButton } from "@/components/WhatsAppButton";
 import { FlagChip } from "@/components/ui/primitives";
 
 export const dynamic = "force-dynamic";
@@ -46,26 +47,11 @@ export default async function ReportPage({
   const token = await getReportToken(order.id, order.patient_id);
   const qr = await QRCode.toDataURL(`REPORT:${token}`, { margin: 1, width: 120 });
 
-  const waMsg = encodeURIComponent(
-    `نتائج فحص ${order.full_name} — مختبر التحاليل. رمز التحقق: ${token}`
-  );
-  const waLink = order.phone
-    ? `https://wa.me/${order.phone.replace(/\D/g, "")}?text=${waMsg}`
-    : null;
-
   return (
     <div>
       <div className="no-print mb-4 flex gap-2">
         <PrintButton />
-        {waLink && (
-          <a
-            href={waLink}
-            target="_blank"
-            className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-3.5 py-2 text-sm font-semibold text-white hover:bg-green-700"
-          >
-            إرسال عبر واتساب
-          </a>
-        )}
+        {order.phone && <WhatsAppButton orderId={order.id} />}
       </div>
 
       {/* A4 report sheet */}

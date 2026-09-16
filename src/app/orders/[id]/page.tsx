@@ -4,6 +4,7 @@ import { FileText } from "lucide-react";
 import { query, queryOne } from "@/lib/db";
 import { saveResult, setOrderStatus } from "@/app/actions/orders";
 import { PageHeader, Card, Button, FlagChip } from "@/components/ui/primitives";
+import { AiAssistant } from "@/components/AiAssistant";
 
 export const dynamic = "force-dynamic";
 
@@ -117,6 +118,8 @@ export default async function OrderDetailPage({
             </form>
           </Card>
         ))}
+
+        <AiAssistant orderId={order.id} />
       </div>
     </div>
   );
