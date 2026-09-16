@@ -65,7 +65,11 @@ export default async function InventoryPage() {
                   key={p.id}
                   className="border-b border-line last:border-0 hover:bg-canvas"
                 >
-                  <td className="px-4 py-3 font-medium">{p.name}</td>
+                  <td className="px-4 py-3 font-medium">
+                    <a href={`/inventory/${p.id}`} className="text-brand-dark hover:underline">
+                      {p.name}
+                    </a>
+                  </td>
                   <td className={cn("px-4 py-3", low && "font-bold text-red-600")}>
                     {p.quantity} {p.unit}
                   </td>
