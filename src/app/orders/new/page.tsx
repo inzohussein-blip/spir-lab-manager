@@ -43,15 +43,18 @@ export default async function NewOrderPage({
   );
   if (!patient) notFound();
 
-  const tests = await query<{
-    id: string;
-    name_ar: string;
-    category: string | null;
-    price: number;
-  }>(
-    `select id, name_ar, category, price from test_catalog
-      where is_active order by category, name_ar`
-  );
+  const [tests, referrers] = await Promise.all([
+    query<{
+      id: string;
+      name_ar: string;
+      category: string | null;
+      price: number;
+    }>(
+      `select id, name_ar, category, price from test_catalog
+        where is_active order by category, name_ar`
+    ),
+    query<any>(`select id, name from referrers order by name`),
+  ]);
 
   return (
     <div className="max-w-2xl">
@@ -62,6 +65,21 @@ export default async function NewOrderPage({
       <Card>
         <form action={createOrder} className="flex flex-col gap-4">
           <input type="hidden" name="patient_id" value={patientId} />
+          {referrers.length > 0 && (
+            <label className="text-sm font-medium">
+              الطبيب المُحيل (اختياري)
+              <select
+                name="referrer_id"
+                defaultValue=""
+                className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand"
+              >
+                <option value="">— بدون —</option>
+                {referrers.map((r: any) => (
+                  <option key={r.id} value={r.id}>{r.name}</option>
+                ))}
+              </select>
+            </label>
+          )}
           <div className="text-sm font-medium">اختر الفحوصات المطلوبة:</div>
           <div className="grid gap-1 sm:grid-cols-2">
             {tests.map((t) => (

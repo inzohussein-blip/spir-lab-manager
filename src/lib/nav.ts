@@ -12,6 +12,8 @@ import {
   Scale,
   ScrollText,
   Building2,
+  Stethoscope,
+  CalendarClock,
   UserCog,
   ShieldCheck,
   Wrench,
@@ -64,6 +66,13 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/purchase-orders", label: "أوامر الشراء", icon: ScrollText },
       { href: "/suppliers", label: "الموردون", icon: Building2 },
+    ],
+  },
+  {
+    label: "العلاقات والمواعيد",
+    items: [
+      { href: "/appointments", label: "المواعيد", icon: CalendarClock },
+      { href: "/referrers", label: "الأطباء المُحيلون", icon: Stethoscope },
     ],
   },
   {

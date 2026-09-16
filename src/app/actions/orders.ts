@@ -21,10 +21,11 @@ export async function createOrder(formData: FormData): Promise<void> {
   const testIds = formData.getAll("test_ids").map(String).filter(Boolean);
   if (!patientId || testIds.length === 0) return;
 
+  const referrerId = (formData.get("referrer_id") as string) || null;
   const order = await queryOne<{ id: string }>(
-    `insert into test_orders (patient_id, status, accession_no) values ($1, 'in_progress', $2)
-     returning id`,
-    [patientId, accessionNo()]
+    `insert into test_orders (patient_id, status, accession_no, referrer_id)
+     values ($1, 'in_progress', $2, $3) returning id`,
+    [patientId, accessionNo(), referrerId]
   );
   const orderId = order!.id;
 

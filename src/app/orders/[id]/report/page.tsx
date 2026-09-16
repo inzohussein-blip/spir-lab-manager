@@ -29,8 +29,9 @@ export default async function ReportPage({
   params: { id: string };
 }) {
   const order = await queryOne<any>(
-    `select o.*, p.full_name, p.gender, p.age_years, p.phone
+    `select o.*, p.full_name, p.gender, p.age_years, p.phone, r.name as referrer_name
        from test_orders o join patients p on p.id = o.patient_id
+       left join referrers r on r.id = o.referrer_id
       where o.id = $1`,
     [params.id]
   );
@@ -118,6 +119,9 @@ export default async function ReportPage({
           </div>
           <div><span className="text-gray-500">العمر:</span> {order.age_years ?? "—"}</div>
           <div><span className="text-gray-500">الهاتف:</span> {order.phone ?? "—"}</div>
+          {order.referrer_name && (
+            <div><span className="text-gray-500">الطبيب المُحيل:</span> {order.referrer_name}</div>
+          )}
         </div>
 
         {/* Results grouped by department */}
