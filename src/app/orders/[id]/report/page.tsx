@@ -77,6 +77,9 @@ export default async function ReportPage({
         <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
           <div><b>المريض:</b> {order.full_name}</div>
           <div><b>التاريخ:</b> {order.order_date}</div>
+          {order.accession_no && (
+            <div><b>رقم العيّنة:</b> {order.accession_no}</div>
+          )}
           <div>
             <b>الجنس:</b>{" "}
             {order.gender === "male" ? "ذكر" : order.gender === "female" ? "أنثى" : "—"}

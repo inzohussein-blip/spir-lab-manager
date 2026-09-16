@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { query } from "@/lib/db";
+import { logAudit } from "@/lib/audit";
 
 export async function createPatient(formData: FormData): Promise<void> {
   const full_name = String(formData.get("full_name") || "").trim();
@@ -23,6 +24,7 @@ export async function createPatient(formData: FormData): Promise<void> {
       (formData.get("notes") as string) || null,
     ]
   );
+  await logAudit("patient.created", "patient", rows[0].id, { name: full_name });
   revalidatePath("/patients");
   redirect(`/patients/${rows[0].id}`);
 }

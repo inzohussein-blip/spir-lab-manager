@@ -3,6 +3,16 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { query, queryOne } from "@/lib/db";
+import { logAudit } from "@/lib/audit";
+
+function accessionNo(): string {
+  const d = new Date();
+  const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(
+    d.getDate()
+  ).padStart(2, "0")}`;
+  const suffix = Math.random().toString(16).slice(2, 6).toUpperCase();
+  return `LAB-${ymd}-${suffix}`;
+}
 
 /** Create an order (visit) with the selected tests. Reagent stock is deducted
  *  automatically by the DB trigger on each inserted order item (section 3). */
@@ -12,9 +22,9 @@ export async function createOrder(formData: FormData): Promise<void> {
   if (!patientId || testIds.length === 0) return;
 
   const order = await queryOne<{ id: string }>(
-    `insert into test_orders (patient_id, status) values ($1, 'in_progress')
+    `insert into test_orders (patient_id, status, accession_no) values ($1, 'in_progress', $2)
      returning id`,
-    [patientId]
+    [patientId, accessionNo()]
   );
   const orderId = order!.id;
 
@@ -35,6 +45,11 @@ export async function createOrder(formData: FormData): Promise<void> {
     total,
     orderId,
   ]);
+
+  await logAudit("order.created", "order", orderId, {
+    tests: testIds.length,
+    total,
+  });
 
   revalidatePath(`/patients/${patientId}`);
   redirect(`/orders/${orderId}`);
@@ -89,6 +104,12 @@ export async function saveResult(formData: FormData): Promise<void> {
     ]
   );
 
+  await logAudit("result.saved", "result", orderItemId, {
+    order_id: orderId,
+    test_id: testId,
+    value: valueNumeric ?? valueText ?? "panel",
+  });
+
   revalidatePath(`/orders/${orderId}`);
 }
 
@@ -101,5 +122,6 @@ export async function setOrderStatus(formData: FormData): Promise<void> {
     status,
     orderId,
   ]);
+  await logAudit("order.status", "order", orderId, { status });
   revalidatePath(`/orders/${orderId}`);
 }

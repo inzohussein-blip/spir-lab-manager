@@ -2,6 +2,7 @@
 
 import { query, queryOne } from "@/lib/db";
 import { cloudApiConfigured, sendCloudMessage, waLink } from "@/lib/whatsapp";
+import { logAudit } from "@/lib/audit";
 
 /**
  * Send an order's report link to the patient over WhatsApp and log it.
@@ -33,6 +34,10 @@ export async function sendReportWhatsApp(
        values ($1, $2, $3, 'cloud_api', $4)`,
       [row.patient_id, orderId, row.phone, res.ok ? "sent" : "failed"]
     );
+    await logAudit("report.sent", "report", orderId, {
+      channel: "cloud_api",
+      ok: res.ok,
+    });
     return res.ok
       ? { ok: true, via: "cloud_api" }
       : { ok: false, error: res.error, via: "cloud_api" };
@@ -45,5 +50,6 @@ export async function sendReportWhatsApp(
      values ($1, $2, $3, 'wa_link', 'queued')`,
     [row.patient_id, orderId, row.phone]
   );
+  await logAudit("report.sent", "report", orderId, { channel: "wa_link" });
   return { ok: true, link, via: "wa_link" };
 }

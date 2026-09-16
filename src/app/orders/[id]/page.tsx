@@ -40,7 +40,7 @@ export default async function OrderDetailPage({
     <div className="max-w-3xl">
       <PageHeader
         title={`فحوصات: ${order.full_name}`}
-        subtitle={`التاريخ: ${order.order_date}`}
+        subtitle={`التاريخ: ${order.order_date}${order.accession_no ? ` · رقم العيّنة: ${order.accession_no}` : ""}`}
         action={
           <div className="flex gap-2">
             <Button href={`/orders/${order.id}/report`} variant="ghost">

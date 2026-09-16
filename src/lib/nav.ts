@@ -8,6 +8,7 @@ import {
   CalendarDays,
   UserCog,
   BarChart3,
+  ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
 
@@ -28,4 +29,5 @@ export const NAV: NavItem[] = [
   { href: "/orders-expenses", label: "الطلبيات والمصروفات", icon: ShoppingCart },
   { href: "/calendar", label: "التقويم اليومي", icon: CalendarDays },
   { href: "/staff", label: "الكادر والبدلاء", icon: UserCog },
+  { href: "/audit", label: "سجل التدقيق", icon: ShieldCheck },
 ];
