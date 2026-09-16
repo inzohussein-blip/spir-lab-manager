@@ -1,16 +1,19 @@
 import "server-only";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 /**
  * Data-source layer for the lab app. One interface, two interchangeable
- * backends (same pattern as Spir-Margin so a shared hosted DB just works):
+ * backends:
  *
- *   • Embedded Postgres (PGlite/WASM) — default. Applies this repo's SQL
- *     migrations + seed in-process, persisted to a local data dir. Zero setup.
+ *   • Hosted Postgres (node-postgres) — used when DATABASE_URL is set. This is
+ *     the production path: point it at a dedicated Postgres/Supabase instance.
  *
- *   • Hosted Postgres (node-postgres) — used when DATABASE_URL is set (the
- *     shared Supabase instance on Vercel). Migrations assumed already applied.
+ *   • Embedded Postgres (PGlite/WASM) — the fallback when DATABASE_URL is unset.
+ *     Applies this repo's SQL migrations + seed in-process. Great for local dev;
+ *     on a serverless host (Vercel) its data dir is ephemeral, so it serves as a
+ *     zero-config DEMO only — set DATABASE_URL for durable, shared data.
  */
 
 export interface Db {
@@ -20,8 +23,16 @@ export interface Db {
   ): Promise<{ rows: T[]; affectedRows?: number }>;
 }
 
+// On a serverless host the project dir is read-only, so PGlite must write to a
+// writable temp dir. This is ephemeral (per-instance, not shared) — a demo
+// fallback until DATABASE_URL points at a real database.
+const IS_SERVERLESS =
+  !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME;
 const DATA_DIR =
-  process.env.PGLITE_DATA_DIR || path.join(process.cwd(), ".pglite-data");
+  process.env.PGLITE_DATA_DIR ||
+  (IS_SERVERLESS
+    ? path.join(os.tmpdir(), "lab-pglite-data")
+    : path.join(process.cwd(), ".pglite-data"));
 const MIGRATIONS_DIR = path.join(process.cwd(), "supabase", "migrations");
 const SEED_FILE = path.join(process.cwd(), "supabase", "seed.sql");
 

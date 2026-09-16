@@ -10,6 +10,11 @@ const nextConfig = {
       "pg",
       "@react-pdf/renderer",
     ],
+    // The PGlite fallback reads these SQL files at runtime; make sure Vercel's
+    // function bundle includes them (they aren't statically imported).
+    outputFileTracingIncludes: {
+      "/**": ["./supabase/migrations/**", "./supabase/seed.sql"],
+    },
   },
 };
 export default nextConfig;
