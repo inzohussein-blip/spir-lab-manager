@@ -6,6 +6,7 @@ import {
   getVisits, getTests, getSettings, rangeLabel, flagFor, saveVisitsRaw,
   type StationVisit, type StationTest, type StationSettings,
 } from "@/lib/station/store";
+import { Barcode } from "@/components/station/Barcode";
 
 export default function StationVisitsPage() {
   const [visits, setVisits] = useState<StationVisit[]>([]);
@@ -72,11 +73,20 @@ export default function StationVisitsPage() {
           </div>
           <div id="report-sheet" className="mx-auto mt-4 max-w-[210mm] bg-white p-8 text-black shadow-sm print:mt-0 print:p-0 print:shadow-none">
             <div className="flex items-start justify-between border-b-2 border-teal-700 pb-3">
-              <div>
-                <h2 className="text-xl font-bold text-teal-800">{settings.labName}</h2>
-                <p className="text-sm text-gray-600">{settings.labSubtitle}</p>
+              <div className="flex items-center gap-3">
+                {settings.logo && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={settings.logo} alt="" className="size-12 object-contain" />
+                )}
+                <div>
+                  <h2 className="text-xl font-bold text-teal-800">{settings.labName}</h2>
+                  <p className="text-sm text-gray-600">{settings.labSubtitle}</p>
+                </div>
               </div>
-              <div className="text-left text-xs text-gray-600">التاريخ: {new Date(sel.created_at).toISOString().slice(0, 10)}</div>
+              <div className="text-left text-xs text-gray-600">
+                <div>التاريخ: {new Date(sel.created_at).toISOString().slice(0, 10)}</div>
+                {sel.accession && <div className="font-mono">{sel.accession}</div>}
+              </div>
             </div>
             <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1 rounded-lg bg-gray-50 p-3 text-sm sm:grid-cols-3 print:bg-white">
               <div><span className="text-gray-500">المريض:</span> <b>{sel.patient.name || "—"}</b></div>
@@ -115,6 +125,14 @@ export default function StationVisitsPage() {
                 })}
               </tbody>
             </table>
+            {sel.accession && (
+              <div className="mt-8 flex justify-end">
+                <div className="text-center">
+                  <Barcode text={sel.accession} className="block h-8 w-40" />
+                  <div className="font-mono text-[10px] text-gray-500">{sel.accession}</div>
+                </div>
+              </div>
+            )}
           </div>
         </>
       )}

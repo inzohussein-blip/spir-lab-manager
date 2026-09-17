@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Search, Printer, Save, Check, Beaker } from "lucide-react";
+import { Search, Printer, Save, Check, Beaker, Layers } from "lucide-react";
 import {
-  getTests, addVisit, getSettings, uid, rangeLabel, flagFor,
-  type StationTest, type Gender, type StationVisit, type StationSettings,
+  getTests, addVisit, getSettings, getPanels, nextAccession, uid, rangeLabel, flagFor,
+  type StationTest, type Gender, type StationVisit, type StationSettings, type StationPanel,
 } from "@/lib/station/store";
+import { Barcode } from "@/components/station/Barcode";
 
 const inp =
   "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
@@ -23,6 +24,8 @@ function FlagPill({ f }: { f: "H" | "L" | "N" | null }) {
 
 export default function StationEntryPage() {
   const [tests, setTests] = useState<StationTest[]>([]);
+  const [panels, setPanels] = useState<StationPanel[]>([]);
+  const [accession, setAccession] = useState("");
   const [settings, setSettings] = useState<StationSettings>({ labName: "", labSubtitle: "" });
   const [name, setName] = useState("");
   const [gender, setGender] = useState<Gender>("");
@@ -38,7 +41,16 @@ export default function StationEntryPage() {
   useEffect(() => {
     setTests(getTests());
     setSettings(getSettings());
+    setPanels(getPanels());
   }, []);
+
+  function addPanel(p: StationPanel) {
+    setSelected((s) => {
+      const n = new Set(s);
+      p.testIds.forEach((id) => n.add(id));
+      return n;
+    });
+  }
 
   const groups = useMemo(() => {
     const term = q.trim().toLowerCase();
@@ -62,10 +74,11 @@ export default function StationEntryPage() {
     });
   }
 
-  function saveVisit() {
+  function saveVisit(acc?: string) {
     const v: StationVisit = {
       id: uid(),
       created_at: Date.now(),
+      accession: acc || accession || undefined,
       patient: { name: name.trim(), gender, age, phone },
       referrer: referrer.trim() || undefined,
       results: chosen.map((t) => ({
@@ -80,9 +93,11 @@ export default function StationEntryPage() {
       alert("أدخل اسم المريض واختر فحصاً واحداً على الأقل.");
       return;
     }
-    saveVisit();
+    const acc = accession || nextAccession();
+    setAccession(acc);
+    saveVisit(acc);
     setSavedNote(true);
-    setTimeout(() => window.print(), 60);
+    setTimeout(() => window.print(), 80);
   }
 
   const today = new Date().toISOString().slice(0, 10);
@@ -111,7 +126,7 @@ export default function StationEntryPage() {
                 </button>
               ))}
             </div>
-            <button onClick={saveVisit} className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas">
+            <button onClick={() => saveVisit()} className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas">
               <Save className="size-4" /> حفظ
             </button>
             <button onClick={onPrint} className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3.5 py-2 text-sm font-semibold text-white hover:bg-brand-dark">
@@ -161,6 +176,21 @@ export default function StationEntryPage() {
                 <div className="text-sm font-semibold">اختيار الفحوصات</div>
                 <span className="text-xs text-muted">{selected.size} محدَّد</span>
               </div>
+              {panels.length > 0 && (
+                <div className="mb-3 flex flex-wrap items-center gap-1.5">
+                  <span className="inline-flex items-center gap-1 text-xs text-muted"><Layers className="size-3.5" /> باقات:</span>
+                  {panels.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => addPanel(p)}
+                      className="rounded-full border border-line px-2.5 py-1 text-xs hover:bg-brand-light/60"
+                    >
+                      {p.name} ({p.testIds.length})
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="relative mb-3">
                 <Search className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
                 <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="ابحث عن فحص…" className={`${inp} pr-9`} />
@@ -243,12 +273,19 @@ export default function StationEntryPage() {
       {/* ── Printable report (A4/A5) ─────────────────────────────────────────── */}
       <div id="report-sheet" className="mx-auto mt-6 max-w-[210mm] bg-white p-8 text-black shadow-sm print:mt-0 print:p-0 print:shadow-none">
         <div className="flex items-start justify-between border-b-2 border-teal-700 pb-3">
-          <div>
-            <h2 className="text-xl font-bold text-teal-800">{settings.labName}</h2>
-            <p className="text-sm text-gray-600">{settings.labSubtitle}</p>
+          <div className="flex items-center gap-3">
+            {settings.logo && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={settings.logo} alt="" className="size-12 object-contain" />
+            )}
+            <div>
+              <h2 className="text-xl font-bold text-teal-800">{settings.labName}</h2>
+              <p className="text-sm text-gray-600">{settings.labSubtitle}</p>
+            </div>
           </div>
           <div className="text-left text-xs text-gray-600">
             <div>التاريخ: {today}</div>
+            {accession && <div className="font-mono">{accession}</div>}
           </div>
         </div>
 
@@ -299,7 +336,12 @@ export default function StationEntryPage() {
             <div className="mb-6">اعتمد النتائج:</div>
             <div className="w-48 border-t border-gray-400 pt-1 text-center text-gray-500">التوقيع / الختم</div>
           </div>
-          <div className="text-left text-gray-400">أُصدر: {new Date().toLocaleString("ar-IQ")}</div>
+          {accession && (
+            <div className="text-center">
+              <Barcode text={accession} className="block h-8 w-40" />
+              <div className="font-mono text-[10px] text-gray-500">{accession}</div>
+            </div>
+          )}
         </div>
       </div>
     </div>

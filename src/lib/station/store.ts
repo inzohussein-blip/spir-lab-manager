@@ -33,6 +33,7 @@ export interface StationTest {
 export interface StationVisit {
   id: string;
   created_at: number;
+  accession?: string;
   patient: { name: string; gender: Gender; age?: string; phone?: string };
   referrer?: string;
   results: { testId: string; name_ar: string; value: string; unit?: string }[];
@@ -44,14 +45,24 @@ export interface StationPage {
   content: string;
 }
 
+/** A named group of tests selected together in one click (e.g. CBC panel). */
+export interface StationPanel {
+  id: string;
+  name: string;
+  testIds: string[];
+}
+
 const K_TESTS = "station.tests.v1";
 const K_VISITS = "station.visits.v1";
 const K_PAGES = "station.pages.v1";
 const K_SETTINGS = "station.settings.v1";
+const K_PANELS = "station.panels.v1";
+const K_COUNTER = "station.counter.v1";
 
 export interface StationSettings {
   labName: string;
   labSubtitle: string;
+  logo?: string; // data URL
 }
 
 function read<T>(key: string, fallback: T): T {
@@ -119,6 +130,65 @@ export function getSettings(): StationSettings {
 }
 export function saveSettings(s: StationSettings): void {
   write(K_SETTINGS, s);
+}
+
+// ── Panels ───────────────────────────────────────────────────────────────────
+export function getPanels(): StationPanel[] {
+  return read<StationPanel[]>(K_PANELS, []);
+}
+export function savePanels(panels: StationPanel[]): void {
+  write(K_PANELS, panels);
+}
+
+// ── Sample-number counter (LAB-YYYYMMDD-NNN) ─────────────────────────────────
+export function nextAccession(): string {
+  const d = new Date();
+  const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+  const c = read<{ day: string; n: number }>(K_COUNTER, { day: "", n: 0 });
+  const n = c.day === ymd ? c.n + 1 : 1;
+  write(K_COUNTER, { day: ymd, n });
+  return `LAB-${ymd}-${String(n).padStart(3, "0")}`;
+}
+
+// ── Backup: export / import the whole station ────────────────────────────────
+export interface StationBackup {
+  app: "spir-lab-station";
+  version: 1;
+  exported_at: string;
+  tests: StationTest[];
+  visits: StationVisit[];
+  pages: StationPage[];
+  panels: StationPanel[];
+  settings: StationSettings;
+}
+
+export function exportBackup(): StationBackup {
+  return {
+    app: "spir-lab-station",
+    version: 1,
+    exported_at: new Date().toISOString(),
+    tests: getTests(),
+    visits: getVisits(),
+    pages: getPages(),
+    panels: getPanels(),
+    settings: getSettings(),
+  };
+}
+
+/** Restore a backup. Returns true on success. Replaces current data. */
+export function importBackup(data: unknown): boolean {
+  try {
+    const b = data as Partial<StationBackup>;
+    if (!b || b.app !== "spir-lab-station" || !Array.isArray(b.tests)) return false;
+    if (b.tests) write(K_TESTS, b.tests);
+    if (b.visits) write(K_VISITS, b.visits);
+    if (b.pages) write(K_PAGES, b.pages);
+    if (b.panels) write(K_PANELS, b.panels);
+    if (b.settings) write(K_SETTINGS, b.settings);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // ── Reference-range resolution + flagging ────────────────────────────────────

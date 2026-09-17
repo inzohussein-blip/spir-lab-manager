@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Trash2, Pencil, ListChecks, X } from "lucide-react";
+import { Plus, Trash2, Pencil, ListChecks, X, Layers } from "lucide-react";
 import {
-  getTests, saveTests, uid, rangeLabel,
-  type StationTest, type NormalRange,
+  getTests, saveTests, getPanels, savePanels, uid, rangeLabel,
+  type StationTest, type NormalRange, type StationPanel,
 } from "@/lib/station/store";
 
 const inp = "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
@@ -53,8 +53,25 @@ export default function StationTestsPage() {
   const [tests, setTests] = useState<StationTest[]>([]);
   const [f, setF] = useState({ ...empty });
   const [editId, setEditId] = useState<string | null>(null);
+  const [panels, setPanels] = useState<StationPanel[]>([]);
+  const [panelName, setPanelName] = useState("");
+  const [panelSel, setPanelSel] = useState<Set<string>>(new Set());
 
-  useEffect(() => { setTests(getTests()); }, []);
+  useEffect(() => { setTests(getTests()); setPanels(getPanels()); }, []);
+
+  function persistPanels(next: StationPanel[]) {
+    setPanels(next);
+    savePanels(next);
+  }
+  function addPanel() {
+    if (!panelName.trim() || panelSel.size === 0) return;
+    persistPanels([...panels, { id: uid(), name: panelName.trim(), testIds: Array.from(panelSel) }]);
+    setPanelName("");
+    setPanelSel(new Set());
+  }
+  function togglePanelTest(id: string) {
+    setPanelSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
 
   function persist(next: StationTest[]) {
     setTests(next);
@@ -202,6 +219,54 @@ export default function StationTestsPage() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      {/* Panels (باقات) — named groups selected in one click */}
+      <div className="mt-6 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
+        <div className="mb-1 flex items-center gap-2 text-sm font-semibold"><Layers className="size-4" /> الباقات</div>
+        <p className="mb-3 text-xs text-muted">جمّع فحوصات متكرّرة في باقة (مثل CBC) لاختيارها بضغطة واحدة عند الإدخال.</p>
+
+        {panels.length > 0 && (
+          <div className="mb-4 flex flex-wrap gap-2">
+            {panels.map((p) => (
+              <span key={p.id} className="inline-flex items-center gap-1.5 rounded-full border border-line px-3 py-1 text-xs">
+                {p.name} ({p.testIds.length})
+                <button onClick={() => persistPanels(panels.filter((x) => x.id !== p.id))} className="text-red-600 hover:text-red-700" title="حذف الباقة">
+                  <X className="size-3.5" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+
+        <input
+          value={panelName}
+          onChange={(e) => setPanelName(e.target.value)}
+          placeholder="اسم الباقة الجديدة"
+          className={`mb-2 ${inp}`}
+        />
+        <div className="mb-3 grid max-h-48 grid-cols-2 gap-1 overflow-y-auto sm:grid-cols-3">
+          {tests.map((t) => {
+            const on = panelSel.has(t.id);
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => togglePanelTest(t.id)}
+                className={`truncate rounded-lg border px-2 py-1 text-right text-xs ${on ? "border-brand bg-brand-light/60" : "border-line hover:bg-canvas"}`}
+              >
+                {t.name_ar}
+              </button>
+            );
+          })}
+        </div>
+        <button
+          onClick={addPanel}
+          disabled={!panelName.trim() || panelSel.size === 0}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-50"
+        >
+          <Plus className="size-4" /> إنشاء باقة ({panelSel.size})
+        </button>
       </div>
     </div>
   );
