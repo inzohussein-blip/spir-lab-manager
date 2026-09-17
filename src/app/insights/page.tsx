@@ -154,7 +154,7 @@ export default async function InsightsPage() {
                     <tr key={r.name} className="border-b border-line last:border-0">
                       <td className="py-2 font-medium">{r.name}</td>
                       <td className="py-2">{r.visits}</td>
-                      <td className="py-2">{money(r.revenue)}</td>
+                      <td className="py-2 tabular-nums">{money(r.revenue)} ر.س</td>
                     </tr>
                   ))}
                 </tbody>

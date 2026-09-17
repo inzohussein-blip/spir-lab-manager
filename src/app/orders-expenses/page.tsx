@@ -38,9 +38,9 @@ export default async function OrdersExpensesPage() {
       />
 
       <div className="mb-6 grid gap-4 sm:grid-cols-3">
-        <StatTile label="مصروف اليوم" value={money(totals?.day)} tone="neutral" />
-        <StatTile label="مصروف الأسبوع" value={money(totals?.week)} tone="neutral" />
-        <StatTile label="مصروف الشهر" value={money(totals?.month)} tone="neutral" />
+        <StatTile label="مصروف اليوم" value={`${money(totals?.day)} ر.س`} tone="neutral" />
+        <StatTile label="مصروف الأسبوع" value={`${money(totals?.week)} ر.س`} tone="neutral" />
+        <StatTile label="مصروف الشهر" value={`${money(totals?.month)} ر.س`} tone="neutral" />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -65,7 +65,7 @@ export default async function OrdersExpensesPage() {
                     <td className="py-2">{e.spent_on}</td>
                     <td className="py-2 font-medium">{e.title}</td>
                     <td className="py-2 text-muted">{e.category ?? "—"}</td>
-                    <td className="py-2 text-left">{money(e.amount)}</td>
+                    <td className="py-2 text-left tabular-nums">{money(e.amount)} ر.س</td>
                   </tr>
                 ))}
               </tbody>
@@ -103,7 +103,7 @@ export default async function OrdersExpensesPage() {
                   <tr key={p.id} className="border-b border-line last:border-0">
                     <td className="py-2">{p.order_date}</td>
                     <td className="py-2 font-medium">{p.supplier ?? "—"}</td>
-                    <td className="py-2 text-left">{money(p.total_amount)}</td>
+                    <td className="py-2 text-left tabular-nums">{money(p.total_amount)} ر.س</td>
                   </tr>
                 ))}
               </tbody>

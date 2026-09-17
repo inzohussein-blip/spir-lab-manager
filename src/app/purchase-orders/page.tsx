@@ -65,7 +65,7 @@ export default async function PurchaseOrdersPage() {
                 <td className="px-4 py-3 font-medium">{r.supplier ?? "—"}</td>
                 <td className="px-4 py-3 text-muted">{r.reference ?? "—"}</td>
                 <td className="px-4 py-3">{r.lines}</td>
-                <td className="px-4 py-3">{money(r.total_amount)}</td>
+                <td className="px-4 py-3 tabular-nums">{money(r.total_amount)} ر.س</td>
                 <td className="px-4 py-3">
                   <span className={`rounded-full px-2 py-0.5 text-xs ${statusTone[r.status]}`}>
                     {statusLabel[r.status] ?? r.status}
