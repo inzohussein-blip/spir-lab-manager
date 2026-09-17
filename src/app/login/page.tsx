@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useFormState, useFormStatus } from "react-dom";
-import { FlaskConical } from "lucide-react";
+import { FlaskConical, Beaker } from "lucide-react";
 import { loginAction } from "@/app/actions/auth";
 
 function SubmitBtn() {
@@ -60,6 +61,19 @@ export default function LoginPage() {
         <p className="mt-4 text-center text-xs text-muted">
           للتجربة: admin / admin123
         </p>
+
+        <div className="mt-5 border-t border-line pt-4">
+          <Link
+            href="/station"
+            className="flex items-center justify-center gap-2 rounded-lg border border-line px-3 py-2.5 text-sm font-medium text-ink hover:bg-canvas"
+          >
+            <Beaker className="size-4 text-brand-dark" />
+            محطة المختبر — إدخال وطباعة بدون إنترنت
+          </Link>
+          <p className="mt-2 text-center text-[11px] text-muted">
+            واجهة مبسّطة تعمل محلياً على حاسوب المختبر دون قاعدة بيانات
+          </p>
+        </div>
       </div>
     </div>
   );

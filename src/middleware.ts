@@ -9,8 +9,9 @@ export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const hasSession = req.cookies.has("lab_session");
   const isLogin = pathname === "/login";
-  // Public report verification (scanned from the QR) needs no login.
-  const isPublic = pathname.startsWith("/verify");
+  // Public routes that need no login: QR report verification, and the
+  // standalone offline Lab Station (localStorage-only, no database).
+  const isPublic = pathname.startsWith("/verify") || pathname.startsWith("/station");
 
   if (isPublic) {
     const res = NextResponse.next();
