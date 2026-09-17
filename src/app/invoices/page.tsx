@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ReceiptText, Coins, Wallet } from "lucide-react";
 import { query, queryOne } from "@/lib/db";
 import { PageHeader, Card, StatTile } from "@/components/ui/primitives";
 import { money } from "@/lib/utils";
@@ -62,9 +63,14 @@ export default async function InvoicesPage({
       <PageHeader title="الفواتير" subtitle="فوترة المرضى والمدفوعات" />
 
       <div className="mb-6 grid gap-4 sm:grid-cols-3">
-        <StatTile label="إجمالي الفواتير" value={money(totals?.billed)} tone="neutral" />
-        <StatTile label="المُحصّل" value={money(totals?.collected)} />
-        <StatTile label="المستحق (مدينون)" value={money(totals?.receivable)} tone={Number(totals?.receivable) > 0 ? "warn" : "brand"} />
+        <StatTile label="إجمالي الفواتير" value={`${money(totals?.billed)} ر.س`} tone="neutral" icon={<ReceiptText className="size-5" />} />
+        <StatTile label="المُحصّل" value={`${money(totals?.collected)} ر.س`} icon={<Coins className="size-5" />} />
+        <StatTile
+          label="المستحق (مدينون)"
+          value={`${money(totals?.receivable)} ر.س`}
+          tone={Number(totals?.receivable) > 0 ? "warn" : "brand"}
+          icon={<Wallet className="size-5" />}
+        />
       </div>
 
       <Card className="mb-4">
@@ -97,29 +103,36 @@ export default async function InvoicesPage({
               <th className="px-4 py-3 font-medium">المريض</th>
               <th className="px-4 py-3 font-medium">الإجمالي</th>
               <th className="px-4 py-3 font-medium">المدفوع</th>
+              <th className="px-4 py-3 font-medium">المتبقّي</th>
               <th className="px-4 py-3 font-medium">الحالة</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-muted">لا توجد فواتير</td></tr>
+              <tr><td colSpan={7} className="px-4 py-8 text-center text-muted">لا توجد فواتير</td></tr>
             )}
-            {rows.map((r: any) => (
+            {rows.map((r: any) => {
+              const balance = Math.max(0, Number(r.total) - Number(r.paid));
+              return (
               <tr key={r.id} className="border-b border-line last:border-0 hover:bg-canvas">
                 <td className="px-4 py-3 font-mono text-xs">
                   <Link href={`/invoices/${r.id}`} className="text-brand-dark hover:underline">{r.invoice_no}</Link>
                 </td>
                 <td className="px-4 py-3">{r.invoice_date}</td>
                 <td className="px-4 py-3 font-medium">{r.full_name ?? "—"}</td>
-                <td className="px-4 py-3">{money(r.total)}</td>
-                <td className="px-4 py-3">{money(r.paid)}</td>
+                <td className="px-4 py-3 tabular-nums">{money(r.total)}</td>
+                <td className="px-4 py-3 tabular-nums">{money(r.paid)}</td>
+                <td className={`px-4 py-3 tabular-nums ${balance > 0 && r.status !== "void" ? "text-red-600" : "text-muted"}`}>
+                  {money(balance)}
+                </td>
                 <td className="px-4 py-3">
                   <span className={`rounded-full px-2 py-0.5 text-xs ${statusTone[r.status]}`}>
                     {statusLabel[r.status] ?? r.status}
                   </span>
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </Card>

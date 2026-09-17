@@ -1,5 +1,6 @@
+import { Boxes, AlertTriangle, CalendarClock } from "lucide-react";
 import { query } from "@/lib/db";
-import { PageHeader, Card, Button } from "@/components/ui/primitives";
+import { PageHeader, Card, Button, StatTile } from "@/components/ui/primitives";
 import { addReagent, restock } from "@/app/actions/inventory";
 import { cn } from "@/lib/utils";
 
@@ -23,6 +24,17 @@ export default async function InventoryPage() {
 
   const soon = (d: string | null) =>
     d ? new Date(d).getTime() - Date.now() < 30 * 864e5 : false;
+  const isLow = (p: { quantity: number; min_quantity: number }) =>
+    Number(p.quantity) <= Number(p.min_quantity);
+
+  const lowCount = products.filter(isLow).length;
+  const soonCount = products.filter((p) => soon(p.expiry_date)).length;
+
+  // Fill ratio vs. twice the minimum (a comfortable buffer) for the level bar.
+  const fill = (p: { quantity: number; min_quantity: number }) => {
+    const base = Number(p.min_quantity) > 0 ? Number(p.min_quantity) * 2 : Number(p.quantity) || 1;
+    return Math.max(0.04, Math.min(1, Number(p.quantity) / base));
+  };
 
   return (
     <div>
@@ -30,6 +42,22 @@ export default async function InventoryPage() {
         title="المخزون والكواشف"
         subtitle="القسم 3 — يُخصم تلقائياً عند إجراء الفحوصات"
       />
+
+      <div className="mb-4 grid gap-4 sm:grid-cols-3">
+        <StatTile label="إجمالي الأصناف" value={products.length} icon={<Boxes className="size-5" />} />
+        <StatTile
+          label="تحت الحد الأدنى"
+          value={lowCount}
+          tone={lowCount ? "danger" : "brand"}
+          icon={<AlertTriangle className="size-5" />}
+        />
+        <StatTile
+          label="قرب الانتهاء"
+          value={soonCount}
+          tone={soonCount ? "warn" : "brand"}
+          icon={<CalendarClock className="size-5" />}
+        />
+      </div>
 
       <Card className="mb-4">
         <div className="mb-3 text-sm font-semibold">إضافة مادة / كاشف جديد</div>
@@ -59,7 +87,7 @@ export default async function InventoryPage() {
           </thead>
           <tbody>
             {products.map((p) => {
-              const low = Number(p.quantity) <= Number(p.min_quantity);
+              const low = isLow(p);
               return (
                 <tr
                   key={p.id}
@@ -70,8 +98,16 @@ export default async function InventoryPage() {
                       {p.name}
                     </a>
                   </td>
-                  <td className={cn("px-4 py-3", low && "font-bold text-red-600")}>
-                    {p.quantity} {p.unit}
+                  <td className="px-4 py-3">
+                    <div className={cn("tabular-nums", low && "font-bold text-red-600")}>
+                      {p.quantity} {p.unit}
+                    </div>
+                    <div className="mt-1 h-1.5 w-24 overflow-hidden rounded-full bg-canvas">
+                      <div
+                        className={cn("h-full rounded-full", low ? "bg-red-500" : "bg-brand")}
+                        style={{ width: `${fill(p) * 100}%` }}
+                      />
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-muted">{p.min_quantity}</td>
                   <td
