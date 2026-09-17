@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertTriangle, CalendarClock } from "lucide-react";
+import { AlertTriangle, CalendarClock, Users, Coins, Boxes, CalendarX } from "lucide-react";
 import { query, queryOne } from "@/lib/db";
 import { PageHeader, StatTile, Card } from "@/components/ui/primitives";
 import { money } from "@/lib/utils";
@@ -31,21 +31,24 @@ export default async function DashboardPage() {
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatTile label="مراجعو اليوم" value={today?.visits ?? 0} />
+        <StatTile label="مراجعو اليوم" value={today?.visits ?? 0} icon={<Users className="size-5" />} />
         <StatTile
           label="دخل اليوم"
           value={money(today?.income)}
           hint="من الفحوصات المسجّلة اليوم"
+          icon={<Coins className="size-5" />}
         />
         <StatTile
           label="مواد تحت الحد الأدنى"
           value={lowStock.length}
           tone={lowStock.length ? "danger" : "brand"}
+          icon={<Boxes className="size-5" />}
         />
         <StatTile
           label="كواشف قاربت الانتهاء"
           value={expiring.length}
           tone={expiring.length ? "warn" : "brand"}
+          icon={<CalendarX className="size-5" />}
         />
       </div>
 

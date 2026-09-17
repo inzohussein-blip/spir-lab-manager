@@ -20,11 +20,13 @@ function SubmitBtn() {
 export default function LoginPage() {
   const [state, action] = useFormState(loginAction, {});
   return (
-    <div className="flex min-h-screen items-center justify-center bg-canvas p-4">
-      <div className="w-full max-w-sm rounded-2xl border border-line bg-surface p-7 shadow-sm">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-canvas p-4">
+      <div className="pointer-events-none absolute -top-24 -right-24 size-72 rounded-full bg-brand/15 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-24 -left-24 size-72 rounded-full bg-brand/10 blur-3xl" />
+      <div className="relative w-full max-w-sm rounded-2xl border border-line bg-surface p-7 shadow-[var(--shadow-pop)]">
         <div className="mb-6 flex flex-col items-center gap-2 text-center">
-          <span className="grid size-12 place-items-center rounded-2xl bg-gradient-to-br from-brand to-brand-dark text-white shadow">
-            <FlaskConical className="size-6" />
+          <span className="grid size-14 place-items-center rounded-2xl bg-gradient-to-br from-brand to-brand-dark text-white shadow-lg">
+            <FlaskConical className="size-7" />
           </span>
           <h1 className="text-xl font-bold">مختبر التحاليل الطبية</h1>
           <p className="text-sm text-muted">تسجيل الدخول إلى لوحة الإدارة</p>
