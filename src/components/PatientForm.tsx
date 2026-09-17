@@ -3,6 +3,7 @@
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { UserRound, HeartPulse } from "lucide-react";
 import { useOffline } from "@/components/offline/OfflineProvider";
 import { Button } from "@/components/ui/primitives";
 import type { OutboxFields } from "@/lib/offline/outbox";
@@ -39,45 +40,64 @@ export function PatientForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-2">
-      <label className="text-sm font-medium sm:col-span-2">
-        الاسم الثلاثي *
-        <input name="full_name" required className={field} />
-      </label>
-      <label className="text-sm font-medium">
-        الجنس
-        <select name="gender" className={field} defaultValue="">
-          <option value="">—</option>
-          <option value="male">ذكر</option>
-          <option value="female">أنثى</option>
-        </select>
-      </label>
-      <label className="text-sm font-medium">
-        العمر
-        <input name="age_years" type="number" min="0" className={field} />
-      </label>
-      <label className="text-sm font-medium">
-        رقم الهاتف
-        <input name="phone" className={field} />
-      </label>
-      <label className="flex items-center gap-2 self-end text-sm font-medium">
-        <input name="is_pregnant" type="checkbox" className="size-4" />
-        حالة الحمل
-      </label>
-      <label className="text-sm font-medium sm:col-span-2">
-        أمراض مزمنة
-        <input name="chronic_diseases" className={field} />
-      </label>
-      <label className="text-sm font-medium sm:col-span-2">
-        أدوية حالية
-        <input name="current_meds" className={field} />
-      </label>
-      <label className="text-sm font-medium sm:col-span-2">
-        ملاحظات طبية
-        <textarea name="notes" rows={3} className={field} />
-      </label>
-      <div className="sm:col-span-2">
-        <Button>{pending ? "جارٍ الحفظ…" : "حفظ المريض"}</Button>
+    <form onSubmit={onSubmit} className="flex flex-col gap-6">
+      {/* Basic data */}
+      <section>
+        <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-brand-dark">
+          <UserRound className="size-4" /> البيانات الأساسية
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="text-sm font-medium sm:col-span-2">
+            الاسم الثلاثي *
+            <input name="full_name" required className={field} />
+          </label>
+          <label className="text-sm font-medium">
+            الجنس
+            <select name="gender" className={field} defaultValue="">
+              <option value="">—</option>
+              <option value="male">ذكر</option>
+              <option value="female">أنثى</option>
+            </select>
+          </label>
+          <label className="text-sm font-medium">
+            العمر
+            <input name="age_years" type="number" min="0" className={field} />
+          </label>
+          <label className="text-sm font-medium">
+            رقم الهاتف
+            <input name="phone" inputMode="tel" className={field} />
+          </label>
+          <label className="flex items-center gap-2 self-end pb-2 text-sm font-medium">
+            <input name="is_pregnant" type="checkbox" className="size-4" />
+            حالة الحمل
+          </label>
+        </div>
+      </section>
+
+      {/* Medical info */}
+      <section>
+        <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-brand-dark">
+          <HeartPulse className="size-4" /> المعلومات الطبية
+        </div>
+        <div className="grid gap-4">
+          <label className="text-sm font-medium">
+            أمراض مزمنة
+            <input name="chronic_diseases" placeholder="مثال: سكري، ضغط…" className={field} />
+          </label>
+          <label className="text-sm font-medium">
+            أدوية حالية
+            <input name="current_meds" className={field} />
+          </label>
+          <label className="text-sm font-medium">
+            ملاحظات طبية
+            <textarea name="notes" rows={3} className={field} />
+          </label>
+        </div>
+      </section>
+
+      <div className="flex gap-2 border-t border-line pt-4">
+        <Button disabled={pending}>{pending ? "جارٍ الحفظ…" : "حفظ المريض"}</Button>
+        <Button href="/patients" variant="ghost">إلغاء</Button>
       </div>
     </form>
   );

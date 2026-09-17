@@ -1,6 +1,7 @@
+import { CalendarClock, CalendarCheck, CalendarX } from "lucide-react";
 import { query } from "@/lib/db";
 import { createAppointment, setAppointmentStatus } from "@/app/actions/crm";
-import { PageHeader, Card, Button } from "@/components/ui/primitives";
+import { PageHeader, Card, Button, StatTile } from "@/components/ui/primitives";
 
 export const dynamic = "force-dynamic";
 
@@ -26,9 +27,19 @@ export default async function AppointmentsPage() {
     ),
   ]);
 
+  const scheduled = appts.filter((a: any) => a.status === "scheduled").length;
+  const done = appts.filter((a: any) => a.status === "done").length;
+  const cancelled = appts.filter((a: any) => a.status === "cancelled").length;
+
   return (
     <div>
       <PageHeader title="المواعيد" subtitle="حجز ومتابعة مواعيد المرضى" />
+
+      <div className="mb-4 grid gap-4 sm:grid-cols-3">
+        <StatTile label="مجدولة" value={scheduled} tone={scheduled ? "warn" : "brand"} icon={<CalendarClock className="size-5" />} />
+        <StatTile label="تمّت" value={done} icon={<CalendarCheck className="size-5" />} />
+        <StatTile label="ملغاة" value={cancelled} tone="neutral" icon={<CalendarX className="size-5" />} />
+      </div>
 
       <Card className="mb-4">
         <div className="mb-3 text-sm font-semibold">موعد جديد</div>

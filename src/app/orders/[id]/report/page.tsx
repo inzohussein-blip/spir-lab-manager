@@ -56,9 +56,11 @@ export default async function ReportPage({
     groups.get(key)!.push(it);
   }
   const hasAbnormal = items.some((it: any) => it.flag === "H" || it.flag === "L");
-  const anyResult = items.some(
-    (it: any) => it.value_numeric != null || it.value_text || it.physical_inspection || it.microscopic
-  );
+  const hasResult = (it: any) =>
+    it.value_numeric != null || it.value_text || it.physical_inspection || it.microscopic;
+  const anyResult = items.some(hasResult);
+  const pendingCount = items.filter((it: any) => !hasResult(it)).length;
+  const abnormalCount = items.filter((it: any) => it.flag === "H" || it.flag === "L").length;
 
   const token = await getReportToken(order.id, order.patient_id);
   // Encode the absolute verification URL so scanning the QR opens the public
@@ -123,6 +125,13 @@ export default async function ReportPage({
             <div><span className="text-gray-500">الطبيب المُحيل:</span> {order.referrer_name}</div>
           )}
         </div>
+
+        {/* Incomplete-results notice — keep a partial report from passing as final */}
+        {pendingCount > 0 && (
+          <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800">
+            تقرير أوّلي — {pendingCount} فحص بلا نتيجة بعد.
+          </div>
+        )}
 
         {/* Results grouped by department */}
         {Array.from(groups.entries()).map(([category, rows]) => (
@@ -198,7 +207,14 @@ export default async function ReportPage({
 
         {/* Interpretation */}
         <div className="mt-6 rounded-lg border border-gray-200 p-4 text-sm">
-          <div className="mb-1 font-bold text-teal-800">التفسير</div>
+          <div className="mb-1 flex items-center gap-2 font-bold text-teal-800">
+            التفسير
+            {abnormalCount > 0 && (
+              <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-bold text-red-600">
+                {abnormalCount} قراءة غير طبيعية
+              </span>
+            )}
+          </div>
           <p className="leading-relaxed text-gray-700">
             {!anyResult
               ? "لم تُدخَل نتائج بعد لهذا الطلب."

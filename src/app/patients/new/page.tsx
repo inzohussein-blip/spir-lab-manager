@@ -4,7 +4,7 @@ import { PatientForm } from "@/components/PatientForm";
 export default function NewPatientPage() {
   return (
     <div className="max-w-2xl">
-      <PageHeader title="إضافة مريض جديد" subtitle="القسم 1 — النتائج والمرضى" />
+      <PageHeader title="إضافة مريض جديد" subtitle="سجّل بيانات المريض الأساسية ومعلوماته الطبية" />
       <Card>
         <PatientForm />
       </Card>
