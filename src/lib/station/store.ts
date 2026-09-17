@@ -113,6 +113,17 @@ export function addVisit(v: StationVisit): void {
 export function saveVisitsRaw(visits: StationVisit[]): void {
   write(K_VISITS, visits);
 }
+export function getVisit(id: string): StationVisit | null {
+  return getVisits().find((v) => v.id === id) ?? null;
+}
+/** Replace an existing visit (used when re-saving after an edit). */
+export function updateVisit(v: StationVisit): void {
+  write(K_VISITS, getVisits().map((x) => (x.id === v.id ? v : x)));
+}
+export function deleteVisits(ids: string[]): void {
+  const set = new Set(ids);
+  write(K_VISITS, getVisits().filter((v) => !set.has(v.id)));
+}
 
 // ── Custom pages ─────────────────────────────────────────────────────────────
 export function getPages(): StationPage[] {

@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Printer, Trash2, FileText } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { Printer, Trash2, FileText, Search, Pencil } from "lucide-react";
 import {
-  getVisits, getTests, getSettings, rangeLabel, flagFor, saveVisitsRaw,
+  getVisits, getTests, getSettings, rangeLabel, flagFor, deleteVisits,
   type StationVisit, type StationTest, type StationSettings,
 } from "@/lib/station/store";
 import { Barcode } from "@/components/station/Barcode";
@@ -17,15 +18,44 @@ export default function StationVisitsPage() {
   const [tests, setTests] = useState<StationTest[]>([]);
   const [sel, setSel] = useState<StationVisit | null>(null);
   const [settings, setSettings] = useState<StationSettings>({ labName: "", labSubtitle: "" });
+  const [q, setQ] = useState("");
+  const [checked, setChecked] = useState<Set<string>>(new Set());
 
   useEffect(() => { setVisits(getVisits()); setTests(getTests()); setSettings(getSettings()); }, []);
 
-  function remove(id: string) {
-    if (!window.confirm("حذف هذه الزيارة؟")) return;
-    const next = getVisits().filter((v) => v.id !== id);
-    saveVisitsRaw(next);
-    setVisits(next);
-    if (sel?.id === id) setSel(null);
+  const filtered = useMemo(() => {
+    const term = q.trim().toLowerCase();
+    if (!term) return visits;
+    return visits.filter(
+      (v) =>
+        v.patient.name.toLowerCase().includes(term) ||
+        (v.accession ?? "").toLowerCase().includes(term) ||
+        (v.patient.phone ?? "").toLowerCase().includes(term)
+    );
+  }, [visits, q]);
+
+  function refresh() { setVisits(getVisits()); }
+
+  function remove(ids: string[]) {
+    if (ids.length === 0) return;
+    if (!window.confirm(ids.length === 1 ? "حذف هذه الزيارة؟" : `حذف ${ids.length} زيارة؟`)) return;
+    deleteVisits(ids);
+    refresh();
+    setChecked((c) => { const n = new Set(c); ids.forEach((id) => n.delete(id)); return n; });
+    if (sel && ids.includes(sel.id)) setSel(null);
+  }
+
+  function toggleCheck(id: string) {
+    setChecked((c) => { const n = new Set(c); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
+  const allShownChecked = filtered.length > 0 && filtered.every((v) => checked.has(v.id));
+  function toggleAll() {
+    setChecked((c) => {
+      const n = new Set(c);
+      if (allShownChecked) filtered.forEach((v) => n.delete(v.id));
+      else filtered.forEach((v) => n.add(v.id));
+      return n;
+    });
   }
 
   const byId = (id: string) => tests.find((t) => t.id === id);
@@ -34,32 +64,62 @@ export default function StationVisitsPage() {
     <div>
       <div className="no-print mb-5">
         <h1 className="flex items-center gap-2 text-2xl font-bold"><FileText className="size-6" /> الزيارات المحفوظة</h1>
-        <p className="mt-1 text-sm text-muted">محفوظة محلياً على هذا الحاسوب — يمكن إعادة طباعتها.</p>
+        <p className="mt-1 text-sm text-muted">محفوظة محلياً على هذا الحاسوب — ابحث، عدّل، أعد الطباعة، أو احذف مجموعة.</p>
+      </div>
+
+      {/* Toolbar: search + bulk delete */}
+      <div className="no-print mb-4 flex flex-wrap items-center gap-2">
+        <div className="flex flex-1 items-center gap-2 rounded-lg border border-line bg-surface px-3">
+          <Search className="size-4 text-muted" />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="ابحث بالاسم أو رقم العيّنة أو الهاتف…"
+            className="w-full bg-transparent py-2 text-sm outline-none"
+          />
+        </div>
+        {checked.size > 0 && (
+          <button
+            onClick={() => remove(Array.from(checked))}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700"
+          >
+            <Trash2 className="size-4" /> حذف المحدَّد ({checked.size})
+          </button>
+        )}
       </div>
 
       <div className="no-print overflow-hidden rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)]">
         <table className="w-full text-sm">
           <thead className="border-b border-line text-right text-muted">
             <tr>
+              <th className="px-4 py-3">
+                <input type="checkbox" checked={allShownChecked} onChange={toggleAll} className="size-4 align-middle" aria-label="تحديد الكل" />
+              </th>
               <th className="px-4 py-3 font-medium">التاريخ</th>
+              <th className="px-4 py-3 font-medium">رقم العيّنة</th>
               <th className="px-4 py-3 font-medium">المريض</th>
               <th className="px-4 py-3 font-medium">الفحوصات</th>
-              <th className="px-4 py-3 font-medium"></th>
+              <th className="px-4 py-3 font-medium">إجراءات</th>
             </tr>
           </thead>
           <tbody>
-            {visits.length === 0 && (
-              <tr><td colSpan={4} className="px-4 py-8 text-center text-muted">لا زيارات محفوظة بعد</td></tr>
+            {filtered.length === 0 && (
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-muted">{visits.length === 0 ? "لا زيارات محفوظة بعد" : "لا نتائج مطابقة"}</td></tr>
             )}
-            {visits.map((v) => (
-              <tr key={v.id} className="border-b border-line last:border-0 hover:bg-canvas">
+            {filtered.map((v) => (
+              <tr key={v.id} className={`border-b border-line last:border-0 hover:bg-canvas ${checked.has(v.id) ? "bg-brand-light/40" : ""}`}>
+                <td className="px-4 py-3">
+                  <input type="checkbox" checked={checked.has(v.id)} onChange={() => toggleCheck(v.id)} className="size-4 align-middle" />
+                </td>
                 <td className="px-4 py-3 text-muted whitespace-nowrap">{new Date(v.created_at).toLocaleString("ar-IQ")}</td>
+                <td className="px-4 py-3 font-mono text-xs text-muted">{v.accession ?? "—"}</td>
                 <td className="px-4 py-3 font-medium">{v.patient.name || "—"}</td>
                 <td className="px-4 py-3">{v.results.length}</td>
                 <td className="px-4 py-3">
-                  <div className="flex gap-1">
+                  <div className="flex flex-wrap gap-1">
                     <button onClick={() => setSel(v)} className="inline-flex items-center gap-1 rounded-lg border border-line px-3 py-1 text-xs hover:bg-canvas"><Printer className="size-3.5" /> عرض/طباعة</button>
-                    <button onClick={() => remove(v.id)} className="grid size-7 place-items-center rounded-lg border border-line text-red-600 hover:bg-red-50"><Trash2 className="size-4" /></button>
+                    <Link href={`/station?edit=${v.id}`} className="inline-flex items-center gap-1 rounded-lg border border-line px-3 py-1 text-xs hover:bg-canvas"><Pencil className="size-3.5" /> تعديل</Link>
+                    <button onClick={() => remove([v.id])} className="grid size-7 place-items-center rounded-lg border border-line text-red-600 hover:bg-red-50"><Trash2 className="size-4" /></button>
                   </div>
                 </td>
               </tr>

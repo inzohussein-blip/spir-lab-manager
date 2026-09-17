@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Search, Printer, Save, Check, Beaker, Layers } from "lucide-react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Search, Printer, Save, Check, Beaker, Layers, Pencil } from "lucide-react";
 import {
-  getTests, addVisit, getSettings, getPanels, nextAccession, uid, rangeLabel, flagFor,
+  getTests, addVisit, updateVisit, getVisit, getSettings, getPanels, nextAccession, uid, rangeLabel, flagFor,
   type StationTest, type Gender, type StationVisit, type StationSettings, type StationPanel,
 } from "@/lib/station/store";
 import { Barcode } from "@/components/station/Barcode";
@@ -27,7 +28,7 @@ function FlagPill({ f }: { f: "H" | "L" | "N" | null }) {
   return <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${m}`}>{f} {t}</span>;
 }
 
-export default function StationEntryPage() {
+function StationEntryPage() {
   const [tests, setTests] = useState<StationTest[]>([]);
   const [panels, setPanels] = useState<StationPanel[]>([]);
   const [accession, setAccession] = useState("");
@@ -42,12 +43,38 @@ export default function StationEntryPage() {
   const [q, setQ] = useState("");
   const [paper, setPaper] = useState<"A4" | "A5">("A4");
   const [savedNote, setSavedNote] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [createdAt, setCreatedAt] = useState<number | null>(null);
+
+  const searchParams = useSearchParams();
 
   useEffect(() => {
-    setTests(getTests());
+    const catalog = getTests();
+    setTests(catalog);
     setSettings(getSettings());
     setPanels(getPanels());
-  }, []);
+
+    // Editing an existing saved visit (?edit=<id>) — preload its fields.
+    const eid = searchParams.get("edit");
+    if (eid) {
+      const v = getVisit(eid);
+      if (v) {
+        setEditId(v.id);
+        setCreatedAt(v.created_at);
+        setAccession(v.accession ?? "");
+        setName(v.patient.name);
+        setGender(v.patient.gender);
+        setAge(v.patient.age ?? "");
+        setPhone(v.patient.phone ?? "");
+        setReferrer(v.referrer ?? "");
+        const ids = new Set(v.results.map((r) => r.testId).filter((id) => catalog.some((t) => t.id === id)));
+        setSelected(ids);
+        const rmap: Record<string, string> = {};
+        v.results.forEach((r) => { rmap[r.testId] = r.value; });
+        setResults(rmap);
+      }
+    }
+  }, [searchParams]);
 
   function addPanel(p: StationPanel) {
     setSelected((s) => {
@@ -81,8 +108,8 @@ export default function StationEntryPage() {
 
   function saveVisit(acc?: string) {
     const v: StationVisit = {
-      id: uid(),
-      created_at: Date.now(),
+      id: editId ?? uid(),
+      created_at: createdAt ?? Date.now(),
       accession: acc || accession || undefined,
       patient: { name: name.trim(), gender, age, phone },
       referrer: referrer.trim() || undefined,
@@ -90,7 +117,8 @@ export default function StationEntryPage() {
         testId: t.id, name_ar: t.name_ar, value: results[t.id] ?? "", unit: t.unit,
       })),
     };
-    addVisit(v);
+    if (editId) updateVisit(v);
+    else { addVisit(v); setEditId(v.id); setCreatedAt(v.created_at); }
   }
 
   function onPrint() {
@@ -121,8 +149,15 @@ export default function StationEntryPage() {
       <div className="no-print">
         <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold">إدخال وطباعة النتائج</h1>
-            <p className="mt-1 text-sm text-muted">أدخل بيانات المريض ونتائج فحوصاته ثم اطبعها — يعمل بدون إنترنت.</p>
+            <h1 className="flex items-center gap-2 text-2xl font-bold">
+              {editId && <Pencil className="size-5 text-brand-dark" />}
+              {editId ? "تعديل زيارة محفوظة" : "إدخال وطباعة النتائج"}
+            </h1>
+            <p className="mt-1 text-sm text-muted">
+              {editId
+                ? "عدّل البيانات ثم احفظ — سيُحدَّث نفس السجل."
+                : "أدخل بيانات المريض ونتائج فحوصاته ثم اطبعها — يعمل بدون إنترنت."}
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <div className="flex overflow-hidden rounded-lg border border-line text-sm">
@@ -386,5 +421,13 @@ export default function StationEntryPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function StationEntryPageWrapper() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-muted">جارٍ التحميل…</div>}>
+      <StationEntryPage />
+    </Suspense>
   );
 }
