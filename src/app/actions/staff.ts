@@ -2,8 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { query } from "@/lib/db";
+import { hasRole } from "@/lib/auth/guard";
 
 export async function addStaff(formData: FormData): Promise<void> {
+  if (!(await hasRole())) return; // admin only
   const full_name = String(formData.get("full_name") || "").trim();
   if (!full_name) return;
   await query(
@@ -18,6 +20,7 @@ export async function addStaff(formData: FormData): Promise<void> {
 }
 
 export async function addCoverShift(formData: FormData): Promise<void> {
+  if (!(await hasRole())) return; // admin only
   const cover_date = String(formData.get("cover_date") || "");
   if (!cover_date) return;
   await query(

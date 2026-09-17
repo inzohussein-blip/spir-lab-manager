@@ -68,7 +68,7 @@ export async function createInvoiceFromOrder(orderId: string): Promise<void> {
   if (existing) redirect(`/invoices/${existing.id}`);
 
   const order = await queryOne<any>(
-    `select patient_id from test_orders where id = $1`,
+    `select patient_id, payment_status, payment_method from test_orders where id = $1`,
     [orderId]
   );
   if (!order) return;
@@ -93,6 +93,22 @@ export async function createInvoiceFromOrder(orderId: string): Promise<void> {
     );
   }
   await recompute(invoiceId);
+
+  // If reception already collected the full amount via quick-pay, carry it over
+  // as a real payment so switching to an invoice does not lose that money.
+  if (order.payment_status === "paid") {
+    const total = (await queryOne<{ total: number }>(
+      `select total from invoices where id = $1`,
+      [invoiceId]
+    ))?.total;
+    if (Number(total) > 0) {
+      await query(
+        `insert into payments (invoice_id, amount, method) values ($1,$2,$3)`,
+        [invoiceId, Number(total), order.payment_method || "cash"]
+      );
+      await recompute(invoiceId);
+    }
+  }
   await logAudit("invoice.created", "invoice", invoiceId, { order_id: orderId });
   revalidatePath("/invoices");
   redirect(`/invoices/${invoiceId}`);
