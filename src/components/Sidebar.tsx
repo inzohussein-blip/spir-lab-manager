@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { NAV_GROUPS } from "@/lib/nav";
+import { navForRole } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 
-export function Sidebar() {
+export function Sidebar({ role }: { role: string }) {
   const pathname = usePathname();
+  const groups = navForRole(role);
   return (
     <aside className="no-print sticky top-0 hidden h-screen w-60 shrink-0 flex-col overflow-y-auto border-e border-line bg-surface md:flex">
       <div className="flex items-center gap-2.5 px-5 py-4 text-lg font-bold tracking-tight">
@@ -19,7 +20,7 @@ export function Sidebar() {
         </div>
       </div>
       <nav className="flex flex-col gap-4 px-3 py-2">
-        {NAV_GROUPS.map((group) => (
+        {groups.map((group) => (
           <div key={group.label}>
             <div className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted">
               {group.label}

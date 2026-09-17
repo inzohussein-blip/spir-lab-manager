@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search, CornerDownLeft } from "lucide-react";
-import { NAV_ITEMS } from "@/lib/nav";
+import { navForRole } from "@/lib/nav";
 
 type Cmd = { label: string; href: string; hint?: string };
 
@@ -15,17 +15,19 @@ const ACTIONS: Cmd[] = [
   { label: "إضافة كاشف / مخزون", href: "/inventory", hint: "إجراء" },
 ];
 
-export function CommandPalette() {
+export function CommandPalette({ role }: { role: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const all: Cmd[] = useMemo(
-    () => [...ACTIONS, ...NAV_ITEMS.map((n) => ({ label: n.label, href: n.href, hint: "صفحة" }))],
-    []
-  );
+  const all: Cmd[] = useMemo(() => {
+    const pages = navForRole(role)
+      .flatMap((g) => g.items)
+      .map((n) => ({ label: n.label, href: n.href, hint: "صفحة" }));
+    return [...ACTIONS, ...pages];
+  }, [role]);
 
   const results = useMemo(() => {
     const t = q.trim();

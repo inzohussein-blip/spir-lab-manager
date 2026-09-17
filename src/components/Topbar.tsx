@@ -13,7 +13,7 @@ export function Topbar({ user }: { user: SessionUser }) {
       <div className="flex flex-1 items-center gap-3">
         <NewButton />
         <div className="hidden flex-1 sm:block">
-          <CommandPalette />
+          <CommandPalette role={user.role} />
         </div>
       </div>
       <div className="flex items-center gap-1">

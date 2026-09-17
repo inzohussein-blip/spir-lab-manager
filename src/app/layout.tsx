@@ -5,6 +5,7 @@ import { Toaster } from "sonner";
 import { Sidebar } from "@/components/Sidebar";
 import { Topbar } from "@/components/Topbar";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { canAccess } from "@/lib/permissions";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -38,10 +39,21 @@ export default async function RootLayout({
           children
         ) : (
           <div className="flex min-h-screen">
-            <Sidebar />
+            <Sidebar role={user.role} />
             <div className="flex min-w-0 flex-1 flex-col">
               <Topbar user={user} />
-              <main className="flex-1 p-5 md:p-7">{children}</main>
+              <main className="flex-1 p-5 md:p-7">
+                {canAccess(pathname, user.role) ? (
+                  children
+                ) : (
+                  <div className="mx-auto mt-16 max-w-md rounded-2xl border border-line bg-surface p-8 text-center shadow-sm">
+                    <div className="mb-2 text-lg font-bold">لا تملك صلاحية الوصول</div>
+                    <p className="text-sm text-muted">
+                      هذه الصفحة مقيّدة بدورك الحالي ({user.role}). راجع مدير النظام.
+                    </p>
+                  </div>
+                )}
+              </main>
             </div>
           </div>
         )}
