@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { UserRound, Search } from "lucide-react";
+import { UserRound, Search, UserPlus } from "lucide-react";
 import { query, queryOne } from "@/lib/db";
 import { PageHeader, Card, EmptyState, Button } from "@/components/ui/primitives";
 import { OrderForm } from "@/components/OrderForm";
@@ -30,7 +30,15 @@ export default async function NewOrderPage({
     );
     return (
       <div className="max-w-lg">
-        <PageHeader title="طلب فحص جديد" subtitle="اختر المريض أولاً لبدء الطلب" />
+        <PageHeader
+          title="طلب فحص جديد"
+          subtitle="اختر المريض أولاً لبدء الطلب"
+          action={
+            <Button href="/patients/new">
+              <UserPlus className="size-4" /> تسجيل مريض جديد
+            </Button>
+          }
+        />
         <Card className={patients.length ? "p-2" : ""}>
           {patients.length === 0 ? (
             <EmptyState

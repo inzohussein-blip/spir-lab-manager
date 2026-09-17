@@ -1,9 +1,27 @@
 import Link from "next/link";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, UserRound, ClipboardPlus, Users } from "lucide-react";
 import { query } from "@/lib/db";
-import { PageHeader, Button, Card } from "@/components/ui/primitives";
+import { PageHeader, Button, Card, EmptyState } from "@/components/ui/primitives";
 
 export const dynamic = "force-dynamic";
+
+type Row = {
+  id: string;
+  full_name: string;
+  gender: string | null;
+  age_years: number | null;
+  phone: string | null;
+  visits: number;
+  last_visit: string | null;
+};
+
+function GenderChip({ gender }: { gender: string | null }) {
+  if (gender === "male")
+    return <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-600">ذكر</span>;
+  if (gender === "female")
+    return <span className="rounded-full bg-pink-50 px-2 py-0.5 text-xs font-medium text-pink-600">أنثى</span>;
+  return <span className="text-muted">—</span>;
+}
 
 export default async function PatientsPage({
   searchParams,
@@ -11,19 +29,16 @@ export default async function PatientsPage({
   searchParams: { q?: string };
 }) {
   const q = (searchParams.q || "").trim();
-  const patients = await query<{
-    id: string;
-    full_name: string;
-    gender: string | null;
-    age_years: number | null;
-    phone: string | null;
-  }>(
-    q
-      ? `select id, full_name, gender, age_years, phone from patients
-          where full_name ilike $1 or phone ilike $1
-          order by created_at desc limit 100`
-      : `select id, full_name, gender, age_years, phone from patients
-          order by created_at desc limit 100`,
+  const patients = await query<Row>(
+    `select p.id, p.full_name, p.gender, p.age_years, p.phone,
+            count(o.id)::int as visits,
+            to_char(max(o.order_date), 'YYYY-MM-DD') as last_visit
+       from patients p
+       left join test_orders o on o.patient_id = p.id
+      ${q ? "where p.full_name ilike $1 or p.phone ilike $1" : ""}
+      group by p.id
+      order by max(o.order_date) desc nulls last, p.created_at desc
+      limit 100`,
     q ? [`%${q}%`] : []
   );
 
@@ -50,45 +65,55 @@ export default async function PatientsPage({
       </form>
 
       <Card className="p-0 data-table">
-        <table className="w-full text-sm">
-          <thead className="border-b border-line text-right text-muted">
-            <tr>
-              <th className="px-4 py-3 font-medium">الاسم</th>
-              <th className="px-4 py-3 font-medium">الجنس</th>
-              <th className="px-4 py-3 font-medium">العمر</th>
-              <th className="px-4 py-3 font-medium">الهاتف</th>
-            </tr>
-          </thead>
-          <tbody>
-            {patients.length === 0 && (
+        {patients.length === 0 ? (
+          <EmptyState
+            icon={<Users className="size-6" />}
+            title={q ? "لا يوجد مرضى مطابقون" : "لا يوجد مرضى بعد"}
+            hint={q ? "جرّب اسماً أو رقم هاتف آخر." : "ابدأ بتسجيل أول مريض في المختبر."}
+            action={!q && <Button href="/patients/new">تسجيل مريض جديد</Button>}
+          />
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="border-b border-line text-right text-muted">
               <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-muted">
-                  لا يوجد مرضى مطابقون
-                </td>
+                <th className="px-4 py-3 font-medium">الاسم</th>
+                <th className="px-4 py-3 font-medium">الجنس</th>
+                <th className="px-4 py-3 font-medium">العمر</th>
+                <th className="px-4 py-3 font-medium">الهاتف</th>
+                <th className="px-4 py-3 font-medium">الزيارات</th>
+                <th className="px-4 py-3 font-medium">آخر زيارة</th>
+                <th className="px-4 py-3 font-medium"></th>
               </tr>
-            )}
-            {patients.map((p) => (
-              <tr
-                key={p.id}
-                className="border-b border-line last:border-0 hover:bg-canvas"
-              >
-                <td className="px-4 py-3">
-                  <Link
-                    href={`/patients/${p.id}`}
-                    className="font-medium text-brand-dark hover:underline"
-                  >
-                    {p.full_name}
-                  </Link>
-                </td>
-                <td className="px-4 py-3">
-                  {p.gender === "male" ? "ذكر" : p.gender === "female" ? "أنثى" : "—"}
-                </td>
-                <td className="px-4 py-3">{p.age_years ?? "—"}</td>
-                <td className="px-4 py-3 text-muted">{p.phone ?? "—"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {patients.map((p) => (
+                <tr key={p.id} className="border-b border-line last:border-0 hover:bg-canvas">
+                  <td className="px-4 py-3">
+                    <Link href={`/patients/${p.id}`} className="flex items-center gap-2.5">
+                      <span className="grid size-8 shrink-0 place-items-center rounded-full bg-brand-light text-xs font-bold text-brand-dark">
+                        {p.full_name?.trim()?.[0] ?? <UserRound className="size-4" />}
+                      </span>
+                      <span className="font-medium text-brand-dark hover:underline">{p.full_name}</span>
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3"><GenderChip gender={p.gender} /></td>
+                  <td className="px-4 py-3">{p.age_years ?? "—"}</td>
+                  <td className="px-4 py-3 text-muted">{p.phone ?? "—"}</td>
+                  <td className="px-4 py-3 tabular-nums">{p.visits}</td>
+                  <td className="px-4 py-3 text-muted whitespace-nowrap">{p.last_visit ?? "—"}</td>
+                  <td className="px-4 py-3">
+                    <Link
+                      href={`/orders/new?patient=${p.id}`}
+                      className="inline-flex items-center gap-1 rounded-lg border border-line px-3 py-1 text-xs hover:bg-canvas"
+                    >
+                      <ClipboardPlus className="size-3.5" /> طلب فحص
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </Card>
     </div>
   );
