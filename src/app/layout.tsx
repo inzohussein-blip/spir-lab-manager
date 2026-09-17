@@ -6,6 +6,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { Topbar } from "@/components/Topbar";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canAccess } from "@/lib/permissions";
+import { OfflineProvider } from "@/components/offline/OfflineProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -38,6 +39,7 @@ export default async function RootLayout({
         {isBare || !user ? (
           children
         ) : (
+          <OfflineProvider>
           <div className="flex min-h-screen">
             <Sidebar role={user.role} />
             <div className="flex min-w-0 flex-1 flex-col">
@@ -56,6 +58,7 @@ export default async function RootLayout({
               </main>
             </div>
           </div>
+          </OfflineProvider>
         )}
       </body>
     </html>

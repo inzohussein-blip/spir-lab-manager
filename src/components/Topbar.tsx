@@ -5,6 +5,7 @@ import { logoutAction } from "@/app/actions/auth";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { CommandPalette } from "@/components/CommandPalette";
 import { NewButton } from "@/components/NewButton";
+import { SyncStatus } from "@/components/offline/SyncStatus";
 import type { SessionUser } from "@/lib/auth/session";
 
 export function Topbar({ user }: { user: SessionUser }) {
@@ -17,6 +18,7 @@ export function Topbar({ user }: { user: SessionUser }) {
         </div>
       </div>
       <div className="flex items-center gap-1">
+        <SyncStatus />
         <span className="hidden text-sm text-muted md:inline">
           مرحباً، <span className="font-semibold text-ink">{user.full_name}</span>
         </span>
