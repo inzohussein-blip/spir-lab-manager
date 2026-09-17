@@ -84,11 +84,15 @@ export default async function ReportPage({
       </div>
 
       {/* A4 report sheet */}
-      <div id="report-sheet" className="relative isolate mx-auto max-w-[210mm] bg-white p-8 text-black shadow-sm print:p-[14mm] print:shadow-none">
+      <style>{`@media print {
+        @page { size: A4; margin: 0; }
+        #report-sheet { min-height: 295mm; }
+      }`}</style>
+      <div id="report-sheet" className="relative isolate mx-auto flex max-w-[210mm] flex-col bg-white p-8 text-black shadow-sm print:p-[14mm] print:shadow-none">
         {/* Faint centered logo watermark */}
         <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 flex items-center justify-center">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/lab-logo.png" alt="" className="w-2/3 max-w-[120mm] opacity-[0.05]" />
+          <img src="/lab-logo.png" alt="" className="w-1/2 max-w-[110mm] opacity-[0.06]" />
         </div>
 
         {/* Header — lab letterhead (purple/gold identity) */}
@@ -229,28 +233,30 @@ export default async function ReportPage({
           </p>
         </div>
 
-        {/* Footer: signature + confidentiality + verification */}
-        <div className="mt-8 flex items-end justify-between gap-6 border-t border-gray-200 pt-5 text-xs text-gray-600">
-          <div>
-            <div className="mb-6">اعتمد النتائج:</div>
-            <div className="w-48 border-t border-gray-400 pt-1 text-center text-gray-500">
-              التوقيع / الختم
+        {/* Footer group — pinned to the page bottom */}
+        <div className="mt-auto">
+          <div className="mt-8 flex items-end justify-between gap-6 border-t border-gray-200 pt-5 text-xs text-gray-600">
+            <div>
+              <div className="mb-6">اعتمد النتائج:</div>
+              <div className="w-48 border-t border-gray-400 pt-1 text-center text-gray-500">
+                التوقيع / الختم
+              </div>
+            </div>
+            <div className="text-left">
+              <div>رمز التحقق: <span className="font-mono">{token}</span></div>
+              <div>أُصدر: {new Date().toISOString().slice(0, 16).replace("T", " ")}</div>
+              <div className="mt-2 max-w-xs text-gray-400">
+                وثيقة سرّية تخص المريض المذكور. يُتحقق من صحتها عبر مسح رمز QR.
+              </div>
             </div>
           </div>
-          <div className="text-left">
-            <div>رمز التحقق: <span className="font-mono">{token}</span></div>
-            <div>أُصدر: {new Date().toISOString().slice(0, 16).replace("T", " ")}</div>
-            <div className="mt-2 max-w-xs text-gray-400">
-              وثيقة سرّية تخص المريض المذكور. يُتحقق من صحتها عبر مسح رمز QR.
-            </div>
-          </div>
-        </div>
 
-        <div
-          className="mt-6 rounded-md px-4 py-2 text-center text-xs font-medium text-white"
-          style={{ background: "#5a2a82", WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" }}
-        >
-          النجف الأشرف - حي ميسان - مقابل بريد ميسان / 0789038080
+          <div
+            className="mt-6 rounded-md px-4 py-2 text-center text-xs font-medium text-white"
+            style={{ background: "#5a2a82", WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" }}
+          >
+            النجف الأشرف - حي ميسان - مقابل بريد ميسان / 0789038080
+          </div>
         </div>
       </div>
     </div>
