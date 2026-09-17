@@ -85,19 +85,18 @@ export default async function ReportPage({
 
       {/* A4 report sheet */}
       <div id="report-sheet" className="mx-auto max-w-[210mm] bg-white p-8 text-black shadow-sm print:shadow-none">
-        {/* Header */}
-        <div className="flex items-start justify-between border-b-2 border-teal-700 pb-4">
+        {/* Header — lab letterhead (purple/gold identity) */}
+        <div className="flex items-center justify-between gap-4 border-b-4 pb-4" style={{ borderColor: "#c9a227" }}>
           <div className="flex items-center gap-3">
-            <span className="grid size-12 place-items-center rounded-xl bg-teal-700 text-xl font-bold text-white">
-              م
-            </span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/lab-logo.jpg" alt="" width={64} height={64} className="size-16 object-contain" />
             <div>
-              <h1 className="text-2xl font-bold text-teal-800">مختبر التحاليل الطبية</h1>
-              <p className="text-sm text-gray-600">تقرير نتائج الفحوصات المرضية</p>
+              <h1 className="text-2xl font-extrabold" style={{ color: "#5a2a82" }}>مختبر التحليلات المرضية</h1>
+              <p className="text-sm font-medium" style={{ color: "#9c7c1e" }}>دبلوم تحليلات مرضية / بكالوريوس علوم حياة</p>
             </div>
           </div>
           <div className="text-center">
-            <img src={qr} alt="QR" width={92} height={92} />
+            <img src={qr} alt="QR" width={82} height={82} />
             <div className="text-[10px] text-gray-500">امسح للتحقق</div>
           </div>
         </div>
@@ -239,6 +238,13 @@ export default async function ReportPage({
               وثيقة سرّية تخص المريض المذكور. يُتحقق من صحتها عبر مسح رمز QR.
             </div>
           </div>
+        </div>
+
+        <div
+          className="mt-6 rounded-md px-4 py-2 text-center text-xs font-medium text-white"
+          style={{ background: "#5a2a82", WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" }}
+        >
+          النجف الأشرف - حي ميسان - مقابل بريد ميسان / 0789038080
         </div>
       </div>
     </div>

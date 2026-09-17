@@ -62,7 +62,8 @@ const K_COUNTER = "station.counter.v1";
 export interface StationSettings {
   labName: string;
   labSubtitle: string;
-  logo?: string; // data URL
+  footer?: string; // address / phone line
+  logo?: string; // data URL, or a static path like /lab-logo.jpg
 }
 
 function read<T>(key: string, fallback: T): T {
@@ -124,8 +125,10 @@ export function savePages(pages: StationPage[]): void {
 // ── Settings ─────────────────────────────────────────────────────────────────
 export function getSettings(): StationSettings {
   return read<StationSettings>(K_SETTINGS, {
-    labName: "مختبر المجمع الطبي",
-    labSubtitle: "تقرير نتائج الفحوصات المخبرية",
+    labName: "مختبر التحليلات المرضية",
+    labSubtitle: "دبلوم تحليلات مرضية / بكالوريوس علوم حياة",
+    footer: "النجف الأشرف - حي ميسان - مقابل بريد ميسان / 0789038080",
+    logo: "/lab-logo.jpg",
   });
 }
 export function saveSettings(s: StationSettings): void {

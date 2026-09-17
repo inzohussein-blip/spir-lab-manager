@@ -11,6 +11,11 @@ import { Barcode } from "@/components/station/Barcode";
 const inp =
   "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
 
+// Lab identity colours (from the printed letterhead): purple + gold.
+const PURPLE = "#5a2a82";
+const GOLD = "#c9a227";
+const GOLD_DARK = "#9c7c1e";
+
 function FlagPill({ f }: { f: "H" | "L" | "N" | null }) {
   if (!f) return null;
   const m = {
@@ -272,20 +277,21 @@ export default function StationEntryPage() {
 
       {/* ── Printable report (A4/A5) ─────────────────────────────────────────── */}
       <div id="report-sheet" className="mx-auto mt-6 max-w-[210mm] bg-white p-8 text-black shadow-sm print:mt-0 print:p-0 print:shadow-none">
-        <div className="flex items-start justify-between border-b-2 border-teal-700 pb-3">
+        {/* Letterhead — inspired by the lab's purple/gold identity */}
+        <div className="flex items-center justify-between gap-4 border-b-4 pb-3" style={{ borderColor: GOLD }}>
           <div className="flex items-center gap-3">
             {settings.logo && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={settings.logo} alt="" className="size-12 object-contain" />
+              <img src={settings.logo} alt="" className="size-16 object-contain" />
             )}
             <div>
-              <h2 className="text-xl font-bold text-teal-800">{settings.labName}</h2>
-              <p className="text-sm text-gray-600">{settings.labSubtitle}</p>
+              <h2 className="text-2xl font-extrabold" style={{ color: PURPLE }}>{settings.labName}</h2>
+              <p className="text-sm font-medium" style={{ color: GOLD_DARK }}>{settings.labSubtitle}</p>
             </div>
           </div>
           <div className="text-left text-xs text-gray-600">
             <div>التاريخ: {today}</div>
-            {accession && <div className="font-mono">{accession}</div>}
+            {accession && <div className="font-mono font-bold" style={{ color: PURPLE }}>{accession}</div>}
           </div>
         </div>
 
@@ -299,12 +305,12 @@ export default function StationEntryPage() {
 
         <table className="mt-4 w-full border-collapse text-sm">
           <thead>
-            <tr className="border-b border-gray-300 text-right text-xs text-gray-500">
-              <th className="py-2 font-medium">الفحص</th>
-              <th className="py-2 font-medium">النتيجة</th>
-              <th className="py-2 font-medium">الوحدة</th>
-              <th className="py-2 font-medium">المعدل الطبيعي</th>
-              <th className="py-2 font-medium">الحالة</th>
+            <tr className="text-right text-xs text-white" style={{ background: PURPLE, WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as React.CSSProperties}>
+              <th className="px-2 py-2 font-medium">الفحص</th>
+              <th className="px-2 py-2 font-medium">النتيجة</th>
+              <th className="px-2 py-2 font-medium">الوحدة</th>
+              <th className="px-2 py-2 font-medium">المعدل الطبيعي</th>
+              <th className="px-2 py-2 font-medium">الحالة</th>
             </tr>
           </thead>
           <tbody>
@@ -315,11 +321,11 @@ export default function StationEntryPage() {
               const f = flagFor(results[t.id] ?? "", t.normal, gender);
               return (
                 <tr key={t.id} className="border-b border-gray-100 align-top">
-                  <td className="py-2 font-medium">{t.name_ar}</td>
-                  <td className={`py-2 ${f === "H" || f === "L" ? "font-bold" : ""}`}>{results[t.id] || "—"}</td>
-                  <td className="py-2 text-gray-600">{t.unit || "—"}</td>
-                  <td className="py-2 text-gray-600">{rangeLabel(t.normal, gender, t.unit)}</td>
-                  <td className="py-2">
+                  <td className="px-2 py-2 font-medium">{t.name_ar}</td>
+                  <td className={`px-2 py-2 ${f === "H" || f === "L" ? "font-bold" : ""}`}>{results[t.id] || "—"}</td>
+                  <td className="px-2 py-2 text-gray-600">{t.unit || "—"}</td>
+                  <td className="px-2 py-2 text-gray-600">{rangeLabel(t.normal, gender, t.unit)}</td>
+                  <td className="px-2 py-2">
                     {f === "H" ? <span className="font-bold text-red-600">مرتفع H</span>
                       : f === "L" ? <span className="font-bold text-blue-600">منخفض L</span>
                       : f === "N" ? <span className="text-teal-700">طبيعي</span>
@@ -334,7 +340,7 @@ export default function StationEntryPage() {
         <div className="mt-10 flex items-end justify-between text-xs text-gray-600">
           <div>
             <div className="mb-6">اعتمد النتائج:</div>
-            <div className="w-48 border-t border-gray-400 pt-1 text-center text-gray-500">التوقيع / الختم</div>
+            <div className="w-48 border-t pt-1 text-center text-gray-500" style={{ borderColor: GOLD }}>التوقيع / الختم</div>
           </div>
           {accession && (
             <div className="text-center">
@@ -343,6 +349,15 @@ export default function StationEntryPage() {
             </div>
           )}
         </div>
+
+        {settings.footer && (
+          <div
+            className="mt-6 rounded-md px-4 py-2 text-center text-xs font-medium text-white"
+            style={{ background: PURPLE, WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as React.CSSProperties}
+          >
+            {settings.footer}
+          </div>
+        )}
       </div>
     </div>
   );

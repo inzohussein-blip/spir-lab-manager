@@ -42,7 +42,7 @@ export function MobileNav({ role }: { role: string }) {
                 <span className="grid size-9 place-items-center rounded-xl bg-gradient-to-br from-brand to-brand-dark text-white">
                   <FlaskConical className="size-5" />
                 </span>
-                مختبر التحاليل
+                مختبر التحليلات المرضية
               </div>
               <button onClick={() => setOpen(false)} className="grid size-8 place-items-center rounded-lg hover:bg-canvas">
                 <X className="size-5" />

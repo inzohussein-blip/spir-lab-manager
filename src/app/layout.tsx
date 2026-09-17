@@ -10,7 +10,7 @@ import { OfflineProvider } from "@/components/offline/OfflineProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Spir Lab Manager — إدارة مختبر التحاليل",
+  title: "مختبر التحليلات المرضية — نظام الإدارة",
   description:
     "تطبيق احترافي لإدارة مختبرات التحاليل الطبية: المرضى، النتائج، مخزون الكواشف، والكادر.",
 };

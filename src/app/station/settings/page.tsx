@@ -75,6 +75,9 @@ export default function StationSettingsPage() {
           <label className="text-sm font-medium">العنوان الفرعي
             <input value={s.labSubtitle} onChange={(e) => setS({ ...s, labSubtitle: e.target.value })} className={`mt-1 ${inp}`} />
           </label>
+          <label className="text-sm font-medium">سطر التذييل (العنوان / الهاتف)
+            <input value={s.footer ?? ""} onChange={(e) => setS({ ...s, footer: e.target.value })} placeholder="العنوان - الهاتف" className={`mt-1 ${inp}`} />
+          </label>
 
           <div className="text-sm font-medium">شعار المختبر</div>
           <div className="flex items-center gap-3">

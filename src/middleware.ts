@@ -36,6 +36,8 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  // Run on everything except Next internals, API routes, and static assets.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|api).*)"],
+  // Run on everything except Next internals, API routes, and static files
+  // (anything with a file extension, e.g. /lab-logo.jpg, /sw.js) — those must
+  // be served without an auth redirect so public pages can load their assets.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api|.*\\.[\\w]+$).*)"],
 };

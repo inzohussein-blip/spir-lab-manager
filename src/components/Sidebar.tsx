@@ -24,8 +24,8 @@ export function Sidebar({ role }: { role: string }) {
           م
         </span>
         <div className="leading-tight">
-          مختبر التحاليل
-          <div className="text-xs font-normal text-muted">Spir Lab Manager</div>
+          مختبر التحليلات المرضية
+          <div className="text-xs font-normal text-muted">Medical Lab</div>
         </div>
       </div>
       <nav className="flex flex-col gap-4 px-3 py-2">

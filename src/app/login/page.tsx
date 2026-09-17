@@ -29,7 +29,7 @@ export default function LoginPage() {
           <span className="grid size-14 place-items-center rounded-2xl bg-gradient-to-br from-brand to-brand-dark text-white shadow-lg">
             <FlaskConical className="size-7" />
           </span>
-          <h1 className="text-xl font-bold">مختبر التحاليل الطبية</h1>
+          <h1 className="text-xl font-bold">مختبر التحليلات المرضية</h1>
           <p className="text-sm text-muted">تسجيل الدخول إلى لوحة الإدارة</p>
         </div>
         <form action={action} className="flex flex-col gap-3">
