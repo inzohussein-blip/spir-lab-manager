@@ -12,6 +12,14 @@ export function MobileNav({ role }: { role: string }) {
   const pathname = usePathname();
   const groups = navForRole(role);
 
+  // Longest-prefix match so nested routes highlight the most specific item.
+  const hrefs = groups.flatMap((g) => g.items.map((i) => i.href));
+  const bestMatch = hrefs
+    .filter((h) => h !== "/" && (pathname === h || pathname.startsWith(h + "/")))
+    .reduce((a, b) => (b.length > a.length ? b : a), "");
+  const isActive = (href: string) =>
+    href === "/" ? pathname === "/" : href === bestMatch;
+
   return (
     <div className="md:hidden">
       <button
@@ -48,7 +56,7 @@ export function MobileNav({ role }: { role: string }) {
                   </div>
                   <div className="flex flex-col gap-0.5">
                     {group.items.map((item) => {
-                      const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+                      const active = isActive(item.href);
                       return (
                         <Link
                           key={item.href}

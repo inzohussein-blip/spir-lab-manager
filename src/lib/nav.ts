@@ -3,6 +3,7 @@ import {
   BarChart3,
   Users,
   ClipboardList,
+  ClipboardPlus,
   FlaskConical,
   CalendarDays,
   Boxes,
@@ -47,6 +48,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "الرئيسية",
     items: [
       { href: "/", label: "لوحة التحكم", icon: LayoutDashboard },
+      { href: "/orders/new", label: "طلب فحص جديد", icon: ClipboardPlus },
       { href: "/insights", label: "لوحة التحليلات", icon: BarChart3, roles: FIN },
     ],
   },

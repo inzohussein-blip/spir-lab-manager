@@ -8,6 +8,15 @@ import { cn } from "@/lib/utils";
 export function Sidebar({ role }: { role: string }) {
   const pathname = usePathname();
   const groups = navForRole(role);
+
+  // The active item is the one whose href is the *longest* prefix of the current
+  // path, so /orders/new highlights "طلب فحص جديد" and not also "سجل العيّنات".
+  const hrefs = groups.flatMap((g) => g.items.map((i) => i.href));
+  const bestMatch = hrefs
+    .filter((h) => h !== "/" && (pathname === h || pathname.startsWith(h + "/")))
+    .reduce((a, b) => (b.length > a.length ? b : a), "");
+  const isActive = (href: string) =>
+    href === "/" ? pathname === "/" : href === bestMatch;
   return (
     <aside className="no-print sticky top-0 hidden h-screen w-60 shrink-0 flex-col overflow-y-auto border-e border-line bg-surface md:flex">
       <div className="flex items-center gap-2.5 px-5 py-4 text-lg font-bold tracking-tight">
@@ -27,10 +36,7 @@ export function Sidebar({ role }: { role: string }) {
             </div>
             <div className="flex flex-col gap-0.5">
               {group.items.map((item) => {
-                const active =
-                  item.href === "/"
-                    ? pathname === "/"
-                    : pathname.startsWith(item.href);
+                const active = isActive(item.href);
                 return (
                   <Link
                     key={item.href}
