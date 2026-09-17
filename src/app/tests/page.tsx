@@ -1,6 +1,8 @@
+import { FlaskConical, Layers, Coins } from "lucide-react";
 import { query } from "@/lib/db";
-import { PageHeader, Card, Button } from "@/components/ui/primitives";
+import { PageHeader, Card, Button, StatTile, Badge } from "@/components/ui/primitives";
 import { addTest } from "@/app/actions/tests";
+import { money } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -20,8 +22,13 @@ export default async function TestsPage() {
     price: number;
   }>(
     `select id, code, name_ar, category, sample_type, unit, normal_low, normal_high, price
-       from test_catalog where is_active order by category, name_ar`
+       from test_catalog where is_active order by category nulls last, name_ar`
   );
+
+  const categories = new Set(tests.map((t) => t.category).filter(Boolean));
+  const avgPrice = tests.length
+    ? tests.reduce((s, t) => s + Number(t.price || 0), 0) / tests.length
+    : 0;
 
   return (
     <div>
@@ -29,6 +36,12 @@ export default async function TestsPage() {
         title="كتالوج الفحوصات"
         subtitle="النطاقات الطبيعية تُستخدم لترميز H/L تلقائياً"
       />
+
+      <div className="mb-4 grid gap-4 sm:grid-cols-3">
+        <StatTile label="عدد الفحوصات" value={tests.length} icon={<FlaskConical className="size-5" />} />
+        <StatTile label="التصنيفات" value={categories.size} tone="neutral" icon={<Layers className="size-5" />} />
+        <StatTile label="متوسط السعر" value={`${money(avgPrice)} ر.س`} tone="neutral" icon={<Coins className="size-5" />} />
+      </div>
 
       <Card className="mb-4">
         <div className="mb-3 text-sm font-semibold">إضافة فحص جديد</div>
@@ -68,16 +81,18 @@ export default async function TestsPage() {
                 key={t.id}
                 className="border-b border-line last:border-0 hover:bg-canvas"
               >
-                <td className="px-4 py-3 text-muted">{t.code ?? "—"}</td>
+                <td className="px-4 py-3 font-mono text-xs text-muted">{t.code ?? "—"}</td>
                 <td className="px-4 py-3 font-medium">{t.name_ar}</td>
-                <td className="px-4 py-3">{t.category ?? "—"}</td>
-                <td className="px-4 py-3">{t.sample_type ?? "—"}</td>
                 <td className="px-4 py-3">
+                  {t.category ? <Badge>{t.category}</Badge> : <span className="text-muted">—</span>}
+                </td>
+                <td className="px-4 py-3 text-muted">{t.sample_type ?? "—"}</td>
+                <td className="px-4 py-3 text-muted">
                   {t.normal_low != null || t.normal_high != null
                     ? `${t.normal_low ?? ""} – ${t.normal_high ?? ""} ${t.unit ?? ""}`
                     : "—"}
                 </td>
-                <td className="px-4 py-3">{t.price}</td>
+                <td className="px-4 py-3 tabular-nums font-medium">{money(t.price)} ر.س</td>
               </tr>
             ))}
           </tbody>
