@@ -75,7 +75,13 @@ export default function StationVisitsPage() {
               <Printer className="size-4" /> طباعة
             </button>
           </div>
-          <div id="report-sheet" className="mx-auto mt-4 max-w-[210mm] bg-white p-8 text-black shadow-sm print:mt-0 print:p-0 print:shadow-none">
+          <div id="report-sheet" className="relative isolate mx-auto mt-4 max-w-[210mm] bg-white p-8 text-black shadow-sm print:mt-0 print:p-[14mm] print:shadow-none">
+            {settings.logo && (
+              <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 flex items-center justify-center">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={settings.logo} alt="" className="w-2/3 max-w-[120mm] opacity-[0.05]" />
+              </div>
+            )}
             <div className="flex items-center justify-between gap-4 border-b-4 pb-3" style={{ borderColor: GOLD }}>
               <div className="flex items-center gap-3">
                 {settings.logo && (
@@ -92,11 +98,11 @@ export default function StationVisitsPage() {
                 {sel.accession && <div className="font-mono font-bold" style={{ color: PURPLE }}>{sel.accession}</div>}
               </div>
             </div>
-            <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1 rounded-lg bg-gray-50 p-3 text-sm sm:grid-cols-3 print:bg-white">
-              <div><span className="text-gray-500">المريض:</span> <b>{sel.patient.name || "—"}</b></div>
-              <div><span className="text-gray-500">الجنس:</span> {sel.patient.gender === "male" ? "ذكر" : sel.patient.gender === "female" ? "أنثى" : "—"}</div>
-              <div><span className="text-gray-500">العمر:</span> {sel.patient.age || "—"}</div>
-              {sel.referrer && <div><span className="text-gray-500">الطبيب المُحيل:</span> {sel.referrer}</div>}
+            <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-1.5 rounded-lg border-2 p-3 text-sm sm:grid-cols-3" style={{ borderColor: GOLD }}>
+              <div><span style={{ color: PURPLE }} className="font-semibold">المريض:</span> <b>{sel.patient.name || "—"}</b></div>
+              <div><span style={{ color: PURPLE }} className="font-semibold">الجنس:</span> {sel.patient.gender === "male" ? "ذكر" : sel.patient.gender === "female" ? "أنثى" : "—"}</div>
+              <div><span style={{ color: PURPLE }} className="font-semibold">العمر:</span> {sel.patient.age || "—"}</div>
+              {sel.referrer && <div><span style={{ color: PURPLE }} className="font-semibold">الطبيب المُحيل:</span> {sel.referrer}</div>}
             </div>
             <table className="mt-4 w-full border-collapse text-sm">
               <thead>

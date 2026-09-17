@@ -96,11 +96,21 @@ main > * {
 
 /* Print: hide chrome, force the report onto white regardless of theme */
 @media print {
+  /* Drop the browser's default header/footer (URL, date, page number). */
+  @page {
+    margin: 0;
+  }
   .no-print {
     display: none !important;
   }
   body {
     background: #fff;
+  }
+  /* Ensure brand colours (letterhead bars, watermark) render on paper. */
+  #report-sheet,
+  #report-sheet * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 }
 

@@ -84,12 +84,18 @@ export default async function ReportPage({
       </div>
 
       {/* A4 report sheet */}
-      <div id="report-sheet" className="mx-auto max-w-[210mm] bg-white p-8 text-black shadow-sm print:shadow-none">
+      <div id="report-sheet" className="relative isolate mx-auto max-w-[210mm] bg-white p-8 text-black shadow-sm print:p-[14mm] print:shadow-none">
+        {/* Faint centered logo watermark */}
+        <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 flex items-center justify-center">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/lab-logo.png" alt="" className="w-2/3 max-w-[120mm] opacity-[0.05]" />
+        </div>
+
         {/* Header — lab letterhead (purple/gold identity) */}
         <div className="flex items-center justify-between gap-4 border-b-4 pb-4" style={{ borderColor: "#c9a227" }}>
           <div className="flex items-center gap-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/lab-logo.jpg" alt="" width={64} height={64} className="size-16 object-contain" />
+            <img src="/lab-logo.png" alt="" width={64} height={64} className="size-16 object-contain" />
             <div>
               <h1 className="text-2xl font-extrabold" style={{ color: "#5a2a82" }}>مختبر التحليلات المرضية</h1>
               <p className="text-sm font-medium" style={{ color: "#9c7c1e" }}>دبلوم تحليلات مرضية / بكالوريوس علوم حياة</p>

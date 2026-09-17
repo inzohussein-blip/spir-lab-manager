@@ -63,7 +63,7 @@ export interface StationSettings {
   labName: string;
   labSubtitle: string;
   footer?: string; // address / phone line
-  logo?: string; // data URL, or a static path like /lab-logo.jpg
+  logo?: string; // data URL, or a static path like /lab-logo.png
 }
 
 function read<T>(key: string, fallback: T): T {
@@ -128,7 +128,7 @@ export function getSettings(): StationSettings {
     labName: "مختبر التحليلات المرضية",
     labSubtitle: "دبلوم تحليلات مرضية / بكالوريوس علوم حياة",
     footer: "النجف الأشرف - حي ميسان - مقابل بريد ميسان / 0789038080",
-    logo: "/lab-logo.jpg",
+    logo: "/lab-logo.png",
   });
 }
 export function saveSettings(s: StationSettings): void {

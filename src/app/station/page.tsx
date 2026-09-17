@@ -109,8 +109,8 @@ export default function StationEntryPage() {
 
   return (
     <div>
-      {/* Page size for print */}
-      <style>{`@media print { @page { size: ${paper}; margin: 12mm; } }`}</style>
+      {/* Page size for print — margin 0 drops the browser's URL/date header */}
+      <style>{`@media print { @page { size: ${paper}; margin: 0; } }`}</style>
 
       {/* ── Entry form (screen only) ─────────────────────────────────────────── */}
       <div className="no-print">
@@ -276,7 +276,15 @@ export default function StationEntryPage() {
       </div>
 
       {/* ── Printable report (A4/A5) ─────────────────────────────────────────── */}
-      <div id="report-sheet" className="mx-auto mt-6 max-w-[210mm] bg-white p-8 text-black shadow-sm print:mt-0 print:p-0 print:shadow-none">
+      <div id="report-sheet" className="relative isolate mx-auto mt-6 max-w-[210mm] bg-white p-8 text-black shadow-sm print:mt-0 print:p-[14mm] print:shadow-none">
+        {/* Faint centered logo watermark */}
+        {settings.logo && (
+          <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 flex items-center justify-center">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={settings.logo} alt="" className="w-2/3 max-w-[120mm] opacity-[0.05]" style={{ WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as React.CSSProperties} />
+          </div>
+        )}
+
         {/* Letterhead — inspired by the lab's purple/gold identity */}
         <div className="flex items-center justify-between gap-4 border-b-4 pb-3" style={{ borderColor: GOLD }}>
           <div className="flex items-center gap-3">
@@ -295,12 +303,12 @@ export default function StationEntryPage() {
           </div>
         </div>
 
-        <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1 rounded-lg bg-gray-50 p-3 text-sm sm:grid-cols-3 print:bg-white">
-          <div><span className="text-gray-500">المريض:</span> <b>{name || "—"}</b></div>
-          <div><span className="text-gray-500">الجنس:</span> {gender === "male" ? "ذكر" : gender === "female" ? "أنثى" : "—"}</div>
-          <div><span className="text-gray-500">العمر:</span> {age || "—"}</div>
-          <div><span className="text-gray-500">الهاتف:</span> {phone || "—"}</div>
-          {referrer && <div><span className="text-gray-500">الطبيب المُحيل:</span> {referrer}</div>}
+        <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-1.5 rounded-lg border-2 p-3 text-sm sm:grid-cols-3" style={{ borderColor: GOLD }}>
+          <div><span style={{ color: PURPLE }} className="font-semibold">المريض:</span> <b>{name || "—"}</b></div>
+          <div><span style={{ color: PURPLE }} className="font-semibold">الجنس:</span> {gender === "male" ? "ذكر" : gender === "female" ? "أنثى" : "—"}</div>
+          <div><span style={{ color: PURPLE }} className="font-semibold">العمر:</span> {age || "—"}</div>
+          <div><span style={{ color: PURPLE }} className="font-semibold">الهاتف:</span> {phone || "—"}</div>
+          {referrer && <div><span style={{ color: PURPLE }} className="font-semibold">الطبيب المُحيل:</span> {referrer}</div>}
         </div>
 
         <table className="mt-4 w-full border-collapse text-sm">
