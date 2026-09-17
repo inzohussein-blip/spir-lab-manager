@@ -7,6 +7,8 @@ import { createInvoiceFromOrder } from "@/app/actions/invoices";
 import { PageHeader, Button } from "@/components/ui/primitives";
 import { AiAssistant } from "@/components/AiAssistant";
 import { ResultEntry } from "@/components/ResultEntry";
+import { PaymentBadge } from "@/components/PaymentBadge";
+import { money } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -50,6 +52,9 @@ export default async function OrderDetailPage({
             <Button href={`/orders/${order.id}/label`} variant="ghost">
               ملصق العيّنة
             </Button>
+            <Button href={`/orders/${order.id}/receipt`} variant="ghost">
+              الوصل
+            </Button>
             <form action={createInvoiceFromOrder.bind(null, order.id)}>
               <Button variant="ghost">إنشاء فاتورة</Button>
             </form>
@@ -62,12 +67,19 @@ export default async function OrderDetailPage({
         }
       />
 
-      {barcode && (
-        <div className="mb-4 inline-flex flex-col items-center rounded-lg border border-line bg-surface p-2">
-          <span className="h-8 w-48" dangerouslySetInnerHTML={{ __html: barcode }} />
-          <span className="font-mono text-xs text-muted">{order.accession_no}</span>
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        {barcode && (
+          <div className="inline-flex flex-col items-center rounded-lg border border-line bg-surface p-2">
+            <span className="h-8 w-48" dangerouslySetInnerHTML={{ __html: barcode }} />
+            <span className="font-mono text-xs text-muted">{order.accession_no}</span>
+          </div>
+        )}
+        <div className="flex items-center gap-2 text-sm">
+          <PaymentBadge status={order.payment_status} />
+          <span className="text-muted">الإجمالي:</span>
+          <b className="tabular-nums">{money(order.total_amount)} ر.س</b>
         </div>
-      )}
+      </div>
 
       <div className="flex flex-col gap-4">
         {items.map((it: any) => (
