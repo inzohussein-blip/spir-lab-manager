@@ -1,3 +1,4 @@
+import { Wallet } from "lucide-react";
 import { query } from "@/lib/db";
 import { PageHeader, Card, StatTile } from "@/components/ui/primitives";
 import { BarChart } from "@/components/charts/BarChart";
@@ -22,7 +23,9 @@ export default async function InsightsPage() {
          coalesce(sum(total_amount) filter (where order_date = current_date),0) as rev_day,
          coalesce(sum(total_amount) filter (where order_date >= current_date - interval '7 days'),0) as rev_week,
          coalesce(sum(total_amount) filter (where order_date >= date_trunc('month', current_date)),0) as rev_month,
-         count(*) filter (where order_date >= current_date - interval '30 days')::int as orders_month
+         count(*) filter (where order_date >= current_date - interval '30 days')::int as orders_month,
+         coalesce(sum(total_amount) filter (where payment_status <> 'paid'),0) as uncollected,
+         count(*) filter (where payment_status <> 'paid')::int as unpaid_orders
        from test_orders`
     ),
     query<{ order_date: string; income: number; visits: number }>(
@@ -72,10 +75,17 @@ export default async function InsightsPage() {
         subtitle="القسم 8 — رؤية بيانية لأداء المختبر (رسوم SVG خفيفة)"
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatTile label="دخل اليوم" value={money(k.rev_day)} />
-        <StatTile label="دخل الأسبوع" value={money(k.rev_week)} tone="neutral" />
-        <StatTile label="دخل الشهر" value={money(k.rev_month)} tone="neutral" />
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        <StatTile label="دخل اليوم" value={`${money(k.rev_day)} ر.س`} />
+        <StatTile label="دخل الأسبوع" value={`${money(k.rev_week)} ر.س`} tone="neutral" />
+        <StatTile label="دخل الشهر" value={`${money(k.rev_month)} ر.س`} tone="neutral" />
+        <StatTile
+          label="الدخل غير المُحصَّل"
+          value={`${money(k.uncollected)} ر.س`}
+          hint={`${k.unpaid_orders || 0} طلب غير مدفوع`}
+          tone={Number(k.uncollected) > 0 ? "danger" : "brand"}
+          icon={<Wallet className="size-5" />}
+        />
         <StatTile
           label="نسبة النتائج غير الطبيعية"
           value={`${abnormalPct}%`}

@@ -81,6 +81,27 @@ export default async function OrderDetailPage({
         </div>
       </div>
 
+      {(() => {
+        const done = items.filter(
+          (it: any) =>
+            it.value_numeric != null || it.value_text != null ||
+            it.physical_inspection != null || it.microscopic != null
+        ).length;
+        return (
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface px-4 py-2.5 text-sm">
+            <span className="font-medium">
+              إدخال النتائج: <b className="text-brand-dark">{done}</b> / {items.length}
+            </span>
+            <div className="flex items-center gap-3 text-xs text-muted">
+              <span className="font-medium text-ink">دلالات النتائج:</span>
+              <span className="inline-flex items-center gap-1"><span className="grid size-4 place-items-center rounded bg-red-50 text-[10px] font-bold text-red-600">H</span> مرتفع</span>
+              <span className="inline-flex items-center gap-1"><span className="grid size-4 place-items-center rounded bg-blue-50 text-[10px] font-bold text-blue-600">L</span> منخفض</span>
+              <span className="inline-flex items-center gap-1"><span className="grid size-4 place-items-center rounded bg-teal-50 text-[10px] font-bold text-brand-dark">N</span> طبيعي</span>
+            </div>
+          </div>
+        );
+      })()}
+
       <div className="flex flex-col gap-4">
         {items.map((it: any) => (
           <ResultEntry key={it.item_id} item={it} orderId={order.id} patientId={order.patient_id} />

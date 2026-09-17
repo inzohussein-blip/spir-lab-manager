@@ -10,6 +10,12 @@ const statusLabel: Record<string, string> = {
   delivered: "مُسلّم",
 };
 
+const paymentLabel: Record<string, string> = {
+  unpaid: "غير مدفوع",
+  partial: "دفع جزئي",
+  paid: "مدفوع",
+};
+
 function csvCell(v: unknown): string {
   const s = v == null ? "" : String(v);
   return `"${s.replace(/"/g, '""')}"`;
@@ -21,6 +27,7 @@ export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
   const q = (sp.get("q") || "").trim();
   const status = sp.get("status") || "";
+  const payment = sp.get("payment") || "";
   const from = sp.get("from") || "";
   const to = sp.get("to") || "";
 
@@ -34,6 +41,10 @@ export async function GET(req: NextRequest) {
     params.push(status);
     where.push(`o.status = $${params.length}`);
   }
+  if (payment) {
+    params.push(payment);
+    where.push(`o.payment_status = $${params.length}`);
+  }
   if (from) {
     params.push(from);
     where.push(`o.order_date >= $${params.length}`);
@@ -46,7 +57,7 @@ export async function GET(req: NextRequest) {
 
   const rows = await query<any>(
     `select o.accession_no, o.order_date, p.full_name, p.phone,
-            count(i.id)::int as tests, o.status, o.total_amount
+            count(i.id)::int as tests, o.status, o.payment_status, o.total_amount
        from test_orders o
        join patients p on p.id = o.patient_id
        left join test_order_items i on i.order_id = o.id
@@ -57,7 +68,7 @@ export async function GET(req: NextRequest) {
     params
   );
 
-  const header = ["رقم العيّنة", "التاريخ", "المريض", "الهاتف", "عدد الفحوصات", "الحالة", "المبلغ"];
+  const header = ["رقم العيّنة", "التاريخ", "المريض", "الهاتف", "عدد الفحوصات", "الحالة", "الدفع", "المبلغ"];
   const lines = [header.map(csvCell).join(",")];
   for (const r of rows) {
     lines.push(
@@ -68,6 +79,7 @@ export async function GET(req: NextRequest) {
         r.phone,
         r.tests,
         statusLabel[r.status] ?? r.status,
+        paymentLabel[r.payment_status] ?? r.payment_status,
         r.total_amount,
       ]
         .map(csvCell)

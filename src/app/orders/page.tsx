@@ -2,6 +2,8 @@ import Link from "next/link";
 import { Search, Download } from "lucide-react";
 import { query } from "@/lib/db";
 import { PageHeader, Card } from "@/components/ui/primitives";
+import { PaymentBadge } from "@/components/PaymentBadge";
+import { money } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +14,14 @@ const statusLabel: Record<string, string> = {
   delivered: "مُسلّم",
 };
 
+const paymentLabel: Record<string, string> = {
+  unpaid: "غير مدفوع",
+  partial: "دفع جزئي",
+  paid: "مدفوع",
+};
+
 const STATUSES = ["", "pending", "in_progress", "completed", "delivered"];
+const PAYMENTS = ["", "unpaid", "partial", "paid"];
 
 const field =
   "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
@@ -20,10 +29,11 @@ const field =
 export default async function OrdersPage({
   searchParams,
 }: {
-  searchParams: { q?: string; status?: string; from?: string; to?: string };
+  searchParams: { q?: string; status?: string; payment?: string; from?: string; to?: string };
 }) {
   const q = (searchParams.q || "").trim();
   const status = searchParams.status || "";
+  const payment = searchParams.payment || "";
   const from = searchParams.from || "";
   const to = searchParams.to || "";
 
@@ -38,6 +48,10 @@ export default async function OrdersPage({
     params.push(status);
     where.push(`o.status = $${params.length}`);
   }
+  if (payment) {
+    params.push(payment);
+    where.push(`o.payment_status = $${params.length}`);
+  }
   if (from) {
     params.push(from);
     where.push(`o.order_date >= $${params.length}`);
@@ -51,12 +65,12 @@ export default async function OrdersPage({
   // Preserve the active filters when exporting to CSV.
   const exportQs = new URLSearchParams(
     Object.fromEntries(
-      Object.entries({ q, status, from, to }).filter(([, v]) => v)
+      Object.entries({ q, status, payment, from, to }).filter(([, v]) => v)
     )
   ).toString();
 
   const orders = await query<any>(
-    `select o.id, o.order_date, o.status, o.total_amount, o.accession_no,
+    `select o.id, o.order_date, o.status, o.payment_status, o.total_amount, o.accession_no,
             p.full_name, count(i.id)::int as tests
        from test_orders o
        join patients p on p.id = o.patient_id
@@ -77,7 +91,7 @@ export default async function OrdersPage({
 
       {/* Advanced filter bar */}
       <Card className="mb-4">
-        <form className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+        <form className="grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
           <div className="flex items-center gap-2 rounded-lg border border-line bg-surface px-3 lg:col-span-2">
             <Search className="size-4 text-muted" />
             <input
@@ -94,9 +108,16 @@ export default async function OrdersPage({
               </option>
             ))}
           </select>
+          <select name="payment" defaultValue={payment} className={field}>
+            {PAYMENTS.map((s) => (
+              <option key={s} value={s}>
+                {s === "" ? "كل حالات الدفع" : paymentLabel[s]}
+              </option>
+            ))}
+          </select>
           <input name="from" type="date" defaultValue={from} className={field} aria-label="من تاريخ" />
           <input name="to" type="date" defaultValue={to} className={field} aria-label="إلى تاريخ" />
-          <div className="flex gap-2 sm:col-span-2 lg:col-span-5">
+          <div className="flex gap-2 sm:col-span-2 lg:col-span-6">
             <button className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark">
               تطبيق الفلترة
             </button>
@@ -125,13 +146,14 @@ export default async function OrdersPage({
               <th className="px-4 py-3 font-medium">المريض</th>
               <th className="px-4 py-3 font-medium">الفحوصات</th>
               <th className="px-4 py-3 font-medium">الحالة</th>
+              <th className="px-4 py-3 font-medium">الدفع</th>
               <th className="px-4 py-3 font-medium">المبلغ</th>
             </tr>
           </thead>
           <tbody>
             {orders.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-muted">
+                <td colSpan={7} className="px-4 py-8 text-center text-muted">
                   لا توجد نتائج مطابقة
                 </td>
               </tr>
@@ -149,7 +171,8 @@ export default async function OrdersPage({
                 <td className="px-4 py-3 font-medium">{o.full_name}</td>
                 <td className="px-4 py-3">{o.tests}</td>
                 <td className="px-4 py-3">{statusLabel[o.status] ?? o.status}</td>
-                <td className="px-4 py-3">{o.total_amount}</td>
+                <td className="px-4 py-3"><PaymentBadge status={o.payment_status} /></td>
+                <td className="px-4 py-3 tabular-nums">{money(o.total_amount)} ر.س</td>
               </tr>
             ))}
           </tbody>
