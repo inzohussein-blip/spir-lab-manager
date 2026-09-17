@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { query, queryOne } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
 
@@ -15,11 +14,12 @@ function accessionNo(): string {
 }
 
 /** Create an order (visit) with the selected tests. Reagent stock is deducted
- *  automatically by the DB trigger on each inserted order item (section 3). */
-export async function createOrder(formData: FormData): Promise<void> {
+ *  automatically by the DB trigger on each inserted order item (section 3).
+ *  Returns the new order id (no redirect, so it is offline-replayable). */
+export async function createOrder(formData: FormData): Promise<{ orderId: string } | null> {
   const patientId = String(formData.get("patient_id") || "");
   const testIds = formData.getAll("test_ids").map(String).filter(Boolean);
-  if (!patientId || testIds.length === 0) return;
+  if (!patientId || testIds.length === 0) return null;
 
   const referrerId = (formData.get("referrer_id") as string) || null;
   const order = await queryOne<{ id: string }>(
@@ -53,7 +53,8 @@ export async function createOrder(formData: FormData): Promise<void> {
   });
 
   revalidatePath(`/patients/${patientId}`);
-  redirect(`/orders/${orderId}`);
+  revalidatePath("/orders");
+  return { orderId };
 }
 
 /** Save (upsert) a single test result. Flag H/L/N is computed by a DB trigger. */

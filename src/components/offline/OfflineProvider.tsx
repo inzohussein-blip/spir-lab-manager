@@ -10,7 +10,8 @@ import {
   type ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
-import { saveResult } from "@/app/actions/orders";
+import { saveResult, createOrder } from "@/app/actions/orders";
+import { createPatient } from "@/app/actions/patients";
 import {
   enqueue,
   getOutbox,
@@ -18,6 +19,7 @@ import {
   subscribe,
   toFormData,
   type OutboxItem,
+  type OutboxFields,
 } from "@/lib/offline/outbox";
 
 interface OfflineCtx {
@@ -25,16 +27,21 @@ interface OfflineCtx {
   pending: OutboxItem[];
   syncing: boolean;
   /** Save a result: now if online, else queue (auto-synced on reconnect). */
-  submitResult: (fields: Record<string, string>, label: string) => Promise<"synced" | "queued">;
+  submitResult: (fields: OutboxFields, label: string) => Promise<"synced" | "queued">;
+  /** Create a patient online (returns id) or queue offline. */
+  submitPatient: (fields: OutboxFields, label: string) => Promise<{ status: "synced"; id: string } | { status: "queued" }>;
+  /** Create an order online (returns id) or queue offline. */
+  submitOrder: (fields: OutboxFields, label: string) => Promise<{ status: "synced"; orderId: string } | { status: "queued" }>;
   flush: () => Promise<void>;
 }
 
 const Ctx = createContext<OfflineCtx | null>(null);
 
 async function replay(item: OutboxItem): Promise<void> {
-  if (item.kind === "result") {
-    await saveResult(toFormData(item.fields));
-  }
+  const fd = toFormData(item.fields);
+  if (item.kind === "result") await saveResult(fd);
+  else if (item.kind === "patient") await createPatient(fd);
+  else if (item.kind === "order") await createOrder(fd);
 }
 
 export function OfflineProvider({ children }: { children: ReactNode }) {
@@ -56,7 +63,7 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
           await replay(item);
           remove(item.id);
         } catch {
-          break; // stop on first failure; retry later
+          // keep this item and try the rest; it retries on the next flush
         }
       }
       router.refresh();
@@ -91,7 +98,7 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
   }, [flush]);
 
   const submitResult = useCallback(
-    async (fields: Record<string, string>, label: string): Promise<"synced" | "queued"> => {
+    async (fields: OutboxFields, label: string): Promise<"synced" | "queued"> => {
       if (navigator.onLine) {
         try {
           await saveResult(toFormData(fields));
@@ -108,8 +115,40 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
     [router]
   );
 
+  const submitPatient = useCallback(
+    async (fields: OutboxFields, label: string) => {
+      if (navigator.onLine) {
+        try {
+          const r = await createPatient(toFormData(fields));
+          if (r?.id) return { status: "synced" as const, id: r.id };
+        } catch {
+          /* fall through to queue */
+        }
+      }
+      enqueue("patient", fields, label);
+      return { status: "queued" as const };
+    },
+    []
+  );
+
+  const submitOrder = useCallback(
+    async (fields: OutboxFields, label: string) => {
+      if (navigator.onLine) {
+        try {
+          const r = await createOrder(toFormData(fields));
+          if (r?.orderId) return { status: "synced" as const, orderId: r.orderId };
+        } catch {
+          /* fall through to queue */
+        }
+      }
+      enqueue("order", fields, label);
+      return { status: "queued" as const };
+    },
+    []
+  );
+
   return (
-    <Ctx.Provider value={{ online, pending, syncing, submitResult, flush }}>
+    <Ctx.Provider value={{ online, pending, syncing, submitResult, submitPatient, submitOrder, flush }}>
       {children}
     </Ctx.Provider>
   );

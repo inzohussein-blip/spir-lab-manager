@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { query, queryOne } from "@/lib/db";
-import { createOrder } from "@/app/actions/orders";
-import { PageHeader, Card, Button } from "@/components/ui/primitives";
+import { PageHeader, Card } from "@/components/ui/primitives";
+import { OrderForm } from "@/components/OrderForm";
 
 export const dynamic = "force-dynamic";
 
@@ -63,38 +63,7 @@ export default async function NewOrderPage({
         subtitle={`المريض: ${patient.full_name}`}
       />
       <Card>
-        <form action={createOrder} className="flex flex-col gap-4">
-          <input type="hidden" name="patient_id" value={patientId} />
-          {referrers.length > 0 && (
-            <label className="text-sm font-medium">
-              الطبيب المُحيل (اختياري)
-              <select
-                name="referrer_id"
-                defaultValue=""
-                className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand"
-              >
-                <option value="">— بدون —</option>
-                {referrers.map((r: any) => (
-                  <option key={r.id} value={r.id}>{r.name}</option>
-                ))}
-              </select>
-            </label>
-          )}
-          <div className="text-sm font-medium">اختر الفحوصات المطلوبة:</div>
-          <div className="grid gap-1 sm:grid-cols-2">
-            {tests.map((t) => (
-              <label
-                key={t.id}
-                className="flex items-center gap-2 rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas"
-              >
-                <input type="checkbox" name="test_ids" value={t.id} className="size-4" />
-                <span className="flex-1">{t.name_ar}</span>
-                <span className="text-muted">{t.price}</span>
-              </label>
-            ))}
-          </div>
-          <Button>إنشاء الطلب</Button>
-        </form>
+        <OrderForm patientId={patientId} tests={tests} referrers={referrers} />
       </Card>
     </div>
   );

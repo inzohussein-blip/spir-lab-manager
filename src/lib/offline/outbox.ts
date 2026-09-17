@@ -6,13 +6,15 @@
  * when connectivity returns. Survives reloads; scoped to this browser.
  */
 
-export type OutboxKind = "result";
+export type OutboxKind = "result" | "patient" | "order";
+
+export type OutboxFields = Record<string, string | string[]>;
 
 export interface OutboxItem {
   id: string;
   kind: OutboxKind;
-  /** Flat map of the server action's FormData fields. */
-  fields: Record<string, string>;
+  /** Map of the server action's FormData fields (arrays for multi-value). */
+  fields: OutboxFields;
   /** Human label for the pending list. */
   label: string;
   ts: number;
@@ -43,7 +45,7 @@ export function getOutbox(): OutboxItem[] {
   return read();
 }
 
-export function enqueue(kind: OutboxKind, fields: Record<string, string>, label: string): OutboxItem {
+export function enqueue(kind: OutboxKind, fields: OutboxFields, label: string): OutboxItem {
   const item: OutboxItem = {
     id:
       typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -67,8 +69,11 @@ export function subscribe(fn: Listener): () => void {
   return () => listeners.delete(fn);
 }
 
-export function toFormData(fields: Record<string, string>): FormData {
+export function toFormData(fields: OutboxFields): FormData {
   const fd = new FormData();
-  for (const [k, v] of Object.entries(fields)) fd.append(k, v);
+  for (const [k, v] of Object.entries(fields)) {
+    if (Array.isArray(v)) v.forEach((x) => fd.append(k, x));
+    else fd.append(k, v);
+  }
   return fd;
 }

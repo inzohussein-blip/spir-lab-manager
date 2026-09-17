@@ -1,13 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { query } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
 
-export async function createPatient(formData: FormData): Promise<void> {
+/** Insert a patient and return its id (no redirect, so it is offline-replayable). */
+export async function createPatient(formData: FormData): Promise<{ id: string } | null> {
   const full_name = String(formData.get("full_name") || "").trim();
-  if (!full_name) return;
+  if (!full_name) return null;
   const rows = await query<{ id: string }>(
     `insert into patients
        (full_name, gender, age_years, phone, chronic_diseases, current_meds, is_pregnant, notes)
@@ -26,5 +26,5 @@ export async function createPatient(formData: FormData): Promise<void> {
   );
   await logAudit("patient.created", "patient", rows[0].id, { name: full_name });
   revalidatePath("/patients");
-  redirect(`/patients/${rows[0].id}`);
+  return { id: rows[0].id };
 }
