@@ -15,6 +15,7 @@ export default async function InsightsPage() {
     topTests,
     byCategory,
     flags,
+    byReferrer,
   ] = await Promise.all([
     query<any>(
       `select
@@ -45,6 +46,15 @@ export default async function InsightsPage() {
     query<{ flag: string; c: number }>(
       `select coalesce(flag,'—') as flag, count(*)::int as c
          from test_results group by flag`
+    ),
+    query<{ name: string; visits: number; revenue: number }>(
+      `select coalesce(r.name, 'مرضى خارجيون') as name,
+              count(distinct o.id)::int as visits,
+              coalesce(sum(o.total_amount), 0) as revenue
+         from test_orders o
+         left join referrers r on r.id = o.referrer_id
+        group by coalesce(r.name, 'مرضى خارجيون')
+        order by visits desc limit 8`
     ),
   ]);
 
@@ -108,6 +118,38 @@ export default async function InsightsPage() {
               data={byCategory.map((t) => ({ label: t.category, value: Number(t.c) }))}
               ariaLabel="الفحوصات حسب التصنيف"
             />
+          ) : (
+            <p className="text-sm text-muted">لا توجد بيانات بعد</p>
+          )}
+        </Card>
+
+        <Card className="lg:col-span-2">
+          <div className="mb-3 font-semibold">المراجعون حسب الطبيب المُحيل</div>
+          {byReferrer.length ? (
+            <div className="grid gap-4 lg:grid-cols-2">
+              <BarChart
+                data={byReferrer.map((r) => ({ label: r.name, value: Number(r.visits) }))}
+                ariaLabel="المراجعون حسب الطبيب المُحيل"
+              />
+              <table className="w-full self-start text-sm">
+                <thead className="border-b border-line text-right text-muted">
+                  <tr>
+                    <th className="py-2 font-medium">المصدر</th>
+                    <th className="py-2 font-medium">المراجعون</th>
+                    <th className="py-2 font-medium">الدخل</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {byReferrer.map((r) => (
+                    <tr key={r.name} className="border-b border-line last:border-0">
+                      <td className="py-2 font-medium">{r.name}</td>
+                      <td className="py-2">{r.visits}</td>
+                      <td className="py-2">{money(r.revenue)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : (
             <p className="text-sm text-muted">لا توجد بيانات بعد</p>
           )}

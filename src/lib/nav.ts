@@ -55,6 +55,8 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/patients", label: "المرضى", icon: Users },
       { href: "/orders", label: "سجل العيّنات", icon: ClipboardList },
+      { href: "/worklist", label: "طاولة المختبر", icon: FlaskConical, roles: LAB },
+      { href: "/release", label: "تسليم النتائج", icon: ClipboardCheck, roles: FIN },
       { href: "/tests", label: "كتالوج الفحوصات", icon: FlaskConical, roles: LAB },
       { href: "/quality", label: "مراقبة الجودة", icon: ClipboardCheck, roles: LAB },
       { href: "/calendar", label: "التقويم اليومي", icon: CalendarDays },
