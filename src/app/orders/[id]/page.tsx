@@ -47,6 +47,9 @@ export default async function OrderDetailPage({
             <Button href={`/orders/${order.id}/report`} variant="ghost">
               <FileText className="size-4" /> التقرير / الطباعة
             </Button>
+            <Button href={`/orders/${order.id}/label`} variant="ghost">
+              ملصق العيّنة
+            </Button>
             <form action={createInvoiceFromOrder.bind(null, order.id)}>
               <Button variant="ghost">إنشاء فاتورة</Button>
             </form>

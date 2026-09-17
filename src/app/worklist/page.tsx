@@ -58,9 +58,14 @@ export default async function WorklistPage() {
                   )}
                 </td>
                 <td className="px-4 py-3">
-                  <Link href={`/orders/${o.id}`} className="rounded-lg bg-brand px-3 py-1 text-xs font-semibold text-white hover:bg-brand-dark">
-                    إدخال النتائج
-                  </Link>
+                  <div className="flex gap-1">
+                    <Link href={`/orders/${o.id}`} className="rounded-lg bg-brand px-3 py-1 text-xs font-semibold text-white hover:bg-brand-dark">
+                      إدخال النتائج
+                    </Link>
+                    <Link href={`/orders/${o.id}/label`} className="rounded-lg border border-line px-3 py-1 text-xs hover:bg-canvas">
+                      ملصق
+                    </Link>
+                  </div>
                 </td>
               </tr>
             ))}
