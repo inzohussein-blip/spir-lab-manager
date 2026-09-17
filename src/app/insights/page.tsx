@@ -76,12 +76,12 @@ export default async function InsightsPage() {
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        <StatTile label="دخل اليوم" value={`${money(k.rev_day)} ر.س`} />
-        <StatTile label="دخل الأسبوع" value={`${money(k.rev_week)} ر.س`} tone="neutral" />
-        <StatTile label="دخل الشهر" value={`${money(k.rev_month)} ر.س`} tone="neutral" />
+        <StatTile label="دخل اليوم" value={`${money(k.rev_day)} د.ع`} />
+        <StatTile label="دخل الأسبوع" value={`${money(k.rev_week)} د.ع`} tone="neutral" />
+        <StatTile label="دخل الشهر" value={`${money(k.rev_month)} د.ع`} tone="neutral" />
         <StatTile
           label="الدخل غير المُحصَّل"
-          value={`${money(k.uncollected)} ر.س`}
+          value={`${money(k.uncollected)} د.ع`}
           hint={`${k.unpaid_orders || 0} طلب غير مدفوع`}
           tone={Number(k.uncollected) > 0 ? "danger" : "brand"}
           icon={<Wallet className="size-5" />}
@@ -154,7 +154,7 @@ export default async function InsightsPage() {
                     <tr key={r.name} className="border-b border-line last:border-0">
                       <td className="py-2 font-medium">{r.name}</td>
                       <td className="py-2">{r.visits}</td>
-                      <td className="py-2 tabular-nums">{money(r.revenue)} ر.س</td>
+                      <td className="py-2 tabular-nums">{money(r.revenue)} د.ع</td>
                     </tr>
                   ))}
                 </tbody>

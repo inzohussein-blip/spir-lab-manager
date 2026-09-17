@@ -80,7 +80,7 @@ export default async function ReceiptPage({ params }: { params: { id: string } }
           <thead>
             <tr className="text-gray-500">
               <th className="pb-1 text-right font-medium">الفحص</th>
-              <th className="pb-1 text-left font-medium">ر.س</th>
+              <th className="pb-1 text-left font-medium">د.ع</th>
             </tr>
           </thead>
           <tbody>
@@ -97,7 +97,7 @@ export default async function ReceiptPage({ params }: { params: { id: string } }
 
         <div className="flex items-center justify-between text-sm font-bold">
           <span>الإجمالي</span>
-          <span className="tabular-nums">{money(order.total_amount)} ر.س</span>
+          <span className="tabular-nums">{money(order.total_amount)} د.ع</span>
         </div>
         <div className="mt-1 flex items-center justify-between text-[12px]">
           <span>حالة الدفع</span>

@@ -94,13 +94,13 @@ export default async function InvoiceDetailPage({ params }: { params: { id: stri
         </table>
 
         <div className="mt-4 ms-auto max-w-xs space-y-1 text-sm">
-          <div className="flex justify-between"><span className="text-muted">المجموع الفرعي</span><span className="tabular-nums">{money(inv.subtotal)} ر.س</span></div>
-          <div className="flex justify-between"><span className="text-muted">الخصم</span><span className="tabular-nums">-{money(inv.discount)} ر.س</span></div>
-          <div className="flex justify-between"><span className="text-muted">الضريبة ({inv.tax_rate}%)</span><span className="tabular-nums">{money(inv.tax_amount)} ر.س</span></div>
-          <div className="flex justify-between border-t border-line pt-1 text-base font-bold"><span>الإجمالي</span><span className="tabular-nums">{money(inv.total)} ر.س</span></div>
-          <div className="flex justify-between"><span className="text-muted">المدفوع</span><span className="tabular-nums">{money(inv.paid)} ر.س</span></div>
+          <div className="flex justify-between"><span className="text-muted">المجموع الفرعي</span><span className="tabular-nums">{money(inv.subtotal)} د.ع</span></div>
+          <div className="flex justify-between"><span className="text-muted">الخصم</span><span className="tabular-nums">-{money(inv.discount)} د.ع</span></div>
+          <div className="flex justify-between"><span className="text-muted">الضريبة ({inv.tax_rate}%)</span><span className="tabular-nums">{money(inv.tax_amount)} د.ع</span></div>
+          <div className="flex justify-between border-t border-line pt-1 text-base font-bold"><span>الإجمالي</span><span className="tabular-nums">{money(inv.total)} د.ع</span></div>
+          <div className="flex justify-between"><span className="text-muted">المدفوع</span><span className="tabular-nums">{money(inv.paid)} د.ع</span></div>
           <div className={`flex justify-between font-semibold ${balance > 0 ? "text-red-600" : "text-brand-dark"}`}>
-            <span>المتبقّي</span><span className="tabular-nums">{money(balance)} ر.س</span>
+            <span>المتبقّي</span><span className="tabular-nums">{money(balance)} د.ع</span>
           </div>
           {Number(inv.total) > 0 && inv.status !== "void" && (
             <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-canvas">

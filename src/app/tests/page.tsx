@@ -3,6 +3,7 @@ import { query } from "@/lib/db";
 import { PageHeader, Card, Button, StatTile, Badge } from "@/components/ui/primitives";
 import { addTest } from "@/app/actions/tests";
 import { money } from "@/lib/utils";
+import { TestPriceCell } from "@/components/TestPriceCell";
 
 export const dynamic = "force-dynamic";
 
@@ -26,8 +27,9 @@ export default async function TestsPage() {
   );
 
   const categories = new Set(tests.map((t) => t.category).filter(Boolean));
-  const avgPrice = tests.length
-    ? tests.reduce((s, t) => s + Number(t.price || 0), 0) / tests.length
+  const priced = tests.filter((t) => Number(t.price) > 0);
+  const avgPrice = priced.length
+    ? priced.reduce((s, t) => s + Number(t.price), 0) / priced.length
     : 0;
 
   return (
@@ -40,7 +42,7 @@ export default async function TestsPage() {
       <div className="mb-4 grid gap-4 sm:grid-cols-3">
         <StatTile label="عدد الفحوصات" value={tests.length} icon={<FlaskConical className="size-5" />} />
         <StatTile label="التصنيفات" value={categories.size} tone="neutral" icon={<Layers className="size-5" />} />
-        <StatTile label="متوسط السعر" value={`${money(avgPrice)} ر.س`} tone="neutral" icon={<Coins className="size-5" />} />
+        <StatTile label="متوسط السعر" value={`${money(avgPrice)} د.ع`} hint={`${priced.length} فحص مسعّر`} tone="neutral" icon={<Coins className="size-5" />} />
       </div>
 
       <Card className="mb-4">
@@ -54,7 +56,7 @@ export default async function TestsPage() {
           <input name="unit" placeholder="الوحدة" className={field} />
           <input name="normal_low" type="number" step="any" placeholder="أدنى طبيعي" className={field} />
           <input name="normal_high" type="number" step="any" placeholder="أعلى طبيعي" className={field} />
-          <input name="price" type="number" step="any" placeholder="السعر" className={field} />
+          <input name="price" type="number" step="any" min="0" placeholder="السعر (اختياري)" className={field} />
           <label className="flex items-center gap-2 text-sm">
             <input name="is_special" type="checkbox" className="size-4" />
             فحص خاص (بول/براز)
@@ -72,7 +74,7 @@ export default async function TestsPage() {
               <th className="px-4 py-3 font-medium">التصنيف</th>
               <th className="px-4 py-3 font-medium">العينة</th>
               <th className="px-4 py-3 font-medium">النطاق الطبيعي</th>
-              <th className="px-4 py-3 font-medium">السعر</th>
+              <th className="px-4 py-3 font-medium">السعر (اضغط للتعديل)</th>
             </tr>
           </thead>
           <tbody>
@@ -92,7 +94,7 @@ export default async function TestsPage() {
                     ? `${t.normal_low ?? ""} – ${t.normal_high ?? ""} ${t.unit ?? ""}`
                     : "—"}
                 </td>
-                <td className="px-4 py-3 tabular-nums font-medium">{money(t.price)} ر.س</td>
+                <td className="px-4 py-3"><TestPriceCell id={t.id} price={t.price} /></td>
               </tr>
             ))}
           </tbody>

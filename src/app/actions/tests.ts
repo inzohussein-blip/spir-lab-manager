@@ -30,3 +30,16 @@ export async function addTest(formData: FormData): Promise<void> {
   );
   revalidatePath("/tests");
 }
+
+/** Set (or clear) a test's price. An empty value means "unpriced" (stored as
+ *  0), so a lab can keep some tests without a set price. */
+export async function setTestPrice(formData: FormData): Promise<void> {
+  const id = String(formData.get("test_id") || "");
+  if (!id) return;
+  const raw = formData.get("price");
+  const price = raw && String(raw).trim() !== "" ? Math.max(0, Number(raw)) : 0;
+  if (Number.isNaN(price)) return;
+  await query(`update test_catalog set price = $1 where id = $2`, [price, id]);
+  revalidatePath("/tests");
+  revalidatePath("/orders/new");
+}

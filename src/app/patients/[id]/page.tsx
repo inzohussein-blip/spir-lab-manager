@@ -79,7 +79,7 @@ export default async function PatientDetailPage({
       {/* Summary */}
       <div className="mb-4 grid gap-4 sm:grid-cols-3">
         <StatTile label="عدد الزيارات" value={visits} icon={<Activity className="size-5" />} />
-        <StatTile label="إجمالي الإنفاق" value={`${money(spend)} ر.س`} icon={<Coins className="size-5" />} />
+        <StatTile label="إجمالي الإنفاق" value={`${money(spend)} د.ع`} icon={<Coins className="size-5" />} />
         <StatTile label="آخر زيارة" value={lastVisit} tone="neutral" icon={<CalendarClock className="size-5" />} />
       </div>
 
@@ -131,7 +131,7 @@ export default async function PatientDetailPage({
                   <td className="px-4 py-3">{o.tests}</td>
                   <td className="px-4 py-3">{statusLabel[o.status] ?? o.status}</td>
                   <td className="px-4 py-3"><PaymentBadge status={o.payment_status} /></td>
-                  <td className="px-4 py-3 tabular-nums">{money(o.total_amount)} ر.س</td>
+                  <td className="px-4 py-3 tabular-nums">{money(o.total_amount)} د.ع</td>
                 </tr>
               ))}
             </tbody>

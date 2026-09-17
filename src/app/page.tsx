@@ -61,7 +61,7 @@ export default async function DashboardPage() {
         <StatTile label="مراجعو اليوم" value={today?.visits ?? 0} icon={<Users className="size-5" />} />
         <StatTile
           label="دخل اليوم"
-          value={`${money(today?.income)} ر.س`}
+          value={`${money(today?.income)} د.ع`}
           hint="من الفحوصات المسجّلة اليوم"
           icon={<Coins className="size-5" />}
         />
@@ -102,7 +102,7 @@ export default async function DashboardPage() {
         <Link href="/orders?payment=unpaid" className="block">
           <StatTile
             label="دخل غير محصّل"
-            value={`${money(q.uncollected)} ر.س`}
+            value={`${money(q.uncollected)} د.ع`}
             hint="طلبات غير مدفوعة/جزئية"
             tone={Number(q.uncollected) > 0 ? "danger" : "brand"}
             icon={<Wallet className="size-5" />}

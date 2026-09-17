@@ -172,7 +172,7 @@ export default async function OrdersPage({
                 <td className="px-4 py-3">{o.tests}</td>
                 <td className="px-4 py-3">{statusLabel[o.status] ?? o.status}</td>
                 <td className="px-4 py-3"><PaymentBadge status={o.payment_status} /></td>
-                <td className="px-4 py-3 tabular-nums">{money(o.total_amount)} ر.س</td>
+                <td className="px-4 py-3 tabular-nums">{money(o.total_amount)} د.ع</td>
               </tr>
             ))}
           </tbody>

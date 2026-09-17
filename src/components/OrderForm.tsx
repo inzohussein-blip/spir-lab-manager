@@ -231,7 +231,7 @@ export function OrderForm({
                         </span>
                         <span className="min-w-0 flex-1 truncate font-medium">{t.name_ar}</span>
                         <span className="shrink-0 text-xs text-muted tabular-nums">
-                          {money(t.price)} ر.س
+                          {Number(t.price) > 0 ? `${money(t.price)} د.ع` : "بدون سعر"}
                         </span>
                       </button>
                     );
@@ -251,7 +251,7 @@ export function OrderForm({
           <div className="rounded-xl bg-canvas p-4 text-center">
             <div className="text-xs text-muted">المبلغ الإجمالي</div>
             <div className="mt-1 text-3xl font-bold tabular-nums text-brand-dark">
-              {money(total)} <span className="text-lg">ر.س</span>
+              {money(total)} <span className="text-lg">د.ع</span>
             </div>
             <div className="mt-1 text-xs text-muted">
               {selected.size} فحص محدَّد

@@ -37,7 +37,7 @@ export default async function CalendarPage() {
               <tr key={d.order_date} className="border-b border-line last:border-0">
                 <td className="px-4 py-3 font-medium">{d.order_date}</td>
                 <td className="px-4 py-3">{d.visits}</td>
-                <td className="px-4 py-3 tabular-nums">{money(d.income)} ر.س</td>
+                <td className="px-4 py-3 tabular-nums">{money(d.income)} د.ع</td>
               </tr>
             ))}
           </tbody>

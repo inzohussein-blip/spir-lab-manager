@@ -81,13 +81,17 @@ textarea {
   border-radius: 8px;
 }
 
-/* Subtle page-enter animation */
+/* Subtle page-enter animation — opacity only (no transform) so navigating
+ * between data-heavy tables stays smooth and doesn't repaint on every move. */
 @keyframes lab-fade-in {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 main > * {
-  animation: lab-fade-in 0.25s ease;
+  animation: lab-fade-in 0.15s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  main > * { animation: none; }
 }
 
 /* Print: hide chrome, force the report onto white regardless of theme */

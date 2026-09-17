@@ -26,7 +26,7 @@ export default async function StockBalancePage() {
       <PageHeader title="أرصدة المخزون" subtitle="تقييم المخزون بحسب سعر الشراء" />
 
       <div className="mb-6 grid gap-4 sm:grid-cols-3">
-        <StatTile label="قيمة المخزون" value={`${money(totals?.total_value)} ر.س`} />
+        <StatTile label="قيمة المخزون" value={`${money(totals?.total_value)} د.ع`} />
         <StatTile label="عدد المواد" value={totals?.items ?? 0} tone="neutral" />
         <StatTile label="تحت الحد الأدنى" value={totals?.low ?? 0} tone={Number(totals?.low) ? "danger" : "brand"} />
       </div>

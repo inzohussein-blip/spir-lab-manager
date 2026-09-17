@@ -3,6 +3,7 @@ import { UserRound, Search, UserPlus } from "lucide-react";
 import { query, queryOne } from "@/lib/db";
 import { PageHeader, Card, EmptyState, Button } from "@/components/ui/primitives";
 import { OrderForm } from "@/components/OrderForm";
+import { PatientPicker, type PickPatient } from "@/components/PatientPicker";
 
 export const dynamic = "force-dynamic";
 
@@ -25,8 +26,15 @@ export default async function NewOrderPage({
 
   // ── Step 0: pick a patient when none is passed ──────────────────────────────
   if (!patientId) {
-    const patients = await query<{ id: string; full_name: string; phone: string | null }>(
-      `select id, full_name, phone from patients order by created_at desc limit 50`
+    const patients = await query<PickPatient>(
+      `select p.id, p.full_name, p.gender, p.age_years, p.phone,
+              count(o.id)::int as visits,
+              to_char(max(o.order_date), 'YYYY-MM-DD') as last_visit
+         from patients p
+         left join test_orders o on o.patient_id = p.id
+        group by p.id
+        order by max(o.order_date) desc nulls last, p.created_at desc
+        limit 300`
     );
     return (
       <div className="max-w-lg">
@@ -39,7 +47,7 @@ export default async function NewOrderPage({
             </Button>
           }
         />
-        <Card className={patients.length ? "p-2" : ""}>
+        <Card className={patients.length ? "p-3" : ""}>
           {patients.length === 0 ? (
             <EmptyState
               icon={<UserRound className="size-6" />}
@@ -48,24 +56,7 @@ export default async function NewOrderPage({
               action={<Button href="/patients/new">تسجيل مريض جديد</Button>}
             />
           ) : (
-            <ul className="flex flex-col">
-              {patients.map((p) => (
-                <li key={p.id}>
-                  <a
-                    href={`/orders/new?patient=${p.id}`}
-                    className="flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-sm hover:bg-canvas"
-                  >
-                    <span className="flex items-center gap-2 font-medium">
-                      <span className="grid size-8 place-items-center rounded-full bg-brand-light text-brand-dark">
-                        <UserRound className="size-4" />
-                      </span>
-                      {p.full_name}
-                    </span>
-                    {p.phone && <span className="text-xs text-muted">{p.phone}</span>}
-                  </a>
-                </li>
-              ))}
-            </ul>
+            <PatientPicker patients={patients} />
           )}
         </Card>
       </div>

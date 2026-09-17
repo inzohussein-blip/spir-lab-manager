@@ -63,11 +63,11 @@ export default async function InvoicesPage({
       <PageHeader title="الفواتير" subtitle="فوترة المرضى والمدفوعات" />
 
       <div className="mb-6 grid gap-4 sm:grid-cols-3">
-        <StatTile label="إجمالي الفواتير" value={`${money(totals?.billed)} ر.س`} tone="neutral" icon={<ReceiptText className="size-5" />} />
-        <StatTile label="المُحصّل" value={`${money(totals?.collected)} ر.س`} icon={<Coins className="size-5" />} />
+        <StatTile label="إجمالي الفواتير" value={`${money(totals?.billed)} د.ع`} tone="neutral" icon={<ReceiptText className="size-5" />} />
+        <StatTile label="المُحصّل" value={`${money(totals?.collected)} د.ع`} icon={<Coins className="size-5" />} />
         <StatTile
           label="المستحق (مدينون)"
-          value={`${money(totals?.receivable)} ر.س`}
+          value={`${money(totals?.receivable)} د.ع`}
           tone={Number(totals?.receivable) > 0 ? "warn" : "brand"}
           icon={<Wallet className="size-5" />}
         />

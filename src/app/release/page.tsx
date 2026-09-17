@@ -47,7 +47,7 @@ export default async function ReleasePage() {
         />
         <StatTile
           label="مبالغ مستحقة"
-          value={`${money(dueTotal)} ر.س`}
+          value={`${money(dueTotal)} د.ع`}
           tone={dueTotal > 0 ? "danger" : "brand"}
         />
       </div>

@@ -90,7 +90,7 @@ export default async function OrderDetailPage({
           <div className="flex items-center gap-2 text-sm">
             <PaymentBadge status={order.payment_status} />
             <span className="text-muted">الإجمالي:</span>
-            <b className="tabular-nums">{money(order.total_amount)} ر.س</b>
+            <b className="tabular-nums">{money(order.total_amount)} د.ع</b>
           </div>
           {invoice ? (
             <span className="text-xs text-muted">الدفع يُدار من الفاتورة</span>
