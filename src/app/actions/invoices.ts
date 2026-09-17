@@ -14,7 +14,7 @@ function invoiceNo(): string {
 /** Recompute totals + paid + status from the invoice's items and payments. */
 async function recompute(invoiceId: string): Promise<void> {
   const inv = await queryOne<any>(
-    `select discount, tax_rate from invoices where id = $1`,
+    `select discount, tax_rate, order_id from invoices where id = $1`,
     [invoiceId]
   );
   if (!inv) return;
@@ -39,6 +39,24 @@ async function recompute(invoiceId: string): Promise<void> {
       where id=$6`,
     [sub, taxAmount, total, paid, status, invoiceId]
   );
+
+  // Keep the order's quick-glance payment status in step with its invoice, so
+  // reception/lab/release desks see one consistent figure. Also mirror the
+  // payment method from the most recent payment.
+  if (inv.order_id) {
+    const lastMethod = (await queryOne<{ method: string | null }>(
+      `select method from payments where invoice_id = $1 order by paid_at desc limit 1`,
+      [invoiceId]
+    ))?.method ?? null;
+    await query(
+      `update test_orders set payment_status = $1,
+          payment_method = case when $1 = 'unpaid' then null else $2 end
+        where id = $3`,
+      [status, lastMethod, inv.order_id]
+    );
+    revalidatePath(`/orders/${inv.order_id}`);
+    revalidatePath("/release");
+  }
 }
 
 /** Raise an invoice from a test order (lines = ordered tests). */

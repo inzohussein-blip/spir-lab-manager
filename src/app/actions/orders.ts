@@ -125,6 +125,26 @@ export async function saveResult(formData: FormData): Promise<void> {
   revalidatePath(`/orders/${orderId}`);
 }
 
+/** Quick payment update from the reception/release desk — records how the
+ *  visit was paid on the order itself, without opening a full invoice. */
+export async function setOrderPayment(formData: FormData): Promise<void> {
+  const orderId = String(formData.get("order_id") || "");
+  const statusRaw = String(formData.get("payment_status") || "");
+  const status = ["unpaid", "paid", "partial"].includes(statusRaw) ? statusRaw : null;
+  if (!orderId || !status) return;
+  const methodRaw = String(formData.get("payment_method") || "");
+  const method = ["cash", "card", "transfer"].includes(methodRaw) ? methodRaw : null;
+
+  await query(
+    `update test_orders set payment_status = $1, payment_method = $2 where id = $3`,
+    [status, status === "unpaid" ? null : method, orderId]
+  );
+  await logAudit("order.payment", "order", orderId, { status, method });
+  revalidatePath(`/orders/${orderId}`);
+  revalidatePath("/orders");
+  revalidatePath("/release");
+}
+
 /** Mark an order status (e.g. completed / delivered). */
 export async function setOrderStatus(formData: FormData): Promise<void> {
   const orderId = String(formData.get("order_id") || "");

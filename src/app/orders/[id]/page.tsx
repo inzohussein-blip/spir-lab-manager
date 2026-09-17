@@ -8,6 +8,7 @@ import { PageHeader, Button } from "@/components/ui/primitives";
 import { AiAssistant } from "@/components/AiAssistant";
 import { ResultEntry } from "@/components/ResultEntry";
 import { PaymentBadge } from "@/components/PaymentBadge";
+import { QuickPay } from "@/components/QuickPay";
 import { money } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -37,6 +38,11 @@ export default async function OrderDetailPage({
     [params.id]
   );
 
+  const invoice = await queryOne<{ id: string }>(
+    `select id from invoices where order_id = $1 and status <> 'void' limit 1`,
+    [params.id]
+  );
+
   const barcode = order.accession_no ? await barcodeSvg(order.accession_no) : "";
 
   return (
@@ -55,9 +61,15 @@ export default async function OrderDetailPage({
             <Button href={`/orders/${order.id}/receipt`} variant="ghost">
               الوصل
             </Button>
-            <form action={createInvoiceFromOrder.bind(null, order.id)}>
-              <Button variant="ghost">إنشاء فاتورة</Button>
-            </form>
+            {invoice ? (
+              <Button href={`/invoices/${invoice.id}`} variant="ghost">
+                الفاتورة
+              </Button>
+            ) : (
+              <form action={createInvoiceFromOrder.bind(null, order.id)}>
+                <Button variant="ghost">إنشاء فاتورة</Button>
+              </form>
+            )}
             <form action={setOrderStatus}>
               <input type="hidden" name="order_id" value={order.id} />
               <input type="hidden" name="status" value="completed" />
@@ -74,10 +86,21 @@ export default async function OrderDetailPage({
             <span className="font-mono text-xs text-muted">{order.accession_no}</span>
           </div>
         )}
-        <div className="flex items-center gap-2 text-sm">
-          <PaymentBadge status={order.payment_status} />
-          <span className="text-muted">الإجمالي:</span>
-          <b className="tabular-nums">{money(order.total_amount)} ر.س</b>
+        <div className="flex flex-1 flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-sm">
+            <PaymentBadge status={order.payment_status} />
+            <span className="text-muted">الإجمالي:</span>
+            <b className="tabular-nums">{money(order.total_amount)} ر.س</b>
+          </div>
+          {invoice ? (
+            <span className="text-xs text-muted">الدفع يُدار من الفاتورة</span>
+          ) : (
+            <QuickPay
+              orderId={order.id}
+              status={order.payment_status}
+              method={order.payment_method}
+            />
+          )}
         </div>
       </div>
 

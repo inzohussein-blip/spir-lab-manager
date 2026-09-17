@@ -6,6 +6,7 @@ export const dynamic = "force-dynamic";
 const ACTION_LABEL: Record<string, string> = {
   "order.created": "إنشاء طلب فحص",
   "order.status": "تغيير حالة الطلب",
+  "order.payment": "تحديث الدفع",
   "result.saved": "حفظ نتيجة",
   "report.sent": "إرسال تقرير",
   "patient.created": "إضافة مريض",
@@ -15,6 +16,7 @@ function summarize(action: string, details: any): string {
   if (!details) return "";
   if (action === "order.created") return `عدد الفحوصات ${details.tests}، المبلغ ${details.total}`;
   if (action === "order.status") return `الحالة: ${details.status}`;
+  if (action === "order.payment") return `الدفع: ${details.status}${details.method ? ` (${details.method})` : ""}`;
   if (action === "result.saved") return `القيمة: ${details.value}`;
   if (action === "report.sent") return `القناة: ${details.channel}`;
   if (action === "patient.created") return details.name ?? "";
