@@ -22,10 +22,19 @@ export async function createOrder(formData: FormData): Promise<{ orderId: string
   if (!patientId || testIds.length === 0) return null;
 
   const referrerId = (formData.get("referrer_id") as string) || null;
+  const paymentStatusRaw = String(formData.get("payment_status") || "unpaid");
+  const paymentStatus = ["unpaid", "paid", "partial"].includes(paymentStatusRaw)
+    ? paymentStatusRaw
+    : "unpaid";
+  const paymentMethodRaw = String(formData.get("payment_method") || "");
+  const paymentMethod = ["cash", "card", "transfer"].includes(paymentMethodRaw)
+    ? paymentMethodRaw
+    : null;
   const order = await queryOne<{ id: string }>(
-    `insert into test_orders (patient_id, status, accession_no, referrer_id)
-     values ($1, 'in_progress', $2, $3) returning id`,
-    [patientId, accessionNo(), referrerId]
+    `insert into test_orders
+       (patient_id, status, accession_no, referrer_id, payment_status, payment_method)
+     values ($1, 'in_progress', $2, $3, $4, $5) returning id`,
+    [patientId, accessionNo(), referrerId, paymentStatus, paymentMethod]
   );
   const orderId = order!.id;
 
@@ -50,6 +59,7 @@ export async function createOrder(formData: FormData): Promise<{ orderId: string
   await logAudit("order.created", "order", orderId, {
     tests: testIds.length,
     total,
+    payment: paymentStatus,
   });
 
   revalidatePath(`/patients/${patientId}`);
