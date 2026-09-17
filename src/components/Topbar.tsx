@@ -5,6 +5,7 @@ import { logoutAction } from "@/app/actions/auth";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { CommandPalette } from "@/components/CommandPalette";
 import { NewButton } from "@/components/NewButton";
+import { MobileNav } from "@/components/MobileNav";
 import { SyncStatus } from "@/components/offline/SyncStatus";
 import type { SessionUser } from "@/lib/auth/session";
 
@@ -12,6 +13,7 @@ export function Topbar({ user }: { user: SessionUser }) {
   return (
     <header className="no-print sticky top-0 z-20 flex h-14 items-center justify-between gap-3 border-b border-line bg-surface/90 px-4 backdrop-blur md:px-7">
       <div className="flex flex-1 items-center gap-3">
+        <MobileNav role={user.role} />
         <NewButton />
         <div className="hidden flex-1 sm:block">
           <CommandPalette role={user.role} />

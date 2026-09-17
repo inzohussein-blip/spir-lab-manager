@@ -100,6 +100,27 @@ main > * {
   }
 }
 
+/* Professional data tables (opt-in via .data-table on the scroll wrapper) */
+.data-table {
+  overflow-x: auto;
+}
+.data-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.data-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--color-surface);
+}
+.data-table tbody tr:nth-child(even) {
+  background: color-mix(in oklab, var(--color-canvas) 60%, transparent);
+}
+.data-table tbody tr:hover {
+  background: var(--color-brand-light);
+}
+
 /* Result flag chips */
 .flag-H {
   color: var(--color-high);

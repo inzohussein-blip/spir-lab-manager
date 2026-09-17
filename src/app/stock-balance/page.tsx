@@ -31,7 +31,7 @@ export default async function StockBalancePage() {
         <StatTile label="تحت الحد الأدنى" value={totals?.low ?? 0} tone={Number(totals?.low) ? "danger" : "brand"} />
       </div>
 
-      <Card className="p-0">
+      <Card className="p-0 data-table">
         <table className="w-full text-sm">
           <thead className="border-b border-line text-right text-muted">
             <tr>

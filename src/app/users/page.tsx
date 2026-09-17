@@ -31,7 +31,7 @@ export default async function UsersPage() {
         </form>
       </Card>
 
-      <Card className="p-0">
+      <Card className="p-0 data-table">
         <table className="w-full text-sm">
           <thead className="border-b border-line text-right text-muted">
             <tr>

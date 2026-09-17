@@ -16,7 +16,7 @@ export default async function CalendarPage() {
         title="التقويم اليومي"
         subtitle="القسم 2 — عدد المراجعين والدخل لكل يوم"
       />
-      <Card className="p-0">
+      <Card className="p-0 data-table">
         <table className="w-full text-sm">
           <thead className="border-b border-line text-right text-muted">
             <tr>

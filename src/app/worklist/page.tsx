@@ -28,7 +28,7 @@ export default async function WorklistPage() {
         title="طاولة المختبر"
         subtitle="الطلبات الواردة بانتظار إدخال النتائج (الأقدم أولاً)"
       />
-      <Card className="p-0">
+      <Card className="p-0 data-table">
         <table className="w-full text-sm">
           <thead className="border-b border-line text-right text-muted">
             <tr>

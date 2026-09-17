@@ -28,7 +28,7 @@ export default async function ReleasePage() {
         title="تسليم النتائج"
         subtitle="التقارير المكتملة الجاهزة للطباعة والإرسال والتسليم"
       />
-      <Card className="p-0">
+      <Card className="p-0 data-table">
         <table className="w-full text-sm">
           <thead className="border-b border-line text-right text-muted">
             <tr>
