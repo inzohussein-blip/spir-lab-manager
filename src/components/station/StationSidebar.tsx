@@ -28,6 +28,13 @@ export function StationSidebar() {
     setPages(getPages());
   }, [pathname]);
 
+  // Register the PWA service worker so the station is installable/offline.
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    }
+  }, []);
+
   function addPage() {
     const title = window.prompt("اسم الواجهة الجديدة:");
     if (!title || !title.trim()) return;

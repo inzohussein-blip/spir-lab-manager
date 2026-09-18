@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ShoppingCart, Truck, Settings, Home } from "lucide-react";
+import { ShoppingCart, Truck, Settings, Home, FileBarChart } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const FIXED = [
   { href: "/store", label: "المشتريات", icon: ShoppingCart },
+  { href: "/store/report", label: "التقارير (شهري/سنوي)", icon: FileBarChart },
   { href: "/store/suppliers", label: "الموردون", icon: Truck },
   { href: "/store/settings", label: "الإعدادات والنسخ الاحتياطي", icon: Settings },
 ];

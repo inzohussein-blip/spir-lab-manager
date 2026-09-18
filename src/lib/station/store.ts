@@ -91,6 +91,7 @@ const K_COUNTER = "station.counter.v1";
 const K_PATIENTS = "station.patients.v1";
 const K_STOCK = "station.stock.v1";
 const K_DOCTORS = "station.doctors.v1";
+const K_BACKUP_AT = "station.backupAt.v1";
 
 export interface StationSettings {
   labName: string;
@@ -140,8 +141,8 @@ export function getVisits(): StationVisit[] {
   return read<StationVisit[]>(K_VISITS, []);
 }
 export function addVisit(v: StationVisit): void {
-  const all = getVisits();
-  write(K_VISITS, [v, ...all].slice(0, 500));
+  // No cap — local storage stays open and growable (backed up as a file).
+  write(K_VISITS, [v, ...getVisits()]);
 }
 export function saveVisitsRaw(visits: StationVisit[]): void {
   write(K_VISITS, visits);
@@ -177,6 +178,20 @@ export function getSettings(): StationSettings {
 }
 export function saveSettings(s: StationSettings): void {
   write(K_SETTINGS, s);
+}
+
+// ── Backup reminder (track when the last export happened) ────────────────────
+export function getLastBackup(): number | null {
+  return read<number | null>(K_BACKUP_AT, null);
+}
+export function markBackupNow(): void {
+  write(K_BACKUP_AT, Date.now());
+}
+/** Whole days since the last backup, or null if never backed up. */
+export function daysSinceBackup(): number | null {
+  const t = getLastBackup();
+  if (!t) return null;
+  return Math.floor((Date.now() - t) / 86400000);
 }
 
 // ── Panels ───────────────────────────────────────────────────────────────────
@@ -257,6 +272,12 @@ export function deductStockForTests(testIds: string[]): void {
     s.linkedTestId && set.has(s.linkedTestId) ? { ...s, qty: Math.max(0, Number(s.qty) - 1) } : s
   );
   saveStock(next);
+}
+/** Clear the link on any stock item that pointed at a now-deleted test. */
+export function unlinkTestFromStock(testId: string): void {
+  const list = getStock();
+  if (!list.some((s) => s.linkedTestId === testId)) return;
+  saveStock(list.map((s) => (s.linkedTestId === testId ? { ...s, linkedTestId: undefined } : s)));
 }
 /** Days until expiry (negative = expired), or null when no expiry set. */
 export function daysToExpiry(expiry?: string): number | null {

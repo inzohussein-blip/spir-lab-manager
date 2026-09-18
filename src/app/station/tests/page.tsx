@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Plus, Trash2, Pencil, ListChecks, X, Layers } from "lucide-react";
 import {
-  getTests, saveTests, getPanels, savePanels, uid, rangeLabel,
+  getTests, saveTests, getPanels, savePanels, unlinkTestFromStock, uid, rangeLabel,
   type StationTest, type NormalRange, type StationPanel,
 } from "@/lib/station/store";
 
@@ -97,6 +97,7 @@ export default function StationTestsPage() {
   function del(id: string) {
     if (!window.confirm("حذف هذا الفحص؟")) return;
     persist(tests.filter((t) => t.id !== id));
+    unlinkTestFromStock(id); // clear any stock item linked to this test
     if (editId === id) reset();
   }
 

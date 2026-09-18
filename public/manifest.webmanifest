@@ -1,0 +1,17 @@
+{
+  "name": "محطة المختبر — التحليلات المرضية",
+  "short_name": "محطة المختبر",
+  "description": "إدخال وطباعة نتائج الفحوصات محلياً بدون إنترنت",
+  "start_url": "/station",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "dir": "rtl",
+  "lang": "ar",
+  "background_color": "#ffffff",
+  "theme_color": "#5a2a82",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

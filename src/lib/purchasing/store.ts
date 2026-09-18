@@ -77,7 +77,7 @@ export function savePurchases(p: Purchase[]): void {
   write(K_PUR, p);
 }
 export function addPurchase(p: Purchase): void {
-  write(K_PUR, [p, ...getPurchases()].slice(0, 2000));
+  write(K_PUR, [p, ...getPurchases()]);
 }
 export function updatePurchase(p: Purchase): void {
   write(K_PUR, getPurchases().map((x) => (x.id === p.id ? p : x)));

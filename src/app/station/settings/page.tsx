@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Settings, Check, Image as ImageIcon, Download, Upload, Trash2, Stethoscope, Plus, Pencil, X } from "lucide-react";
+import { Settings, Check, Image as ImageIcon, Download, Upload, Trash2, Stethoscope, Plus, Pencil, X, Smartphone } from "lucide-react";
 import {
-  getSettings, saveSettings, exportBackup, importBackup, getDoctors, saveDoctors, uid,
+  getSettings, saveSettings, exportBackup, importBackup, getDoctors, saveDoctors, markBackupNow, daysSinceBackup, uid,
   type StationSettings, type StationDoctor,
 } from "@/lib/station/store";
+import { InstallButton } from "@/components/station/InstallButton";
 
 const inp = "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
 
@@ -20,8 +21,9 @@ export default function StationSettingsPage() {
   const [dName, setDName] = useState("");
   const [dClinic, setDClinic] = useState("");
   const [dEdit, setDEdit] = useState<string | null>(null);
+  const [since, setSince] = useState<number | null>(null);
 
-  useEffect(() => { setS(getSettings()); setDoctors(getDoctors()); }, []);
+  useEffect(() => { setS(getSettings()); setDoctors(getDoctors()); setSince(daysSinceBackup()); }, []);
 
   function persistDoctors(next: StationDoctor[]) { setDoctors(next); saveDoctors(next); }
   function submitDoctor() {
@@ -63,6 +65,8 @@ export default function StationSettingsPage() {
     a.download = `station-backup-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
+    markBackupNow();
+    setMsg("تم تصدير النسخة الاحتياطية.");
   }
 
   function onImport(e: React.ChangeEvent<HTMLInputElement>) {
@@ -172,7 +176,17 @@ export default function StationSettingsPage() {
           </button>
           <input ref={importRef} type="file" accept="application/json,.json" onChange={onImport} className="hidden" />
         </div>
-        {msg && <p className="mt-2 text-xs text-muted">{msg}</p>}
+        <p className={`mt-2 text-xs ${since != null && since >= 7 ? "text-amber-700" : "text-muted"}`}>
+          {since == null ? "لم تُؤخذ نسخة احتياطية بعد." : since === 0 ? "آخر نسخة احتياطية: اليوم." : `آخر نسخة احتياطية قبل ${since} يوم.`}
+        </p>
+        {msg && <p className="mt-1 text-xs text-muted">{msg}</p>}
+      </div>
+
+      {/* Install as app (PWA) — Lab Station only */}
+      <div className="mt-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
+        <div className="mb-1 flex items-center gap-2 text-sm font-semibold"><Smartphone className="size-4" /> تثبيت كتطبيق</div>
+        <p className="mb-3 text-xs text-muted">ثبّت محطة المختبر كتطبيق مستقلّ يفتح مباشرةً على شاشة الإدخال ويعمل بدون إنترنت.</p>
+        <InstallButton />
       </div>
     </div>
   );

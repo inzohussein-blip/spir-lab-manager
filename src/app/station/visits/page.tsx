@@ -166,7 +166,7 @@ export default function StationVisitsPage() {
                 <td className="px-4 py-3">
                   <input type="checkbox" checked={checked.has(v.id)} onChange={() => toggleCheck(v.id)} className="size-4 align-middle" />
                 </td>
-                <td className="px-4 py-3 text-muted whitespace-nowrap">{new Date(v.created_at).toLocaleString("ar-IQ")}</td>
+                <td className="px-4 py-3 text-muted whitespace-nowrap">{new Date(v.created_at).toLocaleString("ar-IQ-u-nu-latn")}</td>
                 <td className="px-4 py-3 font-mono text-xs text-muted">{v.accession ?? "—"}</td>
                 <td className="px-4 py-3 font-medium">{v.patient.name || "—"}</td>
                 <td className="px-4 py-3">{v.results.length}</td>
