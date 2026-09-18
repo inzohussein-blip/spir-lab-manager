@@ -6,7 +6,6 @@ import { Search, Printer, Save, Check, Beaker, Layers, Pencil, UserRound, Sticky
 import {
   getTests, addVisit, updateVisit, getVisit, getSettings, getPanels, nextAccession, uid, rangeLabel, flagFor,
   getPatients, getPatient, upsertPatient, addPatientNote, deductStockForTests, getDoctors, addDoctor,
-  getVisits, daysSinceBackup,
   type StationTest, type Gender, type StationVisit, type StationSettings, type StationPanel, type StationPatient, type NoteEntry, type StationDoctor,
 } from "@/lib/station/store";
 import { Barcode } from "@/components/station/Barcode";
@@ -54,7 +53,6 @@ function StationEntryPage() {
   const [patientNotes, setPatientNotes] = useState<NoteEntry[]>([]);
   const [newNote, setNewNote] = useState("");
   const [pq, setPq] = useState("");
-  const [backupWarn, setBackupWarn] = useState(false);
 
   const searchParams = useSearchParams();
 
@@ -65,9 +63,6 @@ function StationEntryPage() {
     setPanels(getPanels());
     setPatients(getPatients());
     setDoctors(getDoctors());
-    // Remind to back up if there are visits and no backup in the last 7 days.
-    const dsb = daysSinceBackup();
-    setBackupWarn(getVisits().length > 0 && (dsb === null || dsb >= 7));
 
     // Editing an existing saved visit (?edit=<id>) — preload its fields.
     const eid = searchParams.get("edit");
@@ -236,13 +231,6 @@ function StationEntryPage() {
             </button>
           </div>
         </div>
-
-        {backupWarn && (
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-800">
-            <span>لم تأخذ نسخة احتياطية مؤخراً — بياناتك محفوظة على هذا الجهاز فقط.</span>
-            <a href="/station/settings" className="rounded-lg bg-amber-600 px-3 py-1 text-xs font-semibold text-white hover:bg-amber-700">تصدير نسخة الآن</a>
-          </div>
-        )}
 
         <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
           {/* Patient + tests */}

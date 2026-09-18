@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Settings, Check, Image as ImageIcon, Download, Upload, Trash2, Stethoscope, Plus, Pencil, X, Smartphone } from "lucide-react";
 import {
-  getSettings, saveSettings, exportBackup, importBackup, getDoctors, saveDoctors, markBackupNow, daysSinceBackup, uid,
+  getSettings, saveSettings, exportBackup, importBackup, getDoctors, saveDoctors, markBackupNow, daysSinceBackup, getVisits, uid,
   type StationSettings, type StationDoctor,
 } from "@/lib/station/store";
 import { InstallButton } from "@/components/station/InstallButton";
@@ -22,8 +22,13 @@ export default function StationSettingsPage() {
   const [dClinic, setDClinic] = useState("");
   const [dEdit, setDEdit] = useState<string | null>(null);
   const [since, setSince] = useState<number | null>(null);
+  const [hasData, setHasData] = useState(false);
+  const overdue = hasData && (since === null || since >= 7);
 
-  useEffect(() => { setS(getSettings()); setDoctors(getDoctors()); setSince(daysSinceBackup()); }, []);
+  useEffect(() => {
+    setS(getSettings()); setDoctors(getDoctors());
+    setSince(daysSinceBackup()); setHasData(getVisits().length > 0);
+  }, []);
 
   function persistDoctors(next: StationDoctor[]) { setDoctors(next); saveDoctors(next); }
   function submitDoctor() {
@@ -66,6 +71,7 @@ export default function StationSettingsPage() {
     a.click();
     URL.revokeObjectURL(url);
     markBackupNow();
+    setSince(0);
     setMsg("تم تصدير النسخة الاحتياطية.");
   }
 
@@ -162,8 +168,13 @@ export default function StationSettingsPage() {
       </div>
 
       {/* Backup */}
-      <div className="rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
+      <div className={`rounded-2xl border bg-surface p-5 shadow-[var(--shadow-card)] ${overdue ? "border-amber-300" : "border-line"}`}>
         <div className="mb-1 text-sm font-semibold">النسخ الاحتياطي</div>
+        {overdue && (
+          <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+            لم تأخذ نسخة احتياطية مؤخراً وبياناتك محفوظة على هذا الجهاز فقط — صدّر نسخة الآن.
+          </div>
+        )}
         <p className="mb-3 text-xs text-muted">
           كل البيانات محفوظة على هذا الحاسوب فقط. صدّر نسخة احتياطية بانتظام، أو انقلها إلى حاسوب آخر.
         </p>
