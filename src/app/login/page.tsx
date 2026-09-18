@@ -64,15 +64,12 @@ export default function LoginPage() {
 
         <div className="mt-5 border-t border-line pt-4">
           <Link
-            href="/station"
+            href="/welcome"
             className="flex items-center justify-center gap-2 rounded-lg border border-line px-3 py-2.5 text-sm font-medium text-ink hover:bg-canvas"
           >
             <Beaker className="size-4 text-brand-dark" />
-            محطة المختبر — إدخال وطباعة بدون إنترنت
+            العودة لاختيار النسخة
           </Link>
-          <p className="mt-2 text-center text-[11px] text-muted">
-            واجهة مبسّطة تعمل محلياً على حاسوب المختبر دون قاعدة بيانات
-          </p>
         </div>
       </div>
     </div>

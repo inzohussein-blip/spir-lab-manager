@@ -24,7 +24,11 @@ export default async function RootLayout({
   // The login screen and the standalone Lab Station render without the main
   // app chrome (the station brings its own sidebar and needs no session).
   const isBare =
-    pathname === "/login" || pathname.startsWith("/login/") || pathname.startsWith("/station");
+    pathname === "/login" ||
+    pathname.startsWith("/login/") ||
+    pathname === "/welcome" ||
+    pathname.startsWith("/station") ||
+    pathname.startsWith("/store");
   const user = isBare ? null : await getCurrentUser();
 
   return (

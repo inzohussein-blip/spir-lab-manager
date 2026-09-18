@@ -9,9 +9,14 @@ export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const hasSession = req.cookies.has("lab_session");
   const isLogin = pathname === "/login";
-  // Public routes that need no login: QR report verification, and the
-  // standalone offline Lab Station (localStorage-only, no database).
-  const isPublic = pathname.startsWith("/verify") || pathname.startsWith("/station");
+  // Public routes that need no login: the version chooser (portal), QR report
+  // verification, the offline Lab Station, and the standalone Purchasing app —
+  // all localStorage-only, no database.
+  const isPublic =
+    pathname === "/welcome" ||
+    pathname.startsWith("/verify") ||
+    pathname.startsWith("/station") ||
+    pathname.startsWith("/store");
 
   if (isPublic) {
     const res = NextResponse.next();
@@ -20,8 +25,9 @@ export function middleware(req: NextRequest) {
   }
 
   if (!hasSession && !isLogin) {
+    // Unauthenticated visitors land on the version chooser, not the login form.
     const url = req.nextUrl.clone();
-    url.pathname = "/login";
+    url.pathname = "/welcome";
     return NextResponse.redirect(url);
   }
   if (hasSession && isLogin) {

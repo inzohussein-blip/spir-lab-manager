@@ -94,10 +94,10 @@ export function StationSidebar() {
 
       <div className="border-t border-line p-3">
         <Link
-          href="/login"
+          href="/welcome"
           className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted hover:bg-canvas hover:text-ink"
         >
-          <LogIn className="size-4" /> لوحة الإدارة الكاملة
+          <LogIn className="size-4" /> الصفحة الرئيسية
         </Link>
       </div>
     </aside>
