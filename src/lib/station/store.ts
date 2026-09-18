@@ -52,6 +52,13 @@ export interface StationPatient {
   notes: NoteEntry[];
 }
 
+/** A referring doctor (managed list for the entry screen). */
+export interface StationDoctor {
+  id: string;
+  name: string;
+  clinic?: string;
+}
+
 /** A stock (reagent/kit) item; one unit is deducted per linked test ordered. */
 export interface StockItem {
   id: string;
@@ -83,6 +90,7 @@ const K_PANELS = "station.panels.v1";
 const K_COUNTER = "station.counter.v1";
 const K_PATIENTS = "station.patients.v1";
 const K_STOCK = "station.stock.v1";
+const K_DOCTORS = "station.doctors.v1";
 
 export interface StationSettings {
   labName: string;
@@ -217,6 +225,23 @@ export function deletePatients(ids: string[]): void {
   savePatients(getPatients().filter((p) => !set.has(p.id)));
 }
 
+// ── Referring doctors ────────────────────────────────────────────────────────
+export function getDoctors(): StationDoctor[] {
+  return read<StationDoctor[]>(K_DOCTORS, []);
+}
+export function saveDoctors(list: StationDoctor[]): void {
+  write(K_DOCTORS, list);
+}
+/** Add a doctor (deduping by name); returns the doctor. */
+export function addDoctor(name: string, clinic?: string): StationDoctor {
+  const list = getDoctors();
+  const found = list.find((d) => d.name.trim().toLowerCase() === name.trim().toLowerCase());
+  if (found) return found;
+  const d: StationDoctor = { id: uid(), name: name.trim(), clinic: clinic?.trim() || undefined };
+  saveDoctors([...list, d]);
+  return d;
+}
+
 // ── Stock room (reagents/kits) ───────────────────────────────────────────────
 export function getStock(): StockItem[] {
   return read<StockItem[]>(K_STOCK, []);
@@ -262,6 +287,7 @@ export interface StationBackup {
   settings: StationSettings;
   patients?: StationPatient[];
   stock?: StockItem[];
+  doctors?: StationDoctor[];
 }
 
 export function exportBackup(): StationBackup {
@@ -276,6 +302,7 @@ export function exportBackup(): StationBackup {
     settings: getSettings(),
     patients: getPatients(),
     stock: getStock(),
+    doctors: getDoctors(),
   };
 }
 
@@ -291,6 +318,7 @@ export function importBackup(data: unknown): boolean {
     if (b.settings) write(K_SETTINGS, b.settings);
     if (b.patients) write(K_PATIENTS, b.patients);
     if (b.stock) write(K_STOCK, b.stock);
+    if (b.doctors) write(K_DOCTORS, b.doctors);
     return true;
   } catch {
     return false;

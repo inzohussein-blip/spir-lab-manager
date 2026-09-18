@@ -2,11 +2,11 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Search, Printer, Save, Check, Beaker, Layers, Pencil, UserRound, StickyNote } from "lucide-react";
+import { Search, Printer, Save, Check, Beaker, Layers, Pencil, UserRound, StickyNote, Plus } from "lucide-react";
 import {
   getTests, addVisit, updateVisit, getVisit, getSettings, getPanels, nextAccession, uid, rangeLabel, flagFor,
-  getPatients, getPatient, upsertPatient, addPatientNote, deductStockForTests,
-  type StationTest, type Gender, type StationVisit, type StationSettings, type StationPanel, type StationPatient, type NoteEntry,
+  getPatients, getPatient, upsertPatient, addPatientNote, deductStockForTests, getDoctors, addDoctor,
+  type StationTest, type Gender, type StationVisit, type StationSettings, type StationPanel, type StationPatient, type NoteEntry, type StationDoctor,
 } from "@/lib/station/store";
 import { Barcode } from "@/components/station/Barcode";
 
@@ -25,8 +25,7 @@ function FlagPill({ f }: { f: "H" | "L" | "N" | null }) {
     L: "bg-blue-50 text-blue-600",
     N: "bg-teal-50 text-brand-dark",
   }[f];
-  const t = { H: "مرتفع", L: "منخفض", N: "طبيعي" }[f];
-  return <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${m}`}>{f} {t}</span>;
+  return <span className={`grid size-6 place-items-center rounded-full text-xs font-bold ${m}`}>{f}</span>;
 }
 
 function StationEntryPage() {
@@ -49,6 +48,7 @@ function StationEntryPage() {
 
   // Recurring-patient linkage + notes
   const [patients, setPatients] = useState<StationPatient[]>([]);
+  const [doctors, setDoctors] = useState<StationDoctor[]>([]);
   const [patientId, setPatientId] = useState<string | null>(null);
   const [patientNotes, setPatientNotes] = useState<NoteEntry[]>([]);
   const [newNote, setNewNote] = useState("");
@@ -62,6 +62,7 @@ function StationEntryPage() {
     setSettings(getSettings());
     setPanels(getPanels());
     setPatients(getPatients());
+    setDoctors(getDoctors());
 
     // Editing an existing saved visit (?edit=<id>) — preload its fields.
     const eid = searchParams.get("edit");
@@ -101,6 +102,14 @@ function StationEntryPage() {
     setPatientNotes(p.notes);
     setName(p.name); setGender(p.gender); setAge(p.age ?? ""); setPhone(p.phone ?? "");
     setPq("");
+  }
+
+  function quickAddDoctor() {
+    const nm = window.prompt("اسم الطبيب المُحيل:");
+    if (!nm || !nm.trim()) return;
+    const d = addDoctor(nm.trim());
+    setDoctors(getDoctors());
+    setReferrer(d.name);
   }
 
   function addPanel(p: StationPanel) {
@@ -293,8 +302,19 @@ function StationEntryPage() {
                   <input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" className={`mt-1 ${inp}`} />
                 </label>
                 <label className="text-sm font-medium">
-                  الطبيب المُحيل
-                  <input value={referrer} onChange={(e) => setReferrer(e.target.value)} className={`mt-1 ${inp}`} />
+                  مصدر التحويل
+                  <div className="mt-1 flex gap-1.5">
+                    <select value={referrer} onChange={(e) => setReferrer(e.target.value)} className={inp}>
+                      <option value="">مريض خارجي</option>
+                      {referrer && !doctors.some((d) => d.name === referrer) && <option value={referrer}>{referrer}</option>}
+                      {doctors.map((d) => (
+                        <option key={d.id} value={d.name}>{d.name}{d.clinic ? ` (${d.clinic})` : ""}</option>
+                      ))}
+                    </select>
+                    <button type="button" onClick={quickAddDoctor} title="إضافة طبيب" className="grid size-9 shrink-0 place-items-center rounded-lg border border-line hover:bg-canvas">
+                      <Plus className="size-4" />
+                    </button>
+                  </div>
                 </label>
               </div>
               {gender === "" && chosen.some((t) => t.normal.kind === "sex") && (
@@ -490,9 +510,9 @@ function StationEntryPage() {
                     <td className="px-3 py-2 text-gray-600">{t.unit || "—"}</td>
                     <td className="px-3 py-2 text-gray-600">{rangeLabel(t.normal, gender, t.unit)}</td>
                     <td className="px-3 py-2">
-                      {f === "H" ? <span className="rounded-full px-2 py-0.5 text-xs font-bold text-white" style={{ background: "#b91c1c", WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as React.CSSProperties}>مرتفع H</span>
-                        : f === "L" ? <span className="rounded-full px-2 py-0.5 text-xs font-bold text-white" style={{ background: "#1d4ed8", WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as React.CSSProperties}>منخفض L</span>
-                        : f === "N" ? <span className="rounded-full px-2 py-0.5 text-xs font-semibold" style={{ background: "#e7f6ef", color: "#127a4f", WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as React.CSSProperties}>طبيعي</span>
+                      {f === "H" ? <span className="inline-grid size-6 place-items-center rounded-full text-xs font-bold text-white" style={{ background: "#b91c1c", WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as React.CSSProperties}>H</span>
+                        : f === "L" ? <span className="inline-grid size-6 place-items-center rounded-full text-xs font-bold text-white" style={{ background: "#1d4ed8", WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as React.CSSProperties}>L</span>
+                        : f === "N" ? <span className="inline-grid size-6 place-items-center rounded-full text-xs font-bold" style={{ background: "#e7f6ef", color: "#127a4f", WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as React.CSSProperties}>N</span>
                         : <span className="text-gray-400">—</span>}
                     </td>
                   </tr>

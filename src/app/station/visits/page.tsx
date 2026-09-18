@@ -253,9 +253,9 @@ export default function StationVisitsPage() {
                         <td className="px-3 py-2 text-gray-600">{r.unit || "—"}</td>
                         <td className="px-3 py-2 text-gray-600">{t ? rangeLabel(t.normal, sel.patient.gender, t.unit) : "—"}</td>
                         <td className="px-3 py-2">
-                          {f === "H" ? <span className="rounded-full px-2 py-0.5 text-xs font-bold text-white" style={{ background: "#b91c1c", WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as React.CSSProperties}>مرتفع H</span>
-                            : f === "L" ? <span className="rounded-full px-2 py-0.5 text-xs font-bold text-white" style={{ background: "#1d4ed8", WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as React.CSSProperties}>منخفض L</span>
-                            : f === "N" ? <span className="rounded-full px-2 py-0.5 text-xs font-semibold" style={{ background: "#e7f6ef", color: "#127a4f", WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as React.CSSProperties}>طبيعي</span>
+                          {f === "H" ? <span className="inline-grid size-6 place-items-center rounded-full text-xs font-bold text-white" style={{ background: "#b91c1c", WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as React.CSSProperties}>H</span>
+                            : f === "L" ? <span className="inline-grid size-6 place-items-center rounded-full text-xs font-bold text-white" style={{ background: "#1d4ed8", WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as React.CSSProperties}>L</span>
+                            : f === "N" ? <span className="inline-grid size-6 place-items-center rounded-full text-xs font-bold" style={{ background: "#e7f6ef", color: "#127a4f", WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as React.CSSProperties}>N</span>
                             : <span className="text-gray-400">—</span>}
                         </td>
                       </tr>

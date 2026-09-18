@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Settings, Check, Image as ImageIcon, Download, Upload, Trash2 } from "lucide-react";
+import { Settings, Check, Image as ImageIcon, Download, Upload, Trash2, Stethoscope, Plus, Pencil, X } from "lucide-react";
 import {
-  getSettings, saveSettings, exportBackup, importBackup, type StationSettings,
+  getSettings, saveSettings, exportBackup, importBackup, getDoctors, saveDoctors, uid,
+  type StationSettings, type StationDoctor,
 } from "@/lib/station/store";
 
 const inp = "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
@@ -14,7 +15,27 @@ export default function StationSettingsPage() {
   const [msg, setMsg] = useState("");
   const importRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { setS(getSettings()); }, []);
+  // Referring doctors CRUD
+  const [doctors, setDoctors] = useState<StationDoctor[]>([]);
+  const [dName, setDName] = useState("");
+  const [dClinic, setDClinic] = useState("");
+  const [dEdit, setDEdit] = useState<string | null>(null);
+
+  useEffect(() => { setS(getSettings()); setDoctors(getDoctors()); }, []);
+
+  function persistDoctors(next: StationDoctor[]) { setDoctors(next); saveDoctors(next); }
+  function submitDoctor() {
+    if (!dName.trim()) return;
+    const rec: StationDoctor = { id: dEdit ?? uid(), name: dName.trim(), clinic: dClinic.trim() || undefined };
+    persistDoctors(dEdit ? doctors.map((d) => (d.id === dEdit ? rec : d)) : [...doctors, rec]);
+    setDName(""); setDClinic(""); setDEdit(null);
+  }
+  function editDoctor(d: StationDoctor) { setDName(d.name); setDClinic(d.clinic ?? ""); setDEdit(d.id); }
+  function delDoctor(id: string) {
+    if (!window.confirm("حذف هذا الطبيب؟")) return;
+    persistDoctors(doctors.filter((d) => d.id !== id));
+    if (dEdit === id) { setDName(""); setDClinic(""); setDEdit(null); }
+  }
 
   function save(next?: StationSettings) {
     const v = next ?? s;
@@ -105,6 +126,35 @@ export default function StationSettingsPage() {
           </button>
           {saved && <p className="text-xs text-brand-dark">تم الحفظ.</p>}
         </div>
+      </div>
+
+      {/* Referring doctors */}
+      <div className="mb-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
+        <div className="mb-1 flex items-center gap-2 text-sm font-semibold"><Stethoscope className="size-4" /> الأطباء المُحيلون</div>
+        <p className="mb-3 text-xs text-muted">تظهر هذه القائمة في «مصدر التحويل» بشاشة الإدخال إلى جانب «مريض خارجي».</p>
+        <div className="mb-3 flex flex-wrap items-end gap-2">
+          <label className="flex-1 text-sm font-medium">اسم الطبيب<input value={dName} onChange={(e) => setDName(e.target.value)} className={`mt-1 ${inp}`} /></label>
+          <label className="flex-1 text-sm font-medium">العيادة (اختياري)<input value={dClinic} onChange={(e) => setDClinic(e.target.value)} className={`mt-1 ${inp}`} /></label>
+          <button onClick={submitDoctor} className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark">
+            <Plus className="size-4" /> {dEdit ? "حفظ" : "إضافة"}
+          </button>
+          {dEdit && <button onClick={() => { setDName(""); setDClinic(""); setDEdit(null); }} className="inline-flex items-center gap-1 rounded-lg border border-line px-2 py-2 text-xs text-muted hover:bg-canvas"><X className="size-3.5" /></button>}
+        </div>
+        {doctors.length === 0 ? (
+          <p className="text-sm text-muted">لا أطباء بعد.</p>
+        ) : (
+          <div className="flex flex-col divide-y divide-line rounded-lg border border-line">
+            {doctors.map((d) => (
+              <div key={d.id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
+                <div><span className="font-medium">{d.name}</span>{d.clinic && <span className="text-muted"> — {d.clinic}</span>}</div>
+                <div className="flex gap-1">
+                  <button onClick={() => editDoctor(d)} className="grid size-7 place-items-center rounded-lg border border-line hover:bg-canvas"><Pencil className="size-4" /></button>
+                  <button onClick={() => delDoctor(d.id)} className="grid size-7 place-items-center rounded-lg border border-line text-red-600 hover:bg-red-50"><Trash2 className="size-4" /></button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Backup */}
