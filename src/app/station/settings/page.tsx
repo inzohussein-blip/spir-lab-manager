@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Settings, Check, Image as ImageIcon, Download, Upload, Trash2, Stethoscope, Plus, Pencil, X, Smartphone } from "lucide-react";
 import {
-  getSettings, saveSettings, exportBackup, importBackup, getDoctors, saveDoctors, markBackupNow, daysSinceBackup, getVisits, uid,
+  getSettings, saveSettings, exportBackup, importBackup, getDoctors, saveDoctors, markBackupNow, daysSinceBackup, getVisits, storageUsage, uid,
   type StationSettings, type StationDoctor,
 } from "@/lib/station/store";
 import { InstallButton } from "@/components/station/InstallButton";
@@ -23,11 +23,13 @@ export default function StationSettingsPage() {
   const [dEdit, setDEdit] = useState<string | null>(null);
   const [since, setSince] = useState<number | null>(null);
   const [hasData, setHasData] = useState(false);
+  const [usage, setUsage] = useState({ bytes: 0, pct: 0, visits: 0 });
   const overdue = hasData && (since === null || since >= 7);
 
   useEffect(() => {
     setS(getSettings()); setDoctors(getDoctors());
     setSince(daysSinceBackup()); setHasData(getVisits().length > 0);
+    setUsage(storageUsage());
   }, []);
 
   function persistDoctors(next: StationDoctor[]) { setDoctors(next); saveDoctors(next); }
@@ -178,6 +180,20 @@ export default function StationSettingsPage() {
         <p className="mb-3 text-xs text-muted">
           كل البيانات محفوظة على هذا الحاسوب فقط. صدّر نسخة احتياطية بانتظام، أو انقلها إلى حاسوب آخر.
         </p>
+
+        {/* Local storage usage */}
+        <div className="mb-3">
+          <div className="mb-1 flex items-center justify-between text-xs text-muted">
+            <span>مساحة التخزين المحلية — {usage.visits} زيارة</span>
+            <span className="tabular-nums">{(usage.bytes / 1024).toFixed(0)} KB · {usage.pct}%</span>
+          </div>
+          <div className="h-2 w-full overflow-hidden rounded-full bg-canvas">
+            <div className={`h-full rounded-full ${usage.pct >= 80 ? "bg-red-500" : usage.pct >= 60 ? "bg-amber-500" : "bg-brand"}`} style={{ width: `${Math.max(2, usage.pct)}%` }} />
+          </div>
+          {usage.pct >= 80 && (
+            <p className="mt-1 text-xs font-medium text-red-600">اقتربت المساحة من الحد — صدّر نسخة واحذف زيارات قديمة.</p>
+          )}
+        </div>
         <div className="flex flex-wrap gap-2">
           <button onClick={doExport} className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas">
             <Download className="size-4" /> تصدير نسخة احتياطية

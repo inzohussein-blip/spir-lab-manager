@@ -52,7 +52,6 @@ function StationEntryPage() {
   const [patientId, setPatientId] = useState<string | null>(null);
   const [patientNotes, setPatientNotes] = useState<NoteEntry[]>([]);
   const [newNote, setNewNote] = useState("");
-  const [pq, setPq] = useState("");
 
   const searchParams = useSearchParams();
 
@@ -101,7 +100,6 @@ function StationEntryPage() {
     setPatientId(p.id);
     setPatientNotes(p.notes);
     setName(p.name); setGender(p.gender); setAge(p.age ?? ""); setPhone(p.phone ?? "");
-    setPq("");
   }
 
   function quickAddDoctor() {
@@ -133,6 +131,16 @@ function StationEntryPage() {
   }, [tests, q]);
 
   const chosen = tests.filter((t) => selected.has(t.id));
+
+  // Instant previous-patient suggestions shown under the name field.
+  const nameMatches = useMemo(() => {
+    const term = name.trim().toLowerCase();
+    if (editId || patientId || term.length < 2) return [];
+    return patients.filter((p) => p.name.toLowerCase().includes(term)).slice(0, 8);
+  }, [patients, name, editId, patientId]);
+
+  // Chosen tests still missing a result value — used for incomplete-entry protection.
+  const missingResults = chosen.filter((t) => !(results[t.id] ?? "").trim());
 
   function toggle(id: string) {
     setSelected((s) => {
@@ -177,6 +185,14 @@ function StationEntryPage() {
     if (!name.trim() || chosen.length === 0) {
       alert("أدخل اسم المريض واختر فحصاً واحداً على الأقل.");
       return;
+    }
+    // Incomplete-entry protection: warn before printing a sheet with blank results.
+    if (missingResults.length > 0) {
+      const names = missingResults.map((t) => `• ${t.name_ar}`).join("\n");
+      const ok = window.confirm(
+        `${missingResults.length} فحص بدون نتيجة:\n${names}\n\nهل تريد الطباعة رغم ذلك؟`
+      );
+      if (!ok) return;
     }
     const acc = accession || nextAccession();
     setAccession(acc);
@@ -241,22 +257,20 @@ function StationEntryPage() {
                 {patientId && <span className="rounded-full bg-teal-50 px-2 py-0.5 text-xs font-medium text-brand-dark">مراجع مسجّل</span>}
               </div>
 
-              {/* Search previous patients */}
-              {!editId && (
-                <div className="relative mb-3">
-                  <Search className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
-                  <input
-                    value={pq}
-                    onChange={(e) => setPq(e.target.value)}
-                    placeholder="ابحث عن مراجع سابق بالاسم أو الهاتف…"
-                    className={`${inp} pr-9`}
-                  />
-                  {pq.trim() && (
-                    <div className="absolute z-10 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-line bg-surface shadow-[var(--shadow-pop)]">
-                      {patients
-                        .filter((p) => p.name.toLowerCase().includes(pq.trim().toLowerCase()) || (p.phone ?? "").includes(pq.trim()))
-                        .slice(0, 20)
-                        .map((p) => (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="text-sm font-medium sm:col-span-2">
+                  الاسم الثلاثي *
+                  <div className="relative">
+                    <input
+                      value={name}
+                      onChange={(e) => { setName(e.target.value); if (patientId && !editId) { setPatientId(null); setPatientNotes([]); } }}
+                      placeholder="اكتب الاسم — تظهر أسماء المراجعين السابقين فوراً"
+                      className={`mt-1 ${inp}`}
+                    />
+                    {/* Instant previous-patient suggestions inside the name field */}
+                    {nameMatches.length > 0 && (
+                      <div className="absolute z-10 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-line bg-surface shadow-[var(--shadow-pop)]">
+                        {nameMatches.map((p) => (
                           <button
                             key={p.id}
                             type="button"
@@ -268,22 +282,9 @@ function StationEntryPage() {
                             {p.phone && <span className="text-xs text-muted">{p.phone}</span>}
                           </button>
                         ))}
-                      {patients.filter((p) => p.name.toLowerCase().includes(pq.trim().toLowerCase()) || (p.phone ?? "").includes(pq.trim())).length === 0 && (
-                        <div className="px-3 py-2 text-xs text-muted">لا مراجع مطابق — سيُسجَّل كجديد عند الحفظ</div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="text-sm font-medium sm:col-span-2">
-                  الاسم الثلاثي *
-                  <input
-                    value={name}
-                    onChange={(e) => { setName(e.target.value); if (patientId && !editId) { setPatientId(null); setPatientNotes([]); } }}
-                    className={`mt-1 ${inp}`}
-                  />
+                      </div>
+                    )}
+                  </div>
                 </label>
                 <label className="text-sm font-medium">
                   الجنس
@@ -433,6 +434,11 @@ function StationEntryPage() {
                     );
                   })}
                 </div>
+              )}
+              {chosen.length > 0 && missingResults.length > 0 && (
+                <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">
+                  {missingResults.length} فحص بدون نتيجة — أكملها قبل الطباعة.
+                </p>
               )}
               {savedNote && (
                 <p className="mt-3 text-xs text-brand-dark">تم حفظ الزيارة محلياً.</p>

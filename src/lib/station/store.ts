@@ -194,6 +194,22 @@ export function daysSinceBackup(): number | null {
   return Math.floor((Date.now() - t) / 86400000);
 }
 
+/** Approximate size (bytes) this station uses in localStorage, and a rough
+ *  percentage of the typical ~5MB per-origin browser budget. */
+export function storageUsage(): { bytes: number; pct: number; visits: number } {
+  let bytes = 0;
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k || !k.startsWith("station.")) continue;
+      const v = localStorage.getItem(k) ?? "";
+      bytes += (k.length + v.length) * 2; // UTF-16 ≈ 2 bytes/char
+    }
+  } catch { /* ignore */ }
+  const BUDGET = 5 * 1024 * 1024;
+  return { bytes, pct: Math.min(100, Math.round((bytes / BUDGET) * 100)), visits: getVisits().length };
+}
+
 // ── Panels ───────────────────────────────────────────────────────────────────
 export function getPanels(): StationPanel[] {
   return read<StationPanel[]>(K_PANELS, []);
