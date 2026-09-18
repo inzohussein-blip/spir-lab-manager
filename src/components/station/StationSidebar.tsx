@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   FlaskConical, ClipboardPlus, ListChecks, FileText, Plus, Settings, LogIn,
+  Archive, Boxes,
 } from "lucide-react";
 import { getPages, savePages, uid, type StationPage } from "@/lib/station/store";
 import { cn } from "@/lib/utils";
@@ -13,6 +14,8 @@ const FIXED = [
   { href: "/station", label: "إدخال وطباعة النتائج", icon: ClipboardPlus },
   { href: "/station/tests", label: "إدارة الفحوصات", icon: ListChecks },
   { href: "/station/visits", label: "الزيارات المحفوظة", icon: FileText },
+  { href: "/station/records", label: "المحفوظات (سجل المراجعين)", icon: Archive },
+  { href: "/station/inventory", label: "المخزن", icon: Boxes },
   { href: "/station/settings", label: "إعدادات المحطة", icon: Settings },
 ];
 

@@ -34,9 +34,32 @@ export interface StationVisit {
   id: string;
   created_at: number;
   accession?: string;
+  patientId?: string; // links to a saved patient record
   patient: { name: string; gender: Gender; age?: string; phone?: string };
   referrer?: string;
   results: { testId: string; name_ar: string; value: string; unit?: string }[];
+}
+
+export interface NoteEntry { ts: number; text: string; }
+
+/** A recurring patient — accumulates notes and links to their visits. */
+export interface StationPatient {
+  id: string;
+  name: string;
+  gender: Gender;
+  age?: string;
+  phone?: string;
+  notes: NoteEntry[];
+}
+
+/** A stock (reagent/kit) item; one unit is deducted per linked test ordered. */
+export interface StockItem {
+  id: string;
+  name: string;
+  qty: number;
+  minQty?: number;
+  expiry?: string; // YYYY-MM-DD
+  linkedTestId?: string;
 }
 
 export interface StationPage {
@@ -58,6 +81,8 @@ const K_PAGES = "station.pages.v1";
 const K_SETTINGS = "station.settings.v1";
 const K_PANELS = "station.panels.v1";
 const K_COUNTER = "station.counter.v1";
+const K_PATIENTS = "station.patients.v1";
+const K_STOCK = "station.stock.v1";
 
 export interface StationSettings {
   labName: string;
@@ -154,6 +179,67 @@ export function savePanels(panels: StationPanel[]): void {
   write(K_PANELS, panels);
 }
 
+// ── Patients (recurring visitors + notes history) ────────────────────────────
+export function getPatients(): StationPatient[] {
+  return read<StationPatient[]>(K_PATIENTS, []);
+}
+export function savePatients(list: StationPatient[]): void {
+  write(K_PATIENTS, list);
+}
+export function getPatient(id: string): StationPatient | null {
+  return getPatients().find((p) => p.id === id) ?? null;
+}
+const pkey = (name: string, phone?: string) =>
+  `${name.trim().toLowerCase()}|${(phone ?? "").trim()}`;
+
+/** Find or create the patient record matching this visit's identity, updating
+ *  basic fields. Returns the patient id. */
+export function upsertPatient(fields: { id?: string; name: string; gender: Gender; age?: string; phone?: string }): string {
+  const list = getPatients();
+  let p = fields.id ? list.find((x) => x.id === fields.id) : undefined;
+  if (!p) p = list.find((x) => pkey(x.name, x.phone) === pkey(fields.name, fields.phone));
+  if (p) {
+    p.name = fields.name; p.gender = fields.gender; p.age = fields.age; p.phone = fields.phone;
+    savePatients(list);
+    return p.id;
+  }
+  const np: StationPatient = { id: uid(), name: fields.name, gender: fields.gender, age: fields.age, phone: fields.phone, notes: [] };
+  savePatients([np, ...list]);
+  return np.id;
+}
+export function addPatientNote(patientId: string, text: string): void {
+  const t = text.trim();
+  if (!t) return;
+  savePatients(getPatients().map((p) => (p.id === patientId ? { ...p, notes: [{ ts: Date.now(), text: t }, ...p.notes] } : p)));
+}
+export function deletePatients(ids: string[]): void {
+  const set = new Set(ids);
+  savePatients(getPatients().filter((p) => !set.has(p.id)));
+}
+
+// ── Stock room (reagents/kits) ───────────────────────────────────────────────
+export function getStock(): StockItem[] {
+  return read<StockItem[]>(K_STOCK, []);
+}
+export function saveStock(list: StockItem[]): void {
+  write(K_STOCK, list);
+}
+/** Deduct one unit from each stock item linked to one of these tests. */
+export function deductStockForTests(testIds: string[]): void {
+  if (testIds.length === 0) return;
+  const set = new Set(testIds);
+  const next = getStock().map((s) =>
+    s.linkedTestId && set.has(s.linkedTestId) ? { ...s, qty: Math.max(0, Number(s.qty) - 1) } : s
+  );
+  saveStock(next);
+}
+/** Days until expiry (negative = expired), or null when no expiry set. */
+export function daysToExpiry(expiry?: string): number | null {
+  if (!expiry) return null;
+  const d = new Date(expiry + "T00:00:00").getTime();
+  return Math.floor((d - Date.now()) / 86400000);
+}
+
 // ── Sample-number counter (LAB-YYYYMMDD-NNN) ─────────────────────────────────
 export function nextAccession(): string {
   const d = new Date();
@@ -174,6 +260,8 @@ export interface StationBackup {
   pages: StationPage[];
   panels: StationPanel[];
   settings: StationSettings;
+  patients?: StationPatient[];
+  stock?: StockItem[];
 }
 
 export function exportBackup(): StationBackup {
@@ -186,6 +274,8 @@ export function exportBackup(): StationBackup {
     pages: getPages(),
     panels: getPanels(),
     settings: getSettings(),
+    patients: getPatients(),
+    stock: getStock(),
   };
 }
 
@@ -199,6 +289,8 @@ export function importBackup(data: unknown): boolean {
     if (b.pages) write(K_PAGES, b.pages);
     if (b.panels) write(K_PANELS, b.panels);
     if (b.settings) write(K_SETTINGS, b.settings);
+    if (b.patients) write(K_PATIENTS, b.patients);
+    if (b.stock) write(K_STOCK, b.stock);
     return true;
   } catch {
     return false;

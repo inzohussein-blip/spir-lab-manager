@@ -2,10 +2,11 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Search, Printer, Save, Check, Beaker, Layers, Pencil } from "lucide-react";
+import { Search, Printer, Save, Check, Beaker, Layers, Pencil, UserRound, StickyNote } from "lucide-react";
 import {
   getTests, addVisit, updateVisit, getVisit, getSettings, getPanels, nextAccession, uid, rangeLabel, flagFor,
-  type StationTest, type Gender, type StationVisit, type StationSettings, type StationPanel,
+  getPatients, getPatient, upsertPatient, addPatientNote, deductStockForTests,
+  type StationTest, type Gender, type StationVisit, type StationSettings, type StationPanel, type StationPatient, type NoteEntry,
 } from "@/lib/station/store";
 import { Barcode } from "@/components/station/Barcode";
 
@@ -46,6 +47,13 @@ function StationEntryPage() {
   const [editId, setEditId] = useState<string | null>(null);
   const [createdAt, setCreatedAt] = useState<number | null>(null);
 
+  // Recurring-patient linkage + notes
+  const [patients, setPatients] = useState<StationPatient[]>([]);
+  const [patientId, setPatientId] = useState<string | null>(null);
+  const [patientNotes, setPatientNotes] = useState<NoteEntry[]>([]);
+  const [newNote, setNewNote] = useState("");
+  const [pq, setPq] = useState("");
+
   const searchParams = useSearchParams();
 
   useEffect(() => {
@@ -53,6 +61,7 @@ function StationEntryPage() {
     setTests(catalog);
     setSettings(getSettings());
     setPanels(getPanels());
+    setPatients(getPatients());
 
     // Editing an existing saved visit (?edit=<id>) — preload its fields.
     const eid = searchParams.get("edit");
@@ -62,6 +71,7 @@ function StationEntryPage() {
         setEditId(v.id);
         setCreatedAt(v.created_at);
         setAccession(v.accession ?? "");
+        if (v.patientId) loadPatient(v.patientId);
         setName(v.patient.name);
         setGender(v.patient.gender);
         setAge(v.patient.age ?? "");
@@ -73,8 +83,25 @@ function StationEntryPage() {
         v.results.forEach((r) => { rmap[r.testId] = r.value; });
         setResults(rmap);
       }
+      return;
     }
+    // New visit for an existing patient (?patient=<id>) — prefill their info.
+    const pid = searchParams.get("patient");
+    if (pid) prefillPatient(pid);
   }, [searchParams]);
+
+  function loadPatient(id: string) {
+    const p = getPatient(id);
+    if (p) { setPatientId(p.id); setPatientNotes(p.notes); }
+  }
+  function prefillPatient(id: string) {
+    const p = getPatient(id);
+    if (!p) return;
+    setPatientId(p.id);
+    setPatientNotes(p.notes);
+    setName(p.name); setGender(p.gender); setAge(p.age ?? ""); setPhone(p.phone ?? "");
+    setPq("");
+  }
 
   function addPanel(p: StationPanel) {
     setSelected((s) => {
@@ -107,18 +134,34 @@ function StationEntryPage() {
   }
 
   function saveVisit(acc?: string) {
+    if (!name.trim()) return;
+    // Link (or create) the patient record and persist any new note.
+    const pid = upsertPatient({ id: patientId ?? undefined, name: name.trim(), gender, age, phone });
+    setPatientId(pid);
+    if (newNote.trim()) { addPatientNote(pid, newNote); setNewNote(""); }
+    setPatients(getPatients());
+    setPatientNotes(getPatient(pid)?.notes ?? []);
+
     const v: StationVisit = {
       id: editId ?? uid(),
       created_at: createdAt ?? Date.now(),
       accession: acc || accession || undefined,
+      patientId: pid,
       patient: { name: name.trim(), gender, age, phone },
       referrer: referrer.trim() || undefined,
       results: chosen.map((t) => ({
         testId: t.id, name_ar: t.name_ar, value: results[t.id] ?? "", unit: t.unit,
       })),
     };
-    if (editId) updateVisit(v);
-    else { addVisit(v); setEditId(v.id); setCreatedAt(v.created_at); }
+    if (editId) {
+      updateVisit(v);
+    } else {
+      addVisit(v);
+      setEditId(v.id);
+      setCreatedAt(v.created_at);
+      // Deduct one unit of stock per linked test — only on a new visit.
+      deductStockForTests(Array.from(selected));
+    }
   }
 
   function onPrint() {
@@ -184,11 +227,54 @@ function StationEntryPage() {
           {/* Patient + tests */}
           <div className="flex flex-col gap-4">
             <div className="rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
-              <div className="mb-3 text-sm font-semibold">بيانات المريض</div>
+              <div className="mb-3 flex items-center justify-between">
+                <div className="text-sm font-semibold">بيانات المريض</div>
+                {patientId && <span className="rounded-full bg-teal-50 px-2 py-0.5 text-xs font-medium text-brand-dark">مراجع مسجّل</span>}
+              </div>
+
+              {/* Search previous patients */}
+              {!editId && (
+                <div className="relative mb-3">
+                  <Search className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
+                  <input
+                    value={pq}
+                    onChange={(e) => setPq(e.target.value)}
+                    placeholder="ابحث عن مراجع سابق بالاسم أو الهاتف…"
+                    className={`${inp} pr-9`}
+                  />
+                  {pq.trim() && (
+                    <div className="absolute z-10 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-line bg-surface shadow-[var(--shadow-pop)]">
+                      {patients
+                        .filter((p) => p.name.toLowerCase().includes(pq.trim().toLowerCase()) || (p.phone ?? "").includes(pq.trim()))
+                        .slice(0, 20)
+                        .map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => prefillPatient(p.id)}
+                            className="flex w-full items-center gap-2 px-3 py-2 text-right text-sm hover:bg-canvas"
+                          >
+                            <UserRound className="size-4 text-muted" />
+                            <span className="flex-1 truncate font-medium">{p.name}</span>
+                            {p.phone && <span className="text-xs text-muted">{p.phone}</span>}
+                          </button>
+                        ))}
+                      {patients.filter((p) => p.name.toLowerCase().includes(pq.trim().toLowerCase()) || (p.phone ?? "").includes(pq.trim())).length === 0 && (
+                        <div className="px-3 py-2 text-xs text-muted">لا مراجع مطابق — سيُسجَّل كجديد عند الحفظ</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="text-sm font-medium sm:col-span-2">
                   الاسم الثلاثي *
-                  <input value={name} onChange={(e) => setName(e.target.value)} className={`mt-1 ${inp}`} />
+                  <input
+                    value={name}
+                    onChange={(e) => { setName(e.target.value); if (patientId && !editId) { setPatientId(null); setPatientNotes([]); } }}
+                    className={`mt-1 ${inp}`}
+                  />
                 </label>
                 <label className="text-sm font-medium">
                   الجنس
@@ -214,6 +300,27 @@ function StationEntryPage() {
               {gender === "" && chosen.some((t) => t.normal.kind === "sex") && (
                 <p className="mt-2 text-xs text-amber-700">حدّد الجنس لعرض المعدل الطبيعي الصحيح لبعض الفحوصات.</p>
               )}
+
+              {/* Patient notes (previous + add) */}
+              <div className="mt-4 border-t border-line pt-4">
+                <div className="mb-2 flex items-center gap-1.5 text-sm font-semibold"><StickyNote className="size-4" /> ملاحظات المريض</div>
+                {patientNotes.length > 0 && (
+                  <div className="mb-2 flex max-h-28 flex-col gap-1.5 overflow-y-auto">
+                    {patientNotes.map((n, i) => (
+                      <div key={i} className="rounded-lg bg-canvas px-3 py-1.5 text-xs">
+                        <span className="text-[10px] text-muted">{new Date(n.ts).toLocaleDateString("ar-IQ")}: </span>
+                        {n.text}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <input
+                  value={newNote}
+                  onChange={(e) => setNewNote(e.target.value)}
+                  placeholder="أضف ملاحظة عن الحالة (تُحفظ مع المريض عند الحفظ)…"
+                  className={inp}
+                />
+              </div>
             </div>
 
             <div className="rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
