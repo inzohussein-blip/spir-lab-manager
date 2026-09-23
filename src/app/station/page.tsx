@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search, Printer, Save, Check, Beaker, Layers, Pencil, UserRound, StickyNote, Plus, X, RotateCcw } from "lucide-react";
+import { Search, Printer, Save, Check, Beaker, Layers, Pencil, UserRound, StickyNote, Plus, X, RotateCcw, ListChecks, type LucideIcon } from "lucide-react";
 import {
   getTests, addVisit, updateVisit, getVisit, getSettings, getPanels, nextAccession, uid, rangeLabel, flagFor,
   getPatients, getPatient, upsertPatient, addPatientNote, deductStockForTests, getDoctors, addDoctor,
@@ -36,6 +36,21 @@ function formSnapshot(
 ): string {
   const chosen = tests.filter((t) => selected.has(t.id));
   return JSON.stringify([f.name.trim(), f.gender, f.age, f.phone, f.referrer, Array.from(selected).sort(), chosen.map((t) => results[t.id] ?? "")]);
+}
+
+/** Card header — icon tile + title + hint, matching the sidebar style. */
+function PanelTitle({ icon: Icon, title, hint }: { icon: LucideIcon; title: string; hint?: string }) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-brand-light text-brand-dark">
+        <Icon className="size-4" />
+      </span>
+      <div className="leading-tight">
+        <div className="text-sm font-bold">{title}</div>
+        {hint && <div className="text-[11px] text-muted">{hint}</div>}
+      </div>
+    </div>
+  );
 }
 
 function StationEntryPage() {
@@ -339,7 +354,7 @@ function StationEntryPage() {
           <div className="flex flex-col gap-4">
             <div className="rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
               <div className="mb-3 flex items-center justify-between">
-                <div className="text-sm font-semibold">بيانات المريض</div>
+                <PanelTitle icon={UserRound} title="بيانات المريض" hint="اكتب الاسم لإظهار المراجعين السابقين" />
                 {patientId && <span className="rounded-full bg-teal-50 px-2 py-0.5 text-xs font-medium text-brand-dark">مراجع مسجّل</span>}
               </div>
 
@@ -433,7 +448,7 @@ function StationEntryPage() {
 
             <div className="rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
               <div className="mb-3 flex items-center justify-between">
-                <div className="text-sm font-semibold">اختيار الفحوصات</div>
+                <PanelTitle icon={ListChecks} title="اختيار الفحوصات" hint="اضغط على الفحص لإضافته" />
                 <div className="flex items-center gap-2">
                   <span className={`rounded-full px-2 py-0.5 text-xs tabular-nums ${selected.size ? "bg-brand-light font-semibold text-brand-dark" : "text-muted"}`}>{selected.size} محدَّد</span>
                   {selected.size > 0 && (
@@ -498,7 +513,7 @@ function StationEntryPage() {
           <div className="lg:sticky lg:top-4 lg:self-start">
             <div className="rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
               <div className="mb-3 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 text-sm font-semibold"><Beaker className="size-4" /> إدخال النتائج</div>
+                <PanelTitle icon={Beaker} title="إدخال النتائج" hint="المعدل الطبيعي يظهر تحت كل حقل" />
                 {chosen.length > 0 && <span className="text-xs tabular-nums text-muted">{filledCount}/{chosen.length}</span>}
               </div>
               {chosen.length > 0 && (

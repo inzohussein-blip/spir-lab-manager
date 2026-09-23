@@ -124,6 +124,10 @@ main > * {
 .station textarea:focus {
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-brand) 18%, transparent);
 }
+/* Dark theme: the brand teal is bright, so text sitting on it goes dark for contrast */
+:root[data-theme="dark"] .station :is(.bg-brand, .from-brand).text-white {
+  color: #042f2e;
+}
 /* Toast slide-in */
 @keyframes station-toast-in {
   from { opacity: 0; transform: translateY(8px); }
