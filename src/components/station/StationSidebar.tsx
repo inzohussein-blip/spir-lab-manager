@@ -7,7 +7,7 @@ import {
   FlaskConical, ClipboardPlus, ListChecks, FileText, Plus, Settings, LogIn,
   Archive, Boxes,
 } from "lucide-react";
-import { getPages, savePages, uid, type StationPage } from "@/lib/station/store";
+import { getPages, savePages, getVisits, uid, type StationPage } from "@/lib/station/store";
 import { cn } from "@/lib/utils";
 
 const FIXED = [
@@ -23,9 +23,13 @@ export function StationSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [pages, setPages] = useState<StationPage[]>([]);
+  const [todayCount, setTodayCount] = useState(0);
 
   useEffect(() => {
     setPages(getPages());
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    setTodayCount(getVisits().filter((v) => v.created_at >= start.getTime()).length);
   }, [pathname]);
 
   // Register the PWA service worker so the station is installable/offline.
@@ -65,13 +69,18 @@ export function StationSidebar() {
           <Link
             key={it.href}
             href={it.href}
+            aria-current={isActive(it.href) ? "page" : undefined}
             className={cn(
-              "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+              "group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
               isActive(it.href) ? "bg-brand-light font-semibold text-brand-dark" : "text-ink hover:bg-canvas"
             )}
           >
-            <it.icon className="size-4.5 shrink-0" />
-            {it.label}
+            {isActive(it.href) && <span className="absolute inset-y-1.5 start-0 w-1 rounded-full bg-brand" />}
+            <it.icon className={cn("size-4.5 shrink-0 transition-colors", isActive(it.href) ? "text-brand" : "text-muted group-hover:text-ink")} />
+            <span className="flex-1">{it.label}</span>
+            {it.href === "/station/visits" && todayCount > 0 && (
+              <span title="زيارات اليوم" className="rounded-full bg-brand px-1.5 py-0.5 text-[10px] font-bold leading-none text-white tabular-nums">{todayCount}</span>
+            )}
           </Link>
         ))}
 

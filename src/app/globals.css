@@ -94,6 +94,61 @@ main > * {
   main > * { animation: none; }
 }
 
+/* ── Lab Station interactions (scoped to .station — admin/purchasing untouched) ── */
+.station button:not(:disabled),
+.station a[href] {
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease,
+    box-shadow 0.15s ease, transform 0.1s ease;
+}
+/* Tactile press feedback */
+.station button:not(:disabled):active {
+  transform: scale(0.96);
+}
+.station button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+/* Primary buttons lift slightly on hover */
+.station button.bg-brand:not(:disabled):hover {
+  box-shadow: 0 4px 12px color-mix(in oklab, var(--color-brand) 35%, transparent);
+}
+/* Keyboard focus ring for buttons/links */
+.station button:focus-visible,
+.station a:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+}
+/* Soft glow around focused fields */
+.station input:focus,
+.station select:focus,
+.station textarea:focus {
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-brand) 18%, transparent);
+}
+/* Toast slide-in */
+@keyframes station-toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.station-toast {
+  animation: station-toast-in 0.18s ease-out;
+}
+/* Keyboard shortcut hint */
+.station kbd {
+  font-family: inherit;
+  font-size: 10px;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 4px;
+  border: 1px solid var(--color-line);
+  border-bottom-width: 2px;
+  background: var(--color-canvas);
+  color: var(--color-muted);
+}
+@media (prefers-reduced-motion: reduce) {
+  .station button:not(:disabled):active { transform: none; }
+  .station-toast { animation: none; }
+}
+
 /* Print: hide chrome, force the report onto white regardless of theme */
 @media print {
   /* Drop the browser's default header/footer (URL, date, page number). */

@@ -1,14 +1,15 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
-import { Search, Printer, Save, Check, Beaker, Layers, Pencil, UserRound, StickyNote, Plus } from "lucide-react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Search, Printer, Save, Check, Beaker, Layers, Pencil, UserRound, StickyNote, Plus, X, RotateCcw } from "lucide-react";
 import {
   getTests, addVisit, updateVisit, getVisit, getSettings, getPanels, nextAccession, uid, rangeLabel, flagFor,
   getPatients, getPatient, upsertPatient, addPatientNote, deductStockForTests, getDoctors, addDoctor,
   type StationTest, type Gender, type StationVisit, type StationSettings, type StationPanel, type StationPatient, type NoteEntry, type StationDoctor,
 } from "@/lib/station/store";
 import { Barcode } from "@/components/station/Barcode";
+import { useToast } from "@/components/station/Toast";
 
 const inp =
   "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
@@ -28,6 +29,15 @@ function FlagPill({ f }: { f: "H" | "L" | "N" | null }) {
   return <span className={`grid size-6 place-items-center rounded-full text-xs font-bold ${m}`}>{f}</span>;
 }
 
+/** Serialized form state used to detect unsaved changes. */
+function formSnapshot(
+  f: { name: string; gender: Gender; age: string; phone: string; referrer: string },
+  selected: Set<string>, results: Record<string, string>, tests: StationTest[],
+): string {
+  const chosen = tests.filter((t) => selected.has(t.id));
+  return JSON.stringify([f.name.trim(), f.gender, f.age, f.phone, f.referrer, Array.from(selected).sort(), chosen.map((t) => results[t.id] ?? "")]);
+}
+
 function StationEntryPage() {
   const [tests, setTests] = useState<StationTest[]>([]);
   const [panels, setPanels] = useState<StationPanel[]>([]);
@@ -42,7 +52,7 @@ function StationEntryPage() {
   const [results, setResults] = useState<Record<string, string>>({});
   const [q, setQ] = useState("");
   const [paper, setPaper] = useState<"A4" | "A5">("A4");
-  const [savedNote, setSavedNote] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [createdAt, setCreatedAt] = useState<number | null>(null);
 
@@ -54,6 +64,11 @@ function StationEntryPage() {
   const [newNote, setNewNote] = useState("");
 
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const toast = useToast();
+  const nameRef = useRef<HTMLInputElement>(null);
+  // Snapshot of the form as last saved/loaded — drives the unsaved-changes guard.
+  const [baseline, setBaseline] = useState("");
 
   useEffect(() => {
     const catalog = getTests();
@@ -82,6 +97,10 @@ function StationEntryPage() {
         const rmap: Record<string, string> = {};
         v.results.forEach((r) => { rmap[r.testId] = r.value; });
         setResults(rmap);
+        setBaseline(formSnapshot(
+          { name: v.patient.name, gender: v.patient.gender, age: v.patient.age ?? "", phone: v.patient.phone ?? "", referrer: v.referrer ?? "" },
+          ids, rmap, catalog,
+        ));
       }
       return;
     }
@@ -141,6 +160,57 @@ function StationEntryPage() {
 
   // Chosen tests still missing a result value — used for incomplete-entry protection.
   const missingResults = chosen.filter((t) => !(results[t.id] ?? "").trim());
+  const filledCount = chosen.length - missingResults.length;
+
+  // Unsaved-changes tracking (note field is checked separately — it clears on save).
+  const snapshot = formSnapshot({ name, gender, age, phone, referrer }, selected, results, tests);
+  const unsaved = (!!name.trim() || selected.size > 0) && (snapshot !== baseline || !!newNote.trim());
+
+  function resetForm() {
+    if (unsaved && !window.confirm("توجد بيانات غير محفوظة — هل تريد بدء زيارة جديدة وتجاهلها؟")) return;
+    setEditId(null); setCreatedAt(null); setAccession("");
+    setPatientId(null); setPatientNotes([]); setNewNote("");
+    setName(""); setGender(""); setAge(""); setPhone(""); setReferrer("");
+    setSelected(new Set()); setResults({}); setQ(""); setBaseline("");
+    if (searchParams.get("edit") || searchParams.get("patient")) router.replace("/station");
+    nameRef.current?.focus();
+  }
+
+  function requireName(): boolean {
+    if (name.trim()) return true;
+    toast.show("أدخل اسم المريض أولاً", "warn");
+    nameRef.current?.focus();
+    return false;
+  }
+
+  function onSave() {
+    if (!requireName()) return;
+    const wasEdit = !!editId;
+    saveVisit();
+    toast.show(wasEdit ? "تم تحديث الزيارة" : "تم حفظ الزيارة محلياً");
+    setJustSaved(true);
+    setTimeout(() => setJustSaved(false), 1600);
+  }
+
+  // Enter in a result field jumps to the next one.
+  function focusNextResult(idx: number) {
+    const next = document.querySelector<HTMLInputElement>(`[data-result-idx="${idx + 1}"]`);
+    if (next) { next.focus(); next.select(); }
+  }
+
+  // Keyboard shortcuts: Ctrl+S save, Ctrl+P print (uses the guarded print flow).
+  // e.code keeps them working on an Arabic keyboard layout too.
+  const actions = useRef({ onSave, onPrint });
+  actions.current = { onSave, onPrint };
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+      if (e.code === "KeyS") { e.preventDefault(); actions.current.onSave(); }
+      else if (e.code === "KeyP") { e.preventDefault(); actions.current.onPrint(); }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   function toggle(id: string) {
     setSelected((s) => {
@@ -179,11 +249,13 @@ function StationEntryPage() {
       // Deduct one unit of stock per linked test — only on a new visit.
       deductStockForTests(Array.from(selected));
     }
+    setBaseline(snapshot);
   }
 
   function onPrint() {
-    if (!name.trim() || chosen.length === 0) {
-      alert("أدخل اسم المريض واختر فحصاً واحداً على الأقل.");
+    if (!requireName()) return;
+    if (chosen.length === 0) {
+      toast.show("اختر فحصاً واحداً على الأقل", "warn");
       return;
     }
     // Incomplete-entry protection: warn before printing a sheet with blank results.
@@ -197,7 +269,7 @@ function StationEntryPage() {
     const acc = accession || nextAccession();
     setAccession(acc);
     saveVisit(acc);
-    setSavedNote(true);
+    toast.show("تم الحفظ — جارٍ فتح نافذة الطباعة");
     setTimeout(() => window.print(), 80);
   }
 
@@ -205,6 +277,7 @@ function StationEntryPage() {
 
   return (
     <div>
+      {toast.node}
       {/* Page size for print — margin 0 drops the browser's URL/date header;
           the sheet fills the whole page so the footer pins to the bottom and
           the watermark centres on the page. */}
@@ -221,13 +294,21 @@ function StationEntryPage() {
               {editId && <Pencil className="size-5 text-brand-dark" />}
               {editId ? "تعديل زيارة محفوظة" : "إدخال وطباعة النتائج"}
             </h1>
-            <p className="mt-1 text-sm text-muted">
+            <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted">
               {editId
                 ? "عدّل البيانات ثم احفظ — سيُحدَّث نفس السجل."
                 : "أدخل بيانات المريض ونتائج فحوصاته ثم اطبعها — يعمل بدون إنترنت."}
+              {unsaved && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                  <span className="size-1.5 rounded-full bg-amber-500" /> غير محفوظ
+                </span>
+              )}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <button onClick={resetForm} title="بدء زيارة جديدة وتفريغ الحقول" className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas">
+              <RotateCcw className="size-4" /> زيارة جديدة
+            </button>
             <div className="flex overflow-hidden rounded-lg border border-line text-sm">
               {(["A4", "A5"] as const).map((p) => (
                 <button
@@ -239,10 +320,15 @@ function StationEntryPage() {
                 </button>
               ))}
             </div>
-            <button onClick={() => saveVisit()} className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas">
-              <Save className="size-4" /> حفظ
+            <button
+              onClick={onSave}
+              title="حفظ (Ctrl+S)"
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm ${justSaved ? "border-teal-300 bg-teal-50 text-brand-dark" : "border-line hover:bg-canvas"}`}
+            >
+              {justSaved ? <Check className="size-4" strokeWidth={3} /> : <Save className="size-4" />}
+              {justSaved ? "تم الحفظ" : "حفظ"}
             </button>
-            <button onClick={onPrint} className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3.5 py-2 text-sm font-semibold text-white hover:bg-brand-dark">
+            <button onClick={onPrint} title="طباعة (Ctrl+P)" className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3.5 py-2 text-sm font-semibold text-white hover:bg-brand-dark">
               <Printer className="size-4" /> طباعة {paper}
             </button>
           </div>
@@ -262,6 +348,7 @@ function StationEntryPage() {
                   الاسم الثلاثي *
                   <div className="relative">
                     <input
+                      ref={nameRef}
                       value={name}
                       onChange={(e) => { setName(e.target.value); if (patientId && !editId) { setPatientId(null); setPatientNotes([]); } }}
                       placeholder="اكتب الاسم — تظهر أسماء المراجعين السابقين فوراً"
@@ -347,7 +434,14 @@ function StationEntryPage() {
             <div className="rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
               <div className="mb-3 flex items-center justify-between">
                 <div className="text-sm font-semibold">اختيار الفحوصات</div>
-                <span className="text-xs text-muted">{selected.size} محدَّد</span>
+                <div className="flex items-center gap-2">
+                  <span className={`rounded-full px-2 py-0.5 text-xs tabular-nums ${selected.size ? "bg-brand-light font-semibold text-brand-dark" : "text-muted"}`}>{selected.size} محدَّد</span>
+                  {selected.size > 0 && (
+                    <button type="button" onClick={() => { setSelected(new Set()); setResults({}); }} className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted hover:bg-red-50 hover:text-red-600">
+                      <X className="size-3.5" /> مسح
+                    </button>
+                  )}
+                </div>
               </div>
               {panels.length > 0 && (
                 <div className="mb-3 flex flex-wrap items-center gap-1.5">
@@ -403,27 +497,52 @@ function StationEntryPage() {
           {/* Results entry for the chosen tests */}
           <div className="lg:sticky lg:top-4 lg:self-start">
             <div className="rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
-              <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
-                <Beaker className="size-4" /> إدخال النتائج
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-sm font-semibold"><Beaker className="size-4" /> إدخال النتائج</div>
+                {chosen.length > 0 && <span className="text-xs tabular-nums text-muted">{filledCount}/{chosen.length}</span>}
               </div>
+              {chosen.length > 0 && (
+                <div className="mb-4 h-1.5 w-full overflow-hidden rounded-full bg-canvas">
+                  <div
+                    className={`h-full rounded-full transition-[width] duration-300 ${filledCount === chosen.length ? "bg-brand" : "bg-amber-400"}`}
+                    style={{ width: `${(filledCount / chosen.length) * 100}%` }}
+                  />
+                </div>
+              )}
               {chosen.length === 0 ? (
                 <p className="py-6 text-center text-sm text-muted">اختر فحوصاً لإدخال نتائجها.</p>
               ) : (
                 <div className="flex flex-col gap-3">
-                  {chosen.map((t) => {
+                  {chosen.map((t, idx) => {
                     const f = flagFor(results[t.id] ?? "", t.normal, gender);
+                    const tint =
+                      f === "H" ? "!border-red-300 bg-red-50/50 text-red-700"
+                      : f === "L" ? "!border-blue-300 bg-blue-50/50 text-blue-700"
+                      : f === "N" ? "!border-teal-300" : "";
                     return (
-                      <div key={t.id}>
+                      <div key={t.id} className="group">
                         <div className="mb-1 flex items-center justify-between gap-2">
-                          <span className="text-sm font-medium">{t.name_ar}</span>
-                          <FlagPill f={f} />
+                          <span className="truncate text-sm font-medium">{t.name_ar}</span>
+                          <div className="flex items-center gap-1">
+                            <FlagPill f={f} />
+                            <button
+                              type="button"
+                              onClick={() => toggle(t.id)}
+                              title="إزالة الفحص"
+                              className="grid size-6 place-items-center rounded-md text-muted opacity-0 hover:bg-red-50 hover:text-red-600 focus:opacity-100 group-hover:opacity-100"
+                            >
+                              <X className="size-3.5" />
+                            </button>
+                          </div>
                         </div>
                         <div className="flex items-center gap-2">
                           <input
+                            data-result-idx={idx}
                             value={results[t.id] ?? ""}
                             onChange={(e) => setResults((r) => ({ ...r, [t.id]: e.target.value }))}
+                            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusNextResult(idx); } }}
                             placeholder="النتيجة"
-                            className={`${inp} text-base font-semibold`}
+                            className={`${inp} text-base font-semibold ${tint}`}
                           />
                           {t.unit && <span className="shrink-0 text-xs text-muted">{t.unit}</span>}
                         </div>
@@ -440,9 +559,11 @@ function StationEntryPage() {
                   {missingResults.length} فحص بدون نتيجة — أكملها قبل الطباعة.
                 </p>
               )}
-              {savedNote && (
-                <p className="mt-3 text-xs text-brand-dark">تم حفظ الزيارة محلياً.</p>
-              )}
+              <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line pt-3 text-[11px] text-muted">
+                <span><kbd>Enter</kbd> النتيجة التالية</span>
+                <span><span dir="ltr"><kbd>Ctrl</kbd>+<kbd>S</kbd></span> حفظ</span>
+                <span><span dir="ltr"><kbd>Ctrl</kbd>+<kbd>P</kbd></span> طباعة</span>
+              </div>
             </div>
           </div>
         </div>
