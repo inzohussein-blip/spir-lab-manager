@@ -210,6 +210,19 @@ export function storageUsage(): { bytes: number; pct: number; visits: number } {
   return { bytes, pct: Math.min(100, Math.round((bytes / BUDGET) * 100)), visits: getVisits().length };
 }
 
+/** Ask the browser to keep this origin's storage permanently, so it is never
+ *  evicted automatically under disk pressure. Resolves to the current state
+ *  (true = persistent). Unsupported browsers resolve false. */
+export async function requestPersistentStorage(): Promise<boolean> {
+  try {
+    if (!navigator.storage?.persist) return false;
+    if (await navigator.storage.persisted()) return true;
+    return await navigator.storage.persist();
+  } catch {
+    return false;
+  }
+}
+
 // ── Panels ───────────────────────────────────────────────────────────────────
 export function getPanels(): StationPanel[] {
   return read<StationPanel[]>(K_PANELS, []);

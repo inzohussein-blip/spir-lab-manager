@@ -7,7 +7,7 @@ import {
   FlaskConical, ClipboardPlus, ListChecks, FileText, Plus, Settings, Home,
   Archive, Boxes, Menu, X, ChevronLeft, type LucideIcon,
 } from "lucide-react";
-import { getPages, savePages, getVisits, getStock, daysToExpiry, uid, type StationPage } from "@/lib/station/store";
+import { getPages, savePages, getVisits, getStock, daysToExpiry, requestPersistentStorage, uid, type StationPage } from "@/lib/station/store";
 import { cn } from "@/lib/utils";
 
 interface NavItem { href: string; label: string; hint: string; icon: LucideIcon }
@@ -103,6 +103,8 @@ export function StationSidebar() {
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});
     }
+    // Keep station data from being auto-evicted by the browser.
+    void requestPersistentStorage();
   }, []);
 
   // Esc closes the mobile drawer.

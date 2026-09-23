@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Settings, Check, Image as ImageIcon, Download, Upload, Trash2, Stethoscope, Plus, Pencil, X, Smartphone } from "lucide-react";
 import {
-  getSettings, saveSettings, exportBackup, importBackup, getDoctors, saveDoctors, markBackupNow, daysSinceBackup, getVisits, storageUsage, uid,
+  getSettings, saveSettings, exportBackup, importBackup, getDoctors, saveDoctors, markBackupNow, daysSinceBackup, getVisits, storageUsage, requestPersistentStorage, uid,
   type StationSettings, type StationDoctor,
 } from "@/lib/station/store";
 import { InstallButton } from "@/components/station/InstallButton";
@@ -24,12 +24,14 @@ export default function StationSettingsPage() {
   const [since, setSince] = useState<number | null>(null);
   const [hasData, setHasData] = useState(false);
   const [usage, setUsage] = useState({ bytes: 0, pct: 0, visits: 0 });
+  const [persisted, setPersisted] = useState<boolean | null>(null);
   const overdue = hasData && (since === null || since >= 7);
 
   useEffect(() => {
     setS(getSettings()); setDoctors(getDoctors());
     setSince(daysSinceBackup()); setHasData(getVisits().length > 0);
     setUsage(storageUsage());
+    requestPersistentStorage().then(setPersisted);
   }, []);
 
   function persistDoctors(next: StationDoctor[]) { setDoctors(next); saveDoctors(next); }
@@ -194,6 +196,19 @@ export default function StationSettingsPage() {
             <p className="mt-1 text-xs font-medium text-red-600">اقتربت المساحة من الحد — صدّر نسخة واحذف زيارات قديمة.</p>
           )}
         </div>
+        {/* Persistent-storage status */}
+        {persisted !== null && (
+          <div className={`mb-3 rounded-lg px-3 py-2 text-xs ${persisted ? "bg-brand-light text-brand-dark" : "bg-amber-50 text-amber-800"}`}>
+            {persisted ? (
+              <span className="font-medium">✓ الحفظ الدائم مفعّل — لن يحذف المتصفح بيانات المحطة تلقائياً.</span>
+            ) : (
+              <span className="flex flex-wrap items-center gap-2">
+                <span className="font-medium">الحفظ الدائم غير مفعّل بعد — ثبّت المحطة كتطبيق (بالأسفل) ثم أعد المحاولة.</span>
+                <button onClick={() => requestPersistentStorage().then(setPersisted)} className="rounded-md border border-amber-300 px-2 py-0.5 hover:bg-amber-100">إعادة المحاولة</button>
+              </span>
+            )}
+          </div>
+        )}
         <div className="flex flex-wrap gap-2">
           <button onClick={doExport} className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas">
             <Download className="size-4" /> تصدير نسخة احتياطية
