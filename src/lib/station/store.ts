@@ -98,6 +98,10 @@ export interface StationSettings {
   labSubtitle: string;
   footer?: string; // address / phone line
   logo?: string; // data URL, or a static path like /lab-logo.png
+  /** Show each test's previous result on the entry screen (default on). */
+  showPrevious?: boolean;
+  /** Also print the previous result on the report sheet (default off). */
+  printPrevious?: boolean;
 }
 
 function read<T>(key: string, fallback: T): T {
@@ -192,6 +196,40 @@ export function daysSinceBackup(): number | null {
   const t = getLastBackup();
   if (!t) return null;
   return Math.floor((Date.now() - t) / 86400000);
+}
+
+/** A patient's most recent earlier result per test.
+ *  Matches visits by patientId, or by name+phone (same key the patient
+ *  records use — also covers visits saved before patient records existed). `before` limits to visits older than that time
+ *  (used when editing/reprinting an existing visit). */
+export interface PrevResult { value: string; at: number }
+export function previousResults(
+  who: { patientId?: string | null; name: string; phone?: string },
+  opts: { before?: number; excludeId?: string | null } = {},
+): Record<string, PrevResult> {
+  const key = who.name.trim().toLowerCase() + "|" + (who.phone ?? "").trim();
+  const out: Record<string, PrevResult> = {};
+  if (!who.patientId && !who.name.trim()) return out;
+  const mine = getVisits()
+    .filter((v) => v.id !== opts.excludeId && (opts.before == null || v.created_at < opts.before))
+    .filter((v) =>
+      (who.patientId && v.patientId === who.patientId) ||
+      v.patient.name.trim().toLowerCase() + "|" + (v.patient.phone ?? "").trim() === key
+    )
+    .sort((a, b) => b.created_at - a.created_at);
+  for (const v of mine) {
+    for (const r of v.results) {
+      if (!out[r.testId] && r.value.trim()) out[r.testId] = { value: r.value.trim(), at: v.created_at };
+    }
+  }
+  return out;
+}
+
+/** Numeric change from previous to current, or null if either isn't a number. */
+export function resultDelta(current: string, previous: string): number | null {
+  const a = Number(current.trim()), b = Number(previous.trim());
+  if (!current.trim() || !Number.isFinite(a) || !Number.isFinite(b)) return null;
+  return Math.round((a - b) * 100) / 100;
 }
 
 /** Approximate size (bytes) this station uses in localStorage, and a rough

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Printer, Trash2, FileText, Search, Pencil, Download } from "lucide-react";
 import {
-  getVisits, getTests, getSettings, rangeLabel, flagFor, deleteVisits,
+  getVisits, getTests, getSettings, rangeLabel, flagFor, deleteVisits, previousResults,
   type StationVisit, type StationTest, type StationSettings,
 } from "@/lib/station/store";
 import { Barcode } from "@/components/station/Barcode";
@@ -26,6 +26,16 @@ export default function StationVisitsPage() {
   useEffect(() => { setVisits(getVisits()); setTests(getTests()); setSettings(getSettings()); }, []);
 
   const byId = (id: string) => tests.find((t) => t.id === id);
+
+  // Previous results for the reprinted visit (only when enabled in settings).
+  const prev = useMemo(() => {
+    if (!sel || settings.printPrevious !== true) return {};
+    return previousResults(
+      { patientId: sel.patientId, name: sel.patient.name, phone: sel.patient.phone },
+      { before: sel.created_at, excludeId: sel.id },
+    );
+  }, [sel, settings.printPrevious]);
+  const printPrev = !!sel && sel.results.some((r) => prev[r.testId]);
   const dayOf = (ms: number) => {
     const d = new Date(ms);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -238,6 +248,7 @@ export default function StationVisitsPage() {
                     <th className="px-3 py-2.5 font-semibold">النتيجة</th>
                     <th className="px-3 py-2.5 font-semibold">الوحدة</th>
                     <th className="px-3 py-2.5 font-semibold">المعدل الطبيعي</th>
+                    {printPrev && <th className="px-3 py-2.5 font-semibold">النتيجة السابقة</th>}
                     <th className="px-3 py-2.5 font-semibold">الحالة</th>
                   </tr>
                 </thead>
@@ -252,6 +263,16 @@ export default function StationVisitsPage() {
                         <td className={`px-3 py-2 tabular-nums ${abn ? "font-bold" : "font-semibold"}`} style={abn ? { color: f === "H" ? "#b91c1c" : "#1d4ed8" } : undefined}>{r.value || "—"}</td>
                         <td className="px-3 py-2 text-gray-600">{r.unit || "—"}</td>
                         <td className="px-3 py-2 text-gray-600">{t ? rangeLabel(t.normal, sel.patient.gender, t.unit) : "—"}</td>
+                        {printPrev && (
+                          <td className="px-3 py-2 text-gray-600">
+                            {prev[r.testId] ? (
+                              <>
+                                <span className="tabular-nums font-semibold text-gray-800">{prev[r.testId].value}</span>
+                                <span className="block text-[10px] tabular-nums text-gray-500">{new Date(prev[r.testId].at).toLocaleDateString("en-CA")}</span>
+                              </>
+                            ) : "—"}
+                          </td>
+                        )}
                         <td className="px-3 py-2">
                           {f === "H" ? <span className="inline-grid size-6 place-items-center rounded-full text-xs font-bold text-white" style={{ background: "#b91c1c", WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as React.CSSProperties}>H</span>
                             : f === "L" ? <span className="inline-grid size-6 place-items-center rounded-full text-xs font-bold text-white" style={{ background: "#1d4ed8", WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as React.CSSProperties}>L</span>

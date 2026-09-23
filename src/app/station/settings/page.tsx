@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Settings, Check, Image as ImageIcon, Download, Upload, Trash2, Stethoscope, Plus, Pencil, X, Smartphone } from "lucide-react";
+import { Settings, Check, Image as ImageIcon, Download, Upload, Trash2, Stethoscope, Plus, Pencil, X, Smartphone, History } from "lucide-react";
 import {
   getSettings, saveSettings, exportBackup, importBackup, getDoctors, saveDoctors, markBackupNow, daysSinceBackup, getVisits, storageUsage, requestPersistentStorage, uid,
   type StationSettings, type StationDoctor,
@@ -55,6 +55,12 @@ export default function StationSettingsPage() {
     setS(clean);
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
+  }
+
+  // Result options save immediately and independently of the letterhead form.
+  function setOption(patch: Partial<StationSettings>) {
+    saveSettings({ ...getSettings(), ...patch });
+    setS((cur) => ({ ...cur, ...patch }));
   }
 
   function onLogo(e: React.ChangeEvent<HTMLInputElement>) {
@@ -139,6 +145,25 @@ export default function StationSettingsPage() {
             <Check className="size-4" /> حفظ
           </button>
           {saved && <p className="text-xs text-brand-dark">تم الحفظ.</p>}
+        </div>
+      </div>
+
+      {/* Previous-result options */}
+      <div className="mb-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
+        <div className="mb-3 flex items-center gap-2 text-sm font-semibold"><History className="size-4" /> النتيجة السابقة للمراجع</div>
+        <div className="flex flex-col gap-3">
+          <Toggle
+            checked={s.showPrevious !== false}
+            onChange={(v) => setOption({ showPrevious: v })}
+            label="إظهار النتيجة السابقة للفاحص"
+            desc="تظهر تحت حقل النتيجة في شاشة الإدخال فقط، ولا تُطبع."
+          />
+          <Toggle
+            checked={s.printPrevious === true}
+            onChange={(v) => setOption({ printPrevious: v })}
+            label="طباعة النتيجة السابقة مع الجديدة"
+            desc="يضيف عمود «النتيجة السابقة» إلى ورقة النتائج المطبوعة."
+          />
         </div>
       </div>
 
@@ -231,5 +256,25 @@ export default function StationSettingsPage() {
         <InstallButton />
       </div>
     </div>
+  );
+}
+
+function Toggle({ checked, onChange, label, desc }: { checked: boolean; onChange: (v: boolean) => void; label: string; desc: string }) {
+  return (
+    <label className="flex cursor-pointer items-start justify-between gap-4">
+      <span>
+        <span className="block text-sm font-medium">{label}</span>
+        <span className="block text-xs text-muted">{desc}</span>
+      </span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onChange(!checked)}
+        className={`relative mt-0.5 h-6 w-11 shrink-0 rounded-full ${checked ? "bg-brand" : "bg-line"}`}
+      >
+        <span className={`absolute top-0.5 size-5 rounded-full bg-white shadow transition-all ${checked ? "start-[22px]" : "start-0.5"}`} />
+      </button>
+    </label>
   );
 }

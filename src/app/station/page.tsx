@@ -6,6 +6,7 @@ import { Search, Printer, Save, Check, Beaker, Layers, Pencil, UserRound, Sticky
 import {
   getTests, addVisit, updateVisit, getVisit, getSettings, getPanels, nextAccession, uid, rangeLabel, flagFor,
   getPatients, getPatient, upsertPatient, addPatientNote, deductStockForTests, getDoctors, addDoctor,
+  previousResults, resultDelta,
   type StationTest, type Gender, type StationVisit, type StationSettings, type StationPanel, type StationPatient, type NoteEntry, type StationDoctor,
 } from "@/lib/station/store";
 import { Barcode } from "@/components/station/Barcode";
@@ -27,6 +28,27 @@ function FlagPill({ f }: { f: "H" | "L" | "N" | null }) {
     N: "bg-teal-50 text-brand-dark",
   }[f];
   return <span className={`grid size-6 place-items-center rounded-full text-xs font-bold ${m}`}>{f}</span>;
+}
+
+const ymd = (ms: number) => new Date(ms).toLocaleDateString("en-CA");
+
+/** Previous result + direction of change, shown to the examiner only. */
+function PrevLine({ prev, current }: { prev: { value: string; at: number }; current: string }) {
+  const d = resultDelta(current, prev.value);
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs">
+      <span className="inline-flex items-center gap-1 rounded-full border border-dashed border-line bg-canvas px-2.5 py-0.5 text-muted">
+        <span className="font-semibold text-ink">السابق:</span>
+        <b className="tabular-nums text-ink">{prev.value}</b>
+        <span className="tabular-nums">· {ymd(prev.at)}</span>
+      </span>
+      {d != null && d !== 0 && (
+        <span dir="ltr" className={`rounded-full px-2 py-0.5 font-bold tabular-nums ${d > 0 ? "bg-amber-100 text-amber-700" : "bg-sky-100 text-sky-700"}`}>
+          {d > 0 ? `+${d} ▲` : `${d} ▼`}
+        </span>
+      )}
+    </div>
+  );
 }
 
 /** Serialized form state used to detect unsaved changes. */
@@ -173,6 +195,16 @@ function StationEntryPage() {
     return patients.filter((p) => p.name.toLowerCase().includes(term)).slice(0, 8);
   }, [patients, name, editId, patientId]);
 
+  // Previous results for the linked patient (or the visit being edited).
+  const [savedTick, setSavedTick] = useState(0);
+  const prev = useMemo(() => {
+    if (!patientId && !editId) return {};
+    return previousResults({ patientId, name, phone }, { before: createdAt ?? undefined, excludeId: editId });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [patientId, editId, createdAt, savedTick]);
+  const showPrev = settings.showPrevious !== false;
+  const printPrev = settings.printPrevious === true && chosen.some((t) => prev[t.id]);
+
   // Chosen tests still missing a result value — used for incomplete-entry protection.
   const missingResults = chosen.filter((t) => !(results[t.id] ?? "").trim());
   const filledCount = chosen.length - missingResults.length;
@@ -265,6 +297,7 @@ function StationEntryPage() {
       deductStockForTests(Array.from(selected));
     }
     setBaseline(snapshot);
+    setSavedTick((n) => n + 1);
   }
 
   function onPrint() {
@@ -354,7 +387,7 @@ function StationEntryPage() {
           <div className="flex flex-col gap-4">
             <div className="rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
               <div className="mb-3 flex items-center justify-between">
-                <PanelTitle icon={UserRound} title="بيانات المريض" hint="اكتب الاسم لإظهار المراجعين السابقين" />
+                <PanelTitle icon={UserRound} title="بيانات المريض" />
                 {patientId && <span className="rounded-full bg-teal-50 px-2 py-0.5 text-xs font-medium text-brand-dark">مراجع مسجّل</span>}
               </div>
 
@@ -366,7 +399,6 @@ function StationEntryPage() {
                       ref={nameRef}
                       value={name}
                       onChange={(e) => { setName(e.target.value); if (patientId && !editId) { setPatientId(null); setPatientNotes([]); } }}
-                      placeholder="اكتب الاسم — تظهر أسماء المراجعين السابقين فوراً"
                       className={`mt-1 ${inp}`}
                     />
                     {/* Instant previous-patient suggestions inside the name field */}
@@ -564,6 +596,7 @@ function StationEntryPage() {
                         <div className="mt-1 text-xs text-muted">
                           المعدل الطبيعي: {rangeLabel(t.normal, gender, t.unit)}
                         </div>
+                        {showPrev && prev[t.id] && <PrevLine prev={prev[t.id]} current={results[t.id] ?? ""} />}
                       </div>
                     );
                   })}
@@ -574,11 +607,6 @@ function StationEntryPage() {
                   {missingResults.length} فحص بدون نتيجة — أكملها قبل الطباعة.
                 </p>
               )}
-              <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line pt-3 text-[11px] text-muted">
-                <span><kbd>Enter</kbd> النتيجة التالية</span>
-                <span><span dir="ltr"><kbd>Ctrl</kbd>+<kbd>S</kbd></span> حفظ</span>
-                <span><span dir="ltr"><kbd>Ctrl</kbd>+<kbd>P</kbd></span> طباعة</span>
-              </div>
             </div>
           </div>
         </div>
@@ -635,12 +663,13 @@ function StationEntryPage() {
                 <th className="px-3 py-2.5 font-semibold">النتيجة</th>
                 <th className="px-3 py-2.5 font-semibold">الوحدة</th>
                 <th className="px-3 py-2.5 font-semibold">المعدل الطبيعي</th>
+                {printPrev && <th className="px-3 py-2.5 font-semibold">النتيجة السابقة</th>}
                 <th className="px-3 py-2.5 font-semibold">الحالة</th>
               </tr>
             </thead>
             <tbody>
               {chosen.length === 0 && (
-                <tr><td colSpan={5} className="py-6 text-center text-gray-400">لم تُختَر فحوصات بعد</td></tr>
+                <tr><td colSpan={printPrev ? 6 : 5} className="py-6 text-center text-gray-400">لم تُختَر فحوصات بعد</td></tr>
               )}
               {chosen.map((t, idx) => {
                 const f = flagFor(results[t.id] ?? "", t.normal, gender);
@@ -651,6 +680,16 @@ function StationEntryPage() {
                     <td className={`px-3 py-2 tabular-nums ${abn ? "font-bold" : "font-semibold"}`} style={abn ? { color: f === "H" ? "#b91c1c" : "#1d4ed8" } : undefined}>{results[t.id] || "—"}</td>
                     <td className="px-3 py-2 text-gray-600">{t.unit || "—"}</td>
                     <td className="px-3 py-2 text-gray-600">{rangeLabel(t.normal, gender, t.unit)}</td>
+                    {printPrev && (
+                      <td className="px-3 py-2 text-gray-600">
+                        {prev[t.id] ? (
+                          <>
+                            <span className="tabular-nums font-semibold text-gray-800">{prev[t.id].value}</span>
+                            <span className="block text-[10px] tabular-nums text-gray-500">{ymd(prev[t.id].at)}</span>
+                          </>
+                        ) : "—"}
+                      </td>
+                    )}
                     <td className="px-3 py-2">
                       {f === "H" ? <span className="inline-grid size-6 place-items-center rounded-full text-xs font-bold text-white" style={{ background: "#b91c1c", WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as React.CSSProperties}>H</span>
                         : f === "L" ? <span className="inline-grid size-6 place-items-center rounded-full text-xs font-bold text-white" style={{ background: "#1d4ed8", WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as React.CSSProperties}>L</span>

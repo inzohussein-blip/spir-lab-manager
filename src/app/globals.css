@@ -136,18 +136,6 @@ main > * {
 .station-toast {
   animation: station-toast-in 0.18s ease-out;
 }
-/* Keyboard shortcut hint */
-.station kbd {
-  font-family: inherit;
-  font-size: 10px;
-  line-height: 1;
-  padding: 2px 5px;
-  border-radius: 4px;
-  border: 1px solid var(--color-line);
-  border-bottom-width: 2px;
-  background: var(--color-canvas);
-  color: var(--color-muted);
-}
 @media (prefers-reduced-motion: reduce) {
   .station button:not(:disabled):active { transform: none; }
   .station-toast { animation: none; }
