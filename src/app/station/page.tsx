@@ -2,23 +2,19 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search, Printer, Save, Check, Beaker, Layers, Pencil, UserRound, StickyNote, Plus, X, RotateCcw, ListChecks, type LucideIcon } from "lucide-react";
+import { Search, Printer, Save, Check, Beaker, Layers, Pencil, UserRound, StickyNote, Plus, X, RotateCcw, ListChecks, ChevronDown, type LucideIcon } from "lucide-react";
 import {
   getTests, addVisit, updateVisit, getVisit, getSettings, getPanels, nextAccession, uid, rangeLabel, flagFor,
   getPatients, getPatient, upsertPatient, addPatientNote, deductStockForTests, getDoctors, addDoctor,
   previousResults, resultDelta,
   type StationTest, type Gender, type StationVisit, type StationSettings, type StationPanel, type StationPatient, type NoteEntry, type StationDoctor,
 } from "@/lib/station/store";
-import { Barcode } from "@/components/station/Barcode";
+import { ReportSheet } from "@/components/station/ReportSheet";
 import { useToast } from "@/components/station/Toast";
 
 const inp =
   "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
 
-// Lab identity colours (from the printed letterhead): purple + gold.
-const PURPLE = "#5a2a82";
-const GOLD = "#c9a227";
-const GOLD_DARK = "#9c7c1e";
 
 function FlagPill({ f }: { f: "H" | "L" | "N" | null }) {
   if (!f) return null;
@@ -88,6 +84,7 @@ function StationEntryPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [results, setResults] = useState<Record<string, string>>({});
   const [q, setQ] = useState("");
+  const [openCats, setOpenCats] = useState<Set<string>>(new Set()); // collapsible groups
   const [paper, setPaper] = useState<"A4" | "A5">("A4");
   const [justSaved, setJustSaved] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -326,13 +323,6 @@ function StationEntryPage() {
   return (
     <div>
       {toast.node}
-      {/* Page size for print — margin 0 drops the browser's URL/date header;
-          the sheet fills the whole page so the footer pins to the bottom and
-          the watermark centres on the page. */}
-      <style>{`@media print {
-        @page { size: ${paper}; margin: 0; }
-        #report-sheet { min-height: ${paper === "A5" ? "208mm" : "295mm"}; }
-      }`}</style>
 
       {/* ── Entry form (screen only) ─────────────────────────────────────────── */}
       <div className="no-print">
@@ -513,9 +503,29 @@ function StationEntryPage() {
                 <p className="py-6 text-center text-sm text-muted">لا توجد فحوصات. أضِفها من «إدارة الفحوصات».</p>
               ) : (
                 <div className="flex flex-col gap-3">
-                  {groups.map(([cat, items]) => (
+                  {groups.map(([cat, items]) => {
+                    // Optional (settings): groups fold under their title; a search opens them all.
+                    const foldable = settings.collapseGroups === true;
+                    const isOpen = !foldable || !!q.trim() || openCats.has(cat);
+                    const picked = items.filter((t) => selected.has(t.id)).length;
+                    return (
                     <div key={cat}>
-                      <div className="mb-1.5 text-xs font-semibold text-muted">{cat}</div>
+                      {foldable ? (
+                        <button
+                          type="button"
+                          onClick={() => setOpenCats((s) => { const n = new Set(s); n.has(cat) ? n.delete(cat) : n.add(cat); return n; })}
+                          aria-expanded={isOpen}
+                          className="mb-1.5 flex w-full items-center gap-2 rounded-lg border border-line bg-canvas px-3 py-2 text-right text-sm font-semibold hover:border-brand"
+                        >
+                          <ChevronDown className={`size-4 shrink-0 text-muted transition-transform ${isOpen ? "" : "rotate-90"}`} />
+                          <span className="flex-1">{cat}</span>
+                          {picked > 0 && <span className="rounded-full bg-brand px-1.5 py-0.5 text-[10px] font-bold leading-none text-white tabular-nums">{picked}</span>}
+                          <span className="text-xs font-normal text-muted tabular-nums">{items.length}</span>
+                        </button>
+                      ) : (
+                        <div className="mb-1.5 text-xs font-semibold text-muted">{cat}</div>
+                      )}
+                      {isOpen && (
                       <div className="grid gap-1.5 sm:grid-cols-2">
                         {items.map((t) => {
                           const on = selected.has(t.id);
@@ -534,8 +544,10 @@ function StationEntryPage() {
                           );
                         })}
                       </div>
+                      )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -627,121 +639,18 @@ function StationEntryPage() {
       </div>
 
       {/* ── Printable report (A4/A5) ─────────────────────────────────────────── */}
-      <div id="report-sheet" className="relative isolate mx-auto mt-6 flex max-w-[210mm] flex-col bg-white p-8 text-black shadow-sm print:mt-0 print:p-[14mm] print:shadow-none">
-        {/* Faint centered logo watermark (centres over the whole page) */}
-        {settings.logo && (
-          <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 flex items-center justify-center">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={settings.logo} alt="" className="w-1/2 max-w-[110mm] opacity-[0.06]" style={{ WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as React.CSSProperties} />
-          </div>
-        )}
-
-        {/* Letterhead — purple/gold identity */}
-        <div className="flex items-center justify-between gap-4 pb-3">
-          <div className="flex items-center gap-3">
-            {settings.logo && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={settings.logo} alt="" className="size-20 object-contain" />
-            )}
-            <div>
-              <h2 className="text-2xl font-extrabold leading-tight" style={{ color: PURPLE }}>{settings.labName}</h2>
-              <p className="text-sm font-medium" style={{ color: GOLD_DARK }}>{settings.labSubtitle}</p>
-            </div>
-          </div>
-          <div className="text-left text-xs text-gray-600">
-            <div>التاريخ: {today}</div>
-            {accession && <div className="font-mono font-bold" style={{ color: PURPLE }}>{accession}</div>}
-          </div>
-        </div>
-        {/* Gold rule with a purple center accent */}
-        <div className="h-1 w-full rounded" style={{ background: `linear-gradient(90deg, ${GOLD} 0%, ${PURPLE} 50%, ${GOLD} 100%)`, WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as React.CSSProperties} />
-
-        <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-1.5 rounded-lg border-2 p-3 text-sm sm:grid-cols-3" style={{ borderColor: GOLD }}>
-          <div><span style={{ color: PURPLE }} className="font-semibold">المريض:</span> <b>{name || "—"}</b></div>
-          <div><span style={{ color: PURPLE }} className="font-semibold">الجنس:</span> {gender === "male" ? "ذكر" : gender === "female" ? "أنثى" : "—"}</div>
-          <div><span style={{ color: PURPLE }} className="font-semibold">العمر:</span> {age || "—"}</div>
-          <div><span style={{ color: PURPLE }} className="font-semibold">الهاتف:</span> {phone || "—"}</div>
-          {referrer && <div><span style={{ color: PURPLE }} className="font-semibold">الطبيب المُحيل:</span> {referrer}</div>}
-        </div>
-
-        {/* Results */}
-        <div className="mt-5 flex items-center gap-2">
-          <span className="h-5 w-1.5 rounded" style={{ background: GOLD, WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as React.CSSProperties} />
-          <span className="text-sm font-bold" style={{ color: PURPLE }}>نتائج الفحوصات</span>
-        </div>
-        <div className="mt-2 overflow-hidden rounded-lg border" style={{ borderColor: GOLD }}>
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr className="text-right text-xs text-white" style={{ background: PURPLE, WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as React.CSSProperties}>
-                <th className="px-3 py-2.5 font-semibold">الفحص</th>
-                <th className="px-3 py-2.5 font-semibold">النتيجة</th>
-                <th className="px-3 py-2.5 font-semibold">الوحدة</th>
-                <th className="px-3 py-2.5 font-semibold">المعدل الطبيعي</th>
-                {printPrev && <th className="px-3 py-2.5 font-semibold">النتيجة السابقة</th>}
-                <th className="px-3 py-2.5 font-semibold">الحالة</th>
-              </tr>
-            </thead>
-            <tbody>
-              {chosen.length === 0 && (
-                <tr><td colSpan={printPrev ? 6 : 5} className="py-6 text-center text-gray-400">لم تُختَر فحوصات بعد</td></tr>
-              )}
-              {chosen.map((t, idx) => {
-                const f = flagFor(results[t.id] ?? "", t.normal, gender);
-                const abn = f === "H" || f === "L";
-                return (
-                  <tr key={t.id} className="align-top" style={{ background: idx % 2 ? "#f7f3fb" : "#ffffff", WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as React.CSSProperties}>
-                    <td className="px-3 py-2 font-medium">{t.name_ar}</td>
-                    <td className={`px-3 py-2 tabular-nums ${abn ? "font-bold" : "font-semibold"}`} style={abn ? { color: f === "H" ? "#b91c1c" : "#1d4ed8" } : undefined}>{results[t.id] || "—"}</td>
-                    <td className="px-3 py-2 text-gray-600"><span dir="ltr">{t.unit || "—"}</span></td>
-                    <td className="px-3 py-2 text-gray-600"><span dir="ltr">{rangeLabel(t.normal, gender, t.unit)}</span></td>
-                    {printPrev && (
-                      <td className="px-3 py-2 text-gray-600">
-                        {prev[t.id] ? (
-                          <>
-                            <span className="tabular-nums font-semibold text-gray-800">{prev[t.id].value}</span>
-                            <span className="block text-[10px] tabular-nums text-gray-500">{ymd(prev[t.id].at)}</span>
-                          </>
-                        ) : "—"}
-                      </td>
-                    )}
-                    <td className="px-3 py-2">
-                      {f === "H" ? <span className="inline-grid size-6 place-items-center rounded-full text-xs font-bold text-white" style={{ background: "#b91c1c", WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as React.CSSProperties}>H</span>
-                        : f === "L" ? <span className="inline-grid size-6 place-items-center rounded-full text-xs font-bold text-white" style={{ background: "#1d4ed8", WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as React.CSSProperties}>L</span>
-                        : f === "N" ? <span className="inline-grid size-6 place-items-center rounded-full text-xs font-bold" style={{ background: "#e7f6ef", color: "#127a4f", WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as React.CSSProperties}>N</span>
-                        : <span className="text-gray-400">—</span>}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Bottom group — pinned to the page bottom */}
-        <div className="mt-auto">
-          <div className="mt-10 flex items-end justify-between text-xs text-gray-600">
-            <div>
-              <div className="mb-6">اعتمد النتائج:</div>
-              <div className="w-48 border-t pt-1 text-center text-gray-500" style={{ borderColor: GOLD }}>التوقيع / الختم</div>
-            </div>
-            {accession && (
-              <div className="text-center">
-                <Barcode text={accession} className="block h-8 w-40" />
-                <div className="font-mono text-[10px] text-gray-500">{accession}</div>
-              </div>
-            )}
-          </div>
-
-          {settings.footer && (
-            <div
-              className="mt-4 rounded-md px-4 py-2 text-center text-xs font-medium text-white"
-              style={{ background: PURPLE, WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as React.CSSProperties}
-            >
-              {settings.footer}
-            </div>
-          )}
-        </div>
-      </div>
+      <ReportSheet
+        className="mt-6"
+        settings={settings}
+        paper={paper}
+        date={today}
+        accession={accession || undefined}
+        patient={{ name, gender, age, phone }}
+        referrer={referrer || undefined}
+        rows={chosen.map((t) => ({ key: t.id, name: t.name_ar, value: results[t.id] ?? "", unit: t.unit, test: t }))}
+        prev={prev}
+        printPrev={printPrev}
+      />
     </div>
   );
 }

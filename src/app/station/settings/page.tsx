@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Settings, Check, Image as ImageIcon, Download, Upload, Trash2, Stethoscope, Plus, Pencil, X, Smartphone, History } from "lucide-react";
+import { Settings, Check, Image as ImageIcon, Download, Upload, Trash2, Stethoscope, Plus, Pencil, X, Smartphone, History, ListCollapse } from "lucide-react";
 import {
   getSettings, saveSettings, exportBackup, importBackup, getDoctors, saveDoctors, markBackupNow, daysSinceBackup, getVisits, storageUsage, requestPersistentStorage, uid,
   type StationSettings, type StationDoctor,
@@ -165,6 +165,17 @@ export default function StationSettingsPage() {
             desc="يضيف عمود «النتيجة السابقة» إلى ورقة النتائج المطبوعة."
           />
         </div>
+      </div>
+
+      {/* Entry-screen options */}
+      <div className="mb-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
+        <div className="mb-3 flex items-center gap-2 text-sm font-semibold"><ListCollapse className="size-4" /> شاشة الإدخال</div>
+        <Toggle
+          checked={s.collapseGroups === true}
+          onChange={(v) => setOption({ collapseGroups: v })}
+          label="طيّ مجموعات الفحوصات"
+          desc="تُطوى كل مجموعة تحت عنوانها وتُفتح بالضغط عليه، والبحث يفتحها تلقائياً."
+        />
       </div>
 
       {/* Referring doctors */}

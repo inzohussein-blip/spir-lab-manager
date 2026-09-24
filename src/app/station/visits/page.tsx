@@ -7,11 +7,8 @@ import {
   getVisits, getTests, getSettings, rangeLabel, flagFor, deleteVisits, previousResults,
   type StationVisit, type StationTest, type StationSettings,
 } from "@/lib/station/store";
-import { Barcode } from "@/components/station/Barcode";
+import { ReportSheet } from "@/components/station/ReportSheet";
 
-const PURPLE = "#5a2a82";
-const GOLD = "#c9a227";
-const GOLD_DARK = "#9c7c1e";
 
 export default function StationVisitsPage() {
   const [visits, setVisits] = useState<StationVisit[]>([]);
@@ -195,120 +192,23 @@ export default function StationVisitsPage() {
 
       {sel && (
         <>
-          <style>{`@media print {
-            @page { size: A4; margin: 0; }
-            #report-sheet { min-height: 295mm; }
-          }`}</style>
           <div className="no-print mt-4 flex justify-center">
             <button onClick={() => window.print()} className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark">
               <Printer className="size-4" /> طباعة
             </button>
           </div>
-          <div id="report-sheet" className="relative isolate mx-auto mt-4 flex max-w-[210mm] flex-col bg-white p-8 text-black shadow-sm print:mt-0 print:p-[14mm] print:shadow-none">
-            {settings.logo && (
-              <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 flex items-center justify-center">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={settings.logo} alt="" className="w-1/2 max-w-[110mm] opacity-[0.06]" />
-              </div>
-            )}
-            <div className="flex items-center justify-between gap-4 pb-3">
-              <div className="flex items-center gap-3">
-                {settings.logo && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={settings.logo} alt="" className="size-20 object-contain" />
-                )}
-                <div>
-                  <h2 className="text-2xl font-extrabold leading-tight" style={{ color: PURPLE }}>{settings.labName}</h2>
-                  <p className="text-sm font-medium" style={{ color: GOLD_DARK }}>{settings.labSubtitle}</p>
-                </div>
-              </div>
-              <div className="text-left text-xs text-gray-600">
-                <div>التاريخ: {new Date(sel.created_at).toISOString().slice(0, 10)}</div>
-                {sel.accession && <div className="font-mono font-bold" style={{ color: PURPLE }}>{sel.accession}</div>}
-              </div>
-            </div>
-            <div className="h-1 w-full rounded" style={{ background: `linear-gradient(90deg, ${GOLD} 0%, ${PURPLE} 50%, ${GOLD} 100%)`, WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as React.CSSProperties} />
-
-            <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-1.5 rounded-lg border-2 p-3 text-sm sm:grid-cols-3" style={{ borderColor: GOLD }}>
-              <div><span style={{ color: PURPLE }} className="font-semibold">المريض:</span> <b>{sel.patient.name || "—"}</b></div>
-              <div><span style={{ color: PURPLE }} className="font-semibold">الجنس:</span> {sel.patient.gender === "male" ? "ذكر" : sel.patient.gender === "female" ? "أنثى" : "—"}</div>
-              <div><span style={{ color: PURPLE }} className="font-semibold">العمر:</span> {sel.patient.age || "—"}</div>
-              {sel.referrer && <div><span style={{ color: PURPLE }} className="font-semibold">الطبيب المُحيل:</span> {sel.referrer}</div>}
-            </div>
-
-            <div className="mt-5 flex items-center gap-2">
-              <span className="h-5 w-1.5 rounded" style={{ background: GOLD, WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as React.CSSProperties} />
-              <span className="text-sm font-bold" style={{ color: PURPLE }}>نتائج الفحوصات</span>
-            </div>
-            <div className="mt-2 overflow-hidden rounded-lg border" style={{ borderColor: GOLD }}>
-              <table className="w-full border-collapse text-sm">
-                <thead>
-                  <tr className="text-right text-xs text-white" style={{ background: PURPLE, WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as React.CSSProperties}>
-                    <th className="px-3 py-2.5 font-semibold">الفحص</th>
-                    <th className="px-3 py-2.5 font-semibold">النتيجة</th>
-                    <th className="px-3 py-2.5 font-semibold">الوحدة</th>
-                    <th className="px-3 py-2.5 font-semibold">المعدل الطبيعي</th>
-                    {printPrev && <th className="px-3 py-2.5 font-semibold">النتيجة السابقة</th>}
-                    <th className="px-3 py-2.5 font-semibold">الحالة</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sel.results.map((r, i) => {
-                    const t = byId(r.testId);
-                    const f = t ? flagFor(r.value, t.normal, sel.patient.gender) : null;
-                    const abn = f === "H" || f === "L";
-                    return (
-                      <tr key={i} style={{ background: i % 2 ? "#f7f3fb" : "#ffffff", WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as React.CSSProperties}>
-                        <td className="px-3 py-2 font-medium">{r.name_ar}</td>
-                        <td className={`px-3 py-2 tabular-nums ${abn ? "font-bold" : "font-semibold"}`} style={abn ? { color: f === "H" ? "#b91c1c" : "#1d4ed8" } : undefined}>{r.value || "—"}</td>
-                        <td className="px-3 py-2 text-gray-600"><span dir="ltr">{r.unit || "—"}</span></td>
-                        <td className="px-3 py-2 text-gray-600"><span dir="ltr">{t ? rangeLabel(t.normal, sel.patient.gender, t.unit) : "—"}</span></td>
-                        {printPrev && (
-                          <td className="px-3 py-2 text-gray-600">
-                            {prev[r.testId] ? (
-                              <>
-                                <span className="tabular-nums font-semibold text-gray-800">{prev[r.testId].value}</span>
-                                <span className="block text-[10px] tabular-nums text-gray-500">{new Date(prev[r.testId].at).toLocaleDateString("en-CA")}</span>
-                              </>
-                            ) : "—"}
-                          </td>
-                        )}
-                        <td className="px-3 py-2">
-                          {f === "H" ? <span className="inline-grid size-6 place-items-center rounded-full text-xs font-bold text-white" style={{ background: "#b91c1c", WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as React.CSSProperties}>H</span>
-                            : f === "L" ? <span className="inline-grid size-6 place-items-center rounded-full text-xs font-bold text-white" style={{ background: "#1d4ed8", WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as React.CSSProperties}>L</span>
-                            : f === "N" ? <span className="inline-grid size-6 place-items-center rounded-full text-xs font-bold" style={{ background: "#e7f6ef", color: "#127a4f", WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as React.CSSProperties}>N</span>
-                            : <span className="text-gray-400">—</span>}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="mt-auto">
-              <div className="mt-10 flex items-end justify-between text-xs text-gray-600">
-                <div>
-                  <div className="mb-6">اعتمد النتائج:</div>
-                  <div className="w-48 border-t pt-1 text-center text-gray-500" style={{ borderColor: GOLD }}>التوقيع / الختم</div>
-                </div>
-                {sel.accession && (
-                  <div className="text-center">
-                    <Barcode text={sel.accession} className="block h-8 w-40" />
-                    <div className="font-mono text-[10px] text-gray-500">{sel.accession}</div>
-                  </div>
-                )}
-              </div>
-              {settings.footer && (
-                <div
-                  className="mt-4 rounded-md px-4 py-2 text-center text-xs font-medium text-white"
-                  style={{ background: PURPLE, WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as React.CSSProperties}
-                >
-                  {settings.footer}
-                </div>
-              )}
-            </div>
-          </div>
+          <ReportSheet
+            className="mt-4"
+            settings={settings}
+            date={new Date(sel.created_at).toISOString().slice(0, 10)}
+            accession={sel.accession}
+            patient={sel.patient}
+            referrer={sel.referrer}
+            rows={sel.results.map((r) => ({ key: r.testId, name: r.name_ar, value: r.value, unit: r.unit, test: byId(r.testId) }))}
+            prev={prev}
+            printPrev={printPrev}
+            emptyText="لا نتائج"
+          />
         </>
       )}
     </div>
