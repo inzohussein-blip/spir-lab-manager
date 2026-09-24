@@ -142,6 +142,16 @@ main > * {
 :root[data-theme="dark"] .training :is(.bg-brand, .from-brand).text-white {
   color: #1e1b4b;
 }
+/* Presentation slides stay light (projector friendly) whatever the theme */
+.training .slide-light,
+:root[data-theme="dark"] .training .slide-light {
+  --color-brand: #4f46e5;
+  --color-brand-dark: #4338ca;
+  --color-brand-light: #eef2ff;
+}
+:root[data-theme="dark"] .training .slide-light :is(.bg-brand, .from-brand).text-white {
+  color: #fff;
+}
 /* Quality & devices station — rose accent */
 .qc {
   --color-brand: #e11d48;

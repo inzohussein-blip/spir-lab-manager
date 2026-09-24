@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
   IdCard, TestTubes, ListOrdered, Microscope, Network, Pencil, Printer, Trash2, Lightbulb, AlertTriangle,
-  ArrowRight, ArrowLeftRight, X, ShieldCheck, Star, Wrench, History, CalendarClock, Share2, type LucideIcon,
+  ArrowRight, ArrowLeftRight, X, ShieldCheck, Star, Wrench, History, CalendarClock, Share2, Presentation as PresentIcon, type LucideIcon,
 } from "lucide-react";
 import {
   getTest, getTests, getTubes, getTools, getSettings, backlinks, deleteTest, getFavs, toggleFav, pushRecent, reviewStatus, exportTestPackage,
@@ -15,6 +15,7 @@ import { Img } from "@/components/training/Img";
 import { RichText } from "@/components/training/RichText";
 import { useEditLock } from "@/lib/training/lock";
 import { SopSheet, SopPrintStyle, SopFooter, sopCode } from "@/components/training/SopSheet";
+import { Presentation } from "@/components/training/Presentation";
 
 type Tab = "card" | "sample" | "procedure" | "results" | "links";
 const TABS: { id: Tab; label: string; icon: LucideIcon }[] = [
@@ -38,6 +39,7 @@ export default function TrainingTestPage() {
   const [zoom, setZoom] = useState<string | null>(null);
   const [withImages, setWithImages] = useState(true);
   const [fav, setFav] = useState(false);
+  const [present, setPresent] = useState(false);
   const { canEdit } = useEditLock();
 
   useEffect(() => {
@@ -119,6 +121,13 @@ export default function TrainingTestPage() {
             <label className="inline-flex items-center gap-1.5 text-xs text-muted">
               <input type="checkbox" checked={withImages} onChange={(e) => setWithImages(e.target.checked)} className="accent-[var(--color-brand)]" /> الصور في الطباعة
             </label>
+            <button
+              onClick={() => { document.documentElement.requestFullscreen?.().catch(() => {}); setPresent(true); }}
+              title="عرض البطاقة كشرائح على الشاشة للتدريس الجماعي"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas"
+            >
+              <PresentIcon className="size-4" /> وضع العرض
+            </button>
             <button onClick={share} title="تصدير هذا الفحص مع صوره في ملف لمشاركته" className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas">
               <Share2 className="size-4" /> مشاركة
             </button>
@@ -332,6 +341,8 @@ export default function TrainingTestPage() {
           </div>
         )}
       </div>
+
+      {present && <Presentation test={test} all={all} tubes={tubes} tools={tools} onClose={() => setPresent(false)} />}
 
       {/* Lightbox */}
       {zoom && (

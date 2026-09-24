@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   GraduationCap, Library, FilePlus2, TestTubes, Wrench, Images, Settings, Home, Menu, X, ChevronLeft,
-  Network, BrainCircuit, Users, BookOpen, Layers, type LucideIcon,
+  Network, BrainCircuit, Users, BookOpen, Layers, FileQuestion, type LucideIcon,
 } from "lucide-react";
 import { getTests, getTubes, getTools } from "@/lib/training/store";
 import { cn } from "@/lib/utils";
@@ -27,6 +27,7 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
     title: "التدريب",
     items: [
       { href: "/training/quiz", label: "اختبر نفسك", hint: "أسئلة تلقائية من المكتبة", icon: BrainCircuit },
+      { href: "/training/exam", label: "ورقة امتحان", hint: "أسئلة مطبوعة مع الإجابات", icon: FileQuestion },
       { href: "/training/cards", label: "بطاقات المراجعة", hint: "مراجعة سريعة قبل العمل", icon: Layers },
       { href: "/training/trainees", label: "سجل المتدربين", hint: "الكفاءة لكل فحص", icon: Users },
     ],
@@ -55,7 +56,7 @@ export function TrainingSidebar() {
   const { lockOn, canEdit } = useEditLock();
   const [showUnlock, setShowUnlock] = useState(false);
   // Edit-only destinations are hidden in read-only mode.
-  const EDIT_ONLY = ["/training/edit", "/training/media", "/training/trainees", "/training/settings"];
+  const EDIT_ONLY = ["/training/edit", "/training/exam", "/training/media", "/training/trainees", "/training/settings"];
 
   useEffect(() => {
     setCounts({ tests: getTests().length, tubes: getTubes().length, tools: getTools().length });
