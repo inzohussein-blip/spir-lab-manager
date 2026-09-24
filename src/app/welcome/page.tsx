@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Lock, Beaker, ShoppingCart, GraduationCap, ArrowLeft } from "lucide-react";
+import { Lock, Beaker, ShoppingCart, GraduationCap, ShieldCheck, Users, ArrowLeft } from "lucide-react";
 
 export const metadata = { title: "مختبر التحليلات المرضية — اختيار النسخة" };
 
@@ -20,7 +20,7 @@ export default function WelcomePage() {
         </div>
 
         {/* Cards */}
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
           {/* Paid — locked */}
           <div className="relative flex flex-col rounded-2xl border border-line bg-surface p-6 opacity-80 shadow-[var(--shadow-card)]">
             <span className="absolute left-4 top-4 inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">
@@ -74,6 +74,32 @@ export default function WelcomePage() {
             <div className="mt-4 text-lg font-bold">محطة التدريب والمعلومات</div>
             <p className="mt-1 flex-1 text-sm text-muted">دليل عملي لكل فحص: البروسيجر، العينات والتيوبات، الأدوات، التفسير والربط بين الفحوصات — مع الصور والطباعة. محطة منفصلة بالكامل.</p>
             <span className="mt-5 inline-flex items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white group-hover:bg-indigo-700">
+              الدخول <ArrowLeft className="size-4" />
+            </span>
+          </Link>
+
+          {/* Free — Quality & devices (fully separate) */}
+          <Link href="/qc" className="group flex flex-col rounded-2xl border-2 border-rose-300 bg-surface p-6 shadow-[var(--shadow-card)] transition-colors hover:border-rose-500">
+            <span className="absolute -mt-9 ms-auto inline-flex items-center rounded-full bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-700">مجانية</span>
+            <span className="grid size-12 place-items-center rounded-xl bg-gradient-to-br from-rose-500 to-rose-700 text-white shadow-sm">
+              <ShieldCheck className="size-6" />
+            </span>
+            <div className="mt-4 text-lg font-bold">محطة الجودة والأجهزة</div>
+            <p className="mt-1 flex-1 text-sm text-muted">سيطرة نوعية يومية مع مخطط Levey-Jennings وقواعد Westgard، سجلات حرارة الثلاجات والحاضنات، وصيانة ومعايرة الأجهزة. محطة منفصلة بالكامل.</p>
+            <span className="mt-5 inline-flex items-center justify-center gap-1.5 rounded-lg bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white group-hover:bg-rose-700">
+              الدخول <ArrowLeft className="size-4" />
+            </span>
+          </Link>
+
+          {/* Free — Staff & shifts (fully separate) */}
+          <Link href="/roster" className="group flex flex-col rounded-2xl border-2 border-sky-300 bg-surface p-6 shadow-[var(--shadow-card)] transition-colors hover:border-sky-500">
+            <span className="absolute -mt-9 ms-auto inline-flex items-center rounded-full bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-700">مجانية</span>
+            <span className="grid size-12 place-items-center rounded-xl bg-gradient-to-br from-sky-500 to-sky-700 text-white shadow-sm">
+              <Users className="size-6" />
+            </span>
+            <div className="mt-4 text-lg font-bold">محطة الكادر والدوام</div>
+            <p className="mt-1 flex-1 text-sm text-muted">جدول المناوبات الأسبوعي، الحضور والانصراف والتأخير، الإجازات وأرصدتها، السلف وكشف الرواتب الشهري. محطة منفصلة بالكامل.</p>
+            <span className="mt-5 inline-flex items-center justify-center gap-1.5 rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white group-hover:bg-sky-700">
               الدخول <ArrowLeft className="size-4" />
             </span>
           </Link>

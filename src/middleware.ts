@@ -17,7 +17,9 @@ export function middleware(req: NextRequest) {
     pathname.startsWith("/verify") ||
     pathname.startsWith("/station") ||
     pathname.startsWith("/store") ||
-    pathname.startsWith("/training");
+    pathname.startsWith("/training") ||
+    pathname.startsWith("/qc") ||
+    pathname.startsWith("/roster");
 
   if (isPublic) {
     const res = NextResponse.next();

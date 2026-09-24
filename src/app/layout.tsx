@@ -29,7 +29,9 @@ export default async function RootLayout({
     pathname === "/welcome" ||
     pathname.startsWith("/station") ||
     pathname.startsWith("/store") ||
-    pathname.startsWith("/training");
+    pathname.startsWith("/training") ||
+    pathname.startsWith("/qc") ||
+    pathname.startsWith("/roster");
   const user = isBare ? null : await getCurrentUser();
 
   return (
