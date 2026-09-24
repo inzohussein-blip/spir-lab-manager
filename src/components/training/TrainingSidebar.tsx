@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  GraduationCap, Library, FilePlus2, TestTubes, Wrench, Images, Settings, Home, Menu, X, ChevronLeft, type LucideIcon,
+  GraduationCap, Library, FilePlus2, TestTubes, Wrench, Images, Settings, Home, Menu, X, ChevronLeft,
+  Network, BrainCircuit, Users, BookOpen, type LucideIcon,
 } from "lucide-react";
 import { getTests, getTubes, getTools } from "@/lib/training/store";
 import { cn } from "@/lib/utils";
@@ -17,6 +18,14 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
     items: [
       { href: "/training", label: "مكتبة الفحوصات", hint: "البروسيجر والتفسير والربط", icon: Library, exact: true },
       { href: "/training/edit", label: "إضافة فحص", hint: "بطاقة فحص جديدة", icon: FilePlus2 },
+      { href: "/training/map", label: "خريطة الربط", hint: "العلاقات بين الفحوصات", icon: Network },
+    ],
+  },
+  {
+    title: "التدريب",
+    items: [
+      { href: "/training/quiz", label: "اختبر نفسك", hint: "أسئلة تلقائية من المكتبة", icon: BrainCircuit },
+      { href: "/training/trainees", label: "سجل المتدربين", hint: "الكفاءة لكل فحص", icon: Users },
     ],
   },
   {
@@ -29,7 +38,10 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
   },
   {
     title: "الإدارة",
-    items: [{ href: "/training/settings", label: "الإعدادات", hint: "الترويسة والسلامة والنسخ", icon: Settings }],
+    items: [
+      { href: "/training/manual", label: "طباعة الدليل", hint: "كتاب SOP كامل مع فهرس", icon: BookOpen },
+      { href: "/training/settings", label: "الإعدادات", hint: "الترويسة والسلامة والنسخ", icon: Settings },
+    ],
   },
 ];
 

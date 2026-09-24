@@ -14,6 +14,9 @@ export interface TStep { id: string; text: string; imageId?: string; warn?: bool
 export interface TGalleryItem { id: string; imageId: string; caption: string }
 export interface TLink { id: string; note?: string }
 export interface TNormal { label: string; value: string }
+/** Troubleshooting row: problem → likely cause → fix. */
+export interface TTrouble { id: string; problem: string; cause: string; fix: string }
+export interface TRevision { version: number; at: number; note?: string }
 
 export interface TrainingTest {
   id: string;
@@ -44,6 +47,13 @@ export interface TrainingTest {
   resultNotes?: string;
   gallery: TGalleryItem[];
   links: TLink[];
+  troubles?: TTrouble[];
+  /** Document control (SOP): version bumps automatically when content changes. */
+  version?: number;
+  reviewedBy?: string;
+  reviewedAt?: string; // YYYY-MM-DD
+  nextReview?: string; // YYYY-MM-DD
+  history?: TRevision[];
   updated_at: number;
 }
 
@@ -73,6 +83,25 @@ export interface TrainingSettings {
   /** Printed in the SOP safety box when a test has none of its own. */
   defaultSafety: string;
   preparedBy?: string;
+  /** Default months until an SOP's next review (document control). */
+  reviewMonths?: number;
+}
+
+/** Competency levels: 1 observed · 2 performed under supervision · 3 independent. */
+export type CompLevel = 1 | 2 | 3;
+export const COMP_LEVELS: { level: CompLevel; label: string }[] = [
+  { level: 1, label: "شاهد" },
+  { level: 2, label: "تحت إشراف" },
+  { level: 3, label: "مستقل" },
+];
+export interface QuizAttempt { at: number; score: number; total: number; category?: string }
+export interface Trainee {
+  id: string;
+  name: string;
+  start?: string;
+  notes?: string;
+  comp: Record<string, { level: CompLevel; date: string; by?: string }>;
+  quiz: QuizAttempt[];
 }
 
 const K_TESTS = "training.tests.v1";
@@ -80,6 +109,18 @@ const K_TUBES = "training.tubes.v1";
 const K_TOOLS = "training.tools.v1";
 const K_SETTINGS = "training.settings.v1";
 const K_SEEDED = "training.seeded.v1";
+const K_FAVS = "training.favs.v1";
+const K_RECENT = "training.recent.v1";
+const K_TRAINEES = "training.trainees.v1";
+const K_QUIZ = "training.quiz.v1";
+
+export const today = () => new Date().toLocaleDateString("en-CA");
+/** YYYY-MM-DD `months` from now. */
+export function addMonths(months: number, from = new Date()): string {
+  const d = new Date(from);
+  d.setMonth(d.getMonth() + months);
+  return d.toLocaleDateString("en-CA");
+}
 
 function read<T>(key: string, fallback: T): T {
   try {
@@ -110,21 +151,102 @@ function ensureSeed(): void {
   const s = seedData();
   write(K_TUBES, s.tubes);
   write(K_TOOLS, s.tools);
-  write(K_TESTS, s.tests);
+  const next = addMonths(12);
+  write(K_TESTS, s.tests.map((t) => ({ ...t, version: 1, history: [{ version: 1, at: Date.now(), note: "إصدار أول" }], nextReview: next })));
   write(K_SEEDED, true);
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────
 export function getTests(): TrainingTest[] { ensureSeed(); return read<TrainingTest[]>(K_TESTS, []); }
 export function getTest(id: string): TrainingTest | null { return getTests().find((t) => t.id === id) ?? null; }
-export function saveTest(t: TrainingTest): void {
+/** Content fingerprint — ignores bookkeeping fields, so only real edits bump the version. */
+function contentKey(t: TrainingTest): string {
+  const { updated_at: _u, version: _v, history: _h, ...rest } = t;
+  return JSON.stringify(rest);
+}
+/** Save a test. A new test starts at v1; a changed one gets version + 1 and a history entry. */
+export function saveTest(t: TrainingTest, changeNote?: string): TrainingTest {
   const all = getTests();
-  const rec = { ...t, updated_at: Date.now() };
-  write(K_TESTS, all.some((x) => x.id === t.id) ? all.map((x) => (x.id === t.id ? rec : x)) : [...all, rec]);
+  const prev = all.find((x) => x.id === t.id);
+  const now = Date.now();
+  let rec: TrainingTest;
+  if (!prev) {
+    rec = {
+      ...t, version: 1, updated_at: now,
+      history: [{ version: 1, at: now, note: changeNote?.trim() || "إصدار أول" }],
+      nextReview: t.nextReview || addMonths(getSettings().reviewMonths ?? 12),
+    };
+  } else if (contentKey(prev) !== contentKey(t)) {
+    const v = (prev.version ?? 1) + 1;
+    rec = { ...t, version: v, updated_at: now, history: [...(prev.history ?? []), { version: v, at: now, ...(changeNote?.trim() ? { note: changeNote.trim() } : {}) }] };
+  } else {
+    rec = prev;
+  }
+  write(K_TESTS, prev ? all.map((x) => (x.id === t.id ? rec : x)) : [...all, rec]);
+  return rec;
+}
+/** Review status from the next-review date: overdue, due within 30 days, or fine. */
+export function reviewStatus(t: TrainingTest): "overdue" | "soon" | "ok" | null {
+  if (!t.nextReview) return null;
+  const days = Math.floor((new Date(t.nextReview + "T00:00:00").getTime() - Date.now()) / 86400000);
+  return days < 0 ? "overdue" : days <= 30 ? "soon" : "ok";
+}
+/** Create empty test cards from pasted lines: "الاسم | English | ABBR | التصنيف". Skips existing names. */
+export function bulkCreate(text: string): number {
+  const all = getTests();
+  const names = new Set(all.map((t) => t.name_ar.trim().toLowerCase()));
+  const months = getSettings().reviewMonths ?? 12;
+  const now = Date.now();
+  const created: TrainingTest[] = [];
+  for (const line of text.split("\n")) {
+    const [ar, en, abbr, cat] = line.split(/[|،,\t]/).map((x) => x?.trim() ?? "");
+    if (!ar || names.has(ar.toLowerCase())) continue;
+    names.add(ar.toLowerCase());
+    created.push({
+      ...blankTest(), name_ar: ar, name_en: en || undefined, abbr: abbr || undefined, category: cat || undefined,
+      version: 1, history: [{ version: 1, at: now, note: "إنشاء سريع" }], nextReview: addMonths(months),
+    });
+  }
+  if (created.length) write(K_TESTS, [...all, ...created]);
+  return created.length;
 }
 /** Delete a test and remove every link that points to it. */
 export function deleteTest(id: string): void {
   write(K_TESTS, getTests().filter((t) => t.id !== id).map((t) => ({ ...t, links: t.links.filter((l) => l.id !== id) })));
+  write(K_FAVS, getFavs().filter((x) => x !== id));
+  write(K_RECENT, getRecent().filter((x) => x !== id));
+  write(K_TRAINEES, getTrainees().map((tr) => { const { [id]: _gone, ...comp } = tr.comp; return { ...tr, comp }; }));
+}
+
+// ── Favourites & recently viewed ─────────────────────────────────────────────
+export function getFavs(): string[] { return read<string[]>(K_FAVS, []); }
+export function toggleFav(id: string): boolean {
+  const f = getFavs();
+  const on = !f.includes(id);
+  write(K_FAVS, on ? [id, ...f] : f.filter((x) => x !== id));
+  return on;
+}
+export function getRecent(): string[] { return read<string[]>(K_RECENT, []); }
+export function pushRecent(id: string): void { write(K_RECENT, [id, ...getRecent().filter((x) => x !== id)].slice(0, 8)); }
+
+// ── Trainees (competency record) & quiz history ──────────────────────────────
+export function getTrainees(): Trainee[] { return read<Trainee[]>(K_TRAINEES, []); }
+export function saveTrainees(list: Trainee[]): void { write(K_TRAINEES, list); }
+/** Set (or clear with 0) a trainee's competency level for a test — dated today. */
+export function setCompetency(traineeId: string, testId: string, level: CompLevel | 0, by?: string): void {
+  saveTrainees(getTrainees().map((tr) => {
+    if (tr.id !== traineeId) return tr;
+    const comp = { ...tr.comp };
+    if (level === 0) delete comp[testId];
+    else comp[testId] = { level, date: today(), ...(by?.trim() ? { by: by.trim() } : {}) };
+    return { ...tr, comp };
+  }));
+}
+export function getQuizHistory(): QuizAttempt[] { return read<QuizAttempt[]>(K_QUIZ, []); }
+/** Record a quiz result (globally, and on the trainee when one was chosen). */
+export function addQuizAttempt(a: QuizAttempt, traineeId?: string): void {
+  write(K_QUIZ, [a, ...getQuizHistory()].slice(0, 50));
+  if (traineeId) saveTrainees(getTrainees().map((tr) => (tr.id === traineeId ? { ...tr, quiz: [a, ...tr.quiz].slice(0, 50) } : tr)));
 }
 export function blankTest(): TrainingTest {
   return {
@@ -215,12 +337,16 @@ export interface TrainingBackup {
   tubes: Tube[];
   tools: Tool[];
   settings: TrainingSettings;
+  trainees?: Trainee[];
+  quiz?: QuizAttempt[];
+  favs?: string[];
   images: MediaExport[];
 }
 export async function exportBackup(): Promise<TrainingBackup> {
   return {
     app: "spir-training", version: 1, exported_at: new Date().toISOString(),
     tests: getTests(), tubes: getTubes(), tools: getTools(), settings: getSettings(),
+    trainees: getTrainees(), quiz: getQuizHistory(), favs: getFavs(),
     images: await exportImages(),
   };
 }
@@ -231,6 +357,9 @@ export async function importBackup(data: unknown): Promise<boolean> {
   if (b.tubes) write(K_TUBES, b.tubes);
   if (b.tools) write(K_TOOLS, b.tools);
   if (b.settings) write(K_SETTINGS, b.settings);
+  if (b.trainees) write(K_TRAINEES, b.trainees);
+  if (b.quiz) write(K_QUIZ, b.quiz);
+  if (b.favs) write(K_FAVS, b.favs);
   write(K_SEEDED, true);
   if (Array.isArray(b.images)) await importImages(b.images);
   return true;
@@ -308,6 +437,10 @@ function seedData(): { tubes: Tube[]; tools: Tool[]; tests: TrainingTest[] } {
       low: "جرعة إنسولين أو حبوب زائدة ، صيام طويل ، ورم الإنسولين ، تأخر فصل العينة.",
       resultNotes: "المصل الطبيعي أصفر شفاف. الأحمر = متحلل ، الحليبي = دهني — دوّن ذلك مع النتيجة.",
       links: [{ id: "x-gue", note: "عند تجاوز السكر ~180 mg/dL يظهر السكر في الإدرار." }],
+      troubles: [
+        { id: uid(), problem: "نتيجة منخفضة بشكل غير متوقع", cause: "تأخّر فصل المصل فاستهلكت الخلايا السكر", fix: "افصل خلال ساعة أو استعمل تيوب الفلورايد، وأعد السحب إن لزم" },
+        { id: uid(), problem: "عينة السيطرة (QC) خارج الحدود", cause: "كاشف منتهي أو ملوّث، أو حرارة حضن غير صحيحة", fix: "تحقّق من صلاحية الكاشف وحرارة الحاضنة، أعد العيارية ثم أعد الـ QC قبل عينات المرضى" },
+      ],
     },
     {
       ...base, id: "x-cbc", name_ar: "صورة الدم الكاملة", name_en: "Complete Blood Count", abbr: "CBC", category: "أمراض الدم",
@@ -337,6 +470,10 @@ function seedData(): { tubes: Tube[]; tools: Tool[]; tests: TrainingTest[] } {
       low: "Hb: فقر الدم. WBC: عدوى فيروسية ، أدوية. PLT: عدوى فيروسية ، ITP ، جلطة في العينة.",
       resultNotes: "",
       links: [],
+      troubles: [
+        { id: uid(), problem: "صفائح منخفضة مع إنذار تكتّل (PLT clumps)", cause: "تجلّط جزئي أو تكتّل الصفائح بسبب EDTA", fix: "افحص العينة والشريحة، وأعد السحب بتيوب سترات إن تكرّر" },
+        { id: uid(), problem: "MCHC أعلى من 37 g/dL", cause: "أجسام باردة (Cold agglutinins) أو دهون عالية", fix: "دفّئ العينة 37°م لمدة 15 دقيقة وأعد التحليل" },
+      ],
     },
     {
       ...base, id: "x-gue", name_ar: "فحص الإدرار العام", name_en: "General Urine Examination", abbr: "GUE", category: "الإدرار",
@@ -366,6 +503,9 @@ function seedData(): { tubes: Tube[]; tools: Tool[]; tests: TrainingTest[] } {
       low: "",
       resultNotes: "بلورات أوكزالات الكالسيوم تشبه الظرف البريدي. بلورات حمض اليوريك صفراء بأشكال متعددة في الإدرار الحامضي.",
       links: [{ id: "x-fbs", note: "السكر في الإدرار يستوجب قياس سكر الدم." }],
+      troubles: [
+        { id: uid(), problem: "بكتريا كثيرة بدون كريات بيض", cause: "عينة قديمة أو ملوّثة", fix: "اطلب عينة وسطى طازجة وافحصها خلال ساعة" },
+      ],
     },
     {
       ...base, id: "x-alt", name_ar: "إنزيم ALT (GPT)", name_en: "Alanine Aminotransferase", abbr: "ALT", category: "وظائف الكبد",
@@ -390,6 +530,9 @@ function seedData(): { tubes: Tube[]; tools: Tool[]; tests: TrainingTest[] } {
       low: "غالباً بلا أهمية سريرية.",
       resultNotes: "",
       links: [{ id: "x-ast", note: "يُفسَّران معاً — نسبة AST/ALT تساعد في التفريق بين أسباب تضرّر الكبد." }],
+      troubles: [
+        { id: uid(), problem: "امتصاص البداية منخفض جداً", cause: "نشاط الإنزيم عالٍ جداً فاستهلك NADH قبل القراءة", fix: "خفّف العينة 1:10 بمحلول ملحي وأعد الفحص ثم اضرب النتيجة بـ 10" },
+      ],
     },
     {
       ...base, id: "x-ast", name_ar: "إنزيم AST (GOT)", name_en: "Aspartate Aminotransferase", abbr: "AST", category: "وظائف الكبد",

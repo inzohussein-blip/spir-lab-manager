@@ -75,6 +75,9 @@ export default function TrainingSettingsPage() {
           <label className="text-sm font-medium">العنوان الفرعي<input value={s.subtitle} onChange={(e) => setS({ ...s, subtitle: e.target.value })} className={`mt-1 ${inp}`} /></label>
           <label className="text-sm font-medium sm:col-span-2">سطر التذييل<input value={s.footer ?? ""} onChange={(e) => setS({ ...s, footer: e.target.value })} className={`mt-1 ${inp}`} /></label>
           <label className="text-sm font-medium">أعدّه (يظهر في خانة التوقيع)<input value={s.preparedBy ?? ""} onChange={(e) => setS({ ...s, preparedBy: e.target.value })} className={`mt-1 ${inp}`} /></label>
+          <label className="text-sm font-medium">مدة المراجعة الافتراضية (بالأشهر)
+            <input type="number" min={1} max={60} value={s.reviewMonths ?? 12} onChange={(e) => setS({ ...s, reviewMonths: Math.max(1, Number(e.target.value) || 12) })} className={`mt-1 ${inp}`} />
+          </label>
           <div className="text-sm font-medium">الشعار<div className="mt-1"><ImagePicker value={s.logoImageId} onChange={(v) => setS({ ...s, logoImageId: v })} label="شعار" size="size-14" /></div></div>
         </div>
       </div>

@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { TestTubes, Plus, Pencil, Trash2, X, Info } from "lucide-react";
-import { getTubes, saveTubes, unlinkFromTests, usageCount, uid, type Tube } from "@/lib/training/store";
+import { TestTubes, Plus, Pencil, Trash2, X, Info, Printer } from "lucide-react";
+import { getTubes, saveTubes, unlinkFromTests, usageCount, uid, getSettings, type Tube, type TrainingSettings } from "@/lib/training/store";
+import { SopLetterhead, SopPrintStyle, SopFooter, SOP_INK, exact } from "@/components/training/SopSheet";
 import { ImagePicker } from "@/components/training/ImagePicker";
 import { Img } from "@/components/training/Img";
 
@@ -13,8 +14,9 @@ export default function TubesPage() {
   const [list, setList] = useState<Tube[]>([]);
   const [f, setF] = useState({ ...empty });
   const [editId, setEditId] = useState<string | null>(null);
+  const [settings, setSettings] = useState<TrainingSettings | null>(null);
 
-  useEffect(() => { setList(getTubes()); }, []);
+  useEffect(() => { setList(getTubes()); setSettings(getSettings()); }, []);
 
   function persist(next: Tube[]) { setList(next); saveTubes(next); }
   function reset() { setF({ ...empty }); setEditId(null); }
@@ -39,8 +41,14 @@ export default function TubesPage() {
 
   return (
     <div>
-      <h1 className="mb-1 flex items-center gap-2 text-2xl font-bold"><TestTubes className="size-6 text-brand" /> التيوبات والحاويات</h1>
-      <p className="mb-5 text-sm text-muted">لون الغطاء، المادة المضافة، الاستعمالات، وملاحظات عملية — مع صورة لكل تيوب.</p>
+      <div className="no-print">
+      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="mb-1 flex items-center gap-2 text-2xl font-bold"><TestTubes className="size-6 text-brand" /> التيوبات والحاويات</h1>
+          <p className="text-sm text-muted">لون الغطاء، المادة المضافة، الاستعمالات، وملاحظات عملية — مع صورة لكل تيوب.</p>
+        </div>
+        <button onClick={() => window.print()} className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas"><Printer className="size-4" /> طباعة لوحة التيوبات</button>
+      </div>
 
       <div className="mb-5 flex gap-3 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-950">
         <Info className="mt-0.5 size-5 shrink-0 text-sky-600" />
@@ -95,6 +103,46 @@ export default function TubesPage() {
           </div>
         ))}
       </div>
+      </div>
+
+      {/* Printable wall chart */}
+      {settings && (
+        <div className="sop-doc hidden bg-white text-[12px] text-black print:block">
+          <SopPrintStyle />
+          <SopLetterhead settings={settings} right={<div className="font-bold" style={{ color: SOP_INK }}>لوحة التيوبات والحاويات</div>} />
+          <div className="sop-keep mt-4 rounded-lg border-2 p-3" style={{ borderColor: SOP_INK }}>
+            <div className="mb-2 text-sm font-bold" style={{ color: SOP_INK }}>ترتيب سحب التيوبات (Order of Draw)</div>
+            <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-semibold">
+              {[["مزرعة الدم", "#f3f4f6"], ["سترات", "#38bdf8"], ["عادي / جل", "#eab308"], ["هيبارين", "#16a34a"], ["EDTA", "#7c3aed"], ["فلورايد", "#6b7280"]].map(([l, c], k, arr) => (
+                <span key={l} className="inline-flex items-center gap-1.5">
+                  <span className="inline-flex items-center gap-1 rounded-full border border-gray-300 px-2 py-1"><span className="size-3.5 rounded-full border border-black/20" style={{ background: c, ...exact }} /> {k + 1}. {l}</span>
+                  {k < arr.length - 1 && <span className="text-gray-400">←</span>}
+                </span>
+              ))}
+            </div>
+            <div className="mt-1.5 text-[10.5px] text-gray-600">الالتزام بالترتيب يمنع انتقال المواد المضافة بين التيوبات (مثلاً EDTA يرفع البوتاسيوم ويُخفض الكالسيوم زوراً).</div>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            {list.map((t) => (
+              <div key={t.id} className="sop-keep flex gap-3 rounded-lg border border-gray-300 p-2.5">
+                {t.imageId ? <Img id={t.imageId} className="size-16 shrink-0 rounded" /> : (
+                  <span className="flex w-9 shrink-0 flex-col items-center">
+                    <span className="h-4 w-8 rounded-t-md border border-black/20" style={{ background: t.color, ...exact }} />
+                    <span className="h-11 w-6 rounded-b-full border border-t-0 border-gray-300" />
+                  </span>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 font-bold"><span className="size-3 rounded-full border border-black/20" style={{ background: t.color, ...exact }} />{t.name}</div>
+                  {t.additive && <div className="text-[11px] text-gray-600">{t.additive}</div>}
+                  {t.uses && <div className="text-[11px]"><b>الاستعمال:</b> {t.uses}</div>}
+                  {t.notes && <div className="mt-0.5 text-[10.5px] text-gray-700">{t.notes}</div>}
+                </div>
+              </div>
+            ))}
+          </div>
+          <SopFooter text={settings.footer} />
+        </div>
+      )}
     </div>
   );
 }

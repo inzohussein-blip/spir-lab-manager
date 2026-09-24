@@ -5,14 +5,14 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
   IdCard, TestTubes, ListOrdered, Microscope, Network, Pencil, Printer, Trash2, Lightbulb, AlertTriangle,
-  ArrowRight, ArrowLeftRight, X, ShieldCheck, type LucideIcon,
+  ArrowRight, ArrowLeftRight, X, ShieldCheck, Star, Wrench, History, CalendarClock, type LucideIcon,
 } from "lucide-react";
 import {
-  getTest, getTests, getTubes, getTools, getSettings, backlinks, deleteTest,
+  getTest, getTests, getTubes, getTools, getSettings, backlinks, deleteTest, getFavs, toggleFav, pushRecent, reviewStatus,
   type TrainingTest, type Tube, type Tool, type TrainingSettings,
 } from "@/lib/training/store";
 import { Img } from "@/components/training/Img";
-import { SopSheet } from "@/components/training/SopSheet";
+import { SopSheet, SopPrintStyle, SopFooter, sopCode } from "@/components/training/SopSheet";
 
 type Tab = "card" | "sample" | "procedure" | "results" | "links";
 const TABS: { id: Tab; label: string; icon: LucideIcon }[] = [
@@ -35,12 +35,15 @@ export default function TrainingTestPage() {
   const [tab, setTab] = useState<Tab>("card");
   const [zoom, setZoom] = useState<string | null>(null);
   const [withImages, setWithImages] = useState(true);
+  const [fav, setFav] = useState(false);
 
   useEffect(() => {
     setTest(getTest(id));
     setAll(getTests()); setTubes(getTubes()); setTools(getTools()); setSettings(getSettings());
     setBack(backlinks(id));
     setTab("card");
+    setFav(getFavs().includes(id));
+    if (getTest(id)) pushRecent(id);
   }, [id]);
 
   if (test === undefined) return null;
@@ -48,6 +51,8 @@ export default function TrainingTestPage() {
 
   const myTubes = test.tubeIds.map((x) => tubes.find((t) => t.id === x)).filter(Boolean) as Tube[];
   const myTools = test.toolIds.map((x) => tools.find((t) => t.id === x)).filter(Boolean) as Tool[];
+  const rs = reviewStatus(test);
+  const troubles = (test.troubles ?? []).filter((r) => r.problem.trim());
   const outLinks = test.links.map((l) => ({ ...l, t: all.find((x) => x.id === l.id) })).filter((l) => l.t);
 
   function remove() {
@@ -80,9 +85,22 @@ export default function TrainingTestPage() {
           <div className="min-w-0 flex-1">
             <h1 className="text-2xl font-bold">{test.name_ar}</h1>
             {(test.name_en || test.abbr) && <div className="text-sm text-muted" dir="ltr" style={{ textAlign: "right" }}>{test.name_en}{test.abbr ? ` (${test.abbr})` : ""}</div>}
-            <span className="mt-1.5 inline-block rounded-full bg-brand-light px-2.5 py-0.5 text-xs font-medium text-brand-dark">{test.category || "أخرى"}</span>
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              <span className="rounded-full bg-brand-light px-2.5 py-0.5 text-xs font-medium text-brand-dark">{test.category || "أخرى"}</span>
+              <span className="rounded-full bg-canvas px-2.5 py-0.5 text-xs text-muted" dir="ltr">{sopCode(test)} · v{test.version ?? 1}</span>
+              {rs === "overdue" && <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-semibold text-red-700"><CalendarClock className="size-3.5" /> المراجعة متأخرة</span>}
+              {rs === "soon" && <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700"><CalendarClock className="size-3.5" /> المراجعة قريباً</span>}
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setFav(toggleFav(test.id))}
+              title={fav ? "إزالة من المفضّلة" : "إضافة إلى المفضّلة"}
+              aria-pressed={fav}
+              className={`grid size-9 place-items-center rounded-lg border ${fav ? "border-amber-300 bg-amber-50 text-amber-500" : "border-line text-muted hover:bg-canvas"}`}
+            >
+              <Star className={`size-4 ${fav ? "fill-current" : ""}`} />
+            </button>
             <label className="inline-flex items-center gap-1.5 text-xs text-muted">
               <input type="checkbox" checked={withImages} onChange={(e) => setWithImages(e.target.checked)} className="accent-[var(--color-brand)]" /> الصور في الطباعة
             </label>
@@ -112,6 +130,26 @@ export default function TrainingTestPage() {
           <div className="grid gap-4 lg:grid-cols-2">
             <Card title="لماذا يُطلب هذا الفحص؟" icon={IdCard}><p className="whitespace-pre-line text-sm">{test.purpose || "—"}</p></Card>
             <Card title="ملخّص ومبدأ الفحص" icon={Microscope}><p className="whitespace-pre-line text-sm">{test.summary || "—"}</p></Card>
+            <div className="lg:col-span-2">
+              <Card title="ضبط الوثيقة" icon={History}>
+                <div className="grid gap-2 text-sm sm:grid-cols-4">
+                  <div className="rounded-lg bg-canvas px-3 py-2"><div className="text-[11px] text-muted">الإصدار</div><b dir="ltr">v{test.version ?? 1}</b></div>
+                  <div className="rounded-lg bg-canvas px-3 py-2"><div className="text-[11px] text-muted">آخر تعديل</div><b dir="ltr">{new Date(test.updated_at).toLocaleDateString("en-CA")}</b></div>
+                  <div className="rounded-lg bg-canvas px-3 py-2"><div className="text-[11px] text-muted">راجعه</div><b>{test.reviewedBy || "—"}</b>{test.reviewedAt && <span className="block text-[11px] text-muted" dir="ltr">{test.reviewedAt}</span>}</div>
+                  <div className={`rounded-lg px-3 py-2 ${rs === "overdue" ? "bg-red-50 text-red-700" : rs === "soon" ? "bg-amber-50 text-amber-700" : "bg-canvas"}`}><div className="text-[11px] opacity-70">المراجعة القادمة</div><b dir="ltr">{test.nextReview || "—"}</b></div>
+                </div>
+                {(test.history?.length ?? 0) > 0 && (
+                  <details className="mt-3 text-sm">
+                    <summary className="cursor-pointer text-xs font-semibold text-brand-dark">سجل الإصدارات ({test.history!.length})</summary>
+                    <ul className="mt-2 flex flex-col gap-1">
+                      {[...test.history!].reverse().map((h) => (
+                        <li key={h.version} className="flex gap-2 text-xs"><b dir="ltr" className="w-8">v{h.version}</b><span className="text-muted" dir="ltr">{new Date(h.at).toLocaleDateString("en-CA")}</span><span>{h.note ?? ""}</span></li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+              </Card>
+            </div>
             {test.tips.length > 0 && (
               <div className="lg:col-span-2">
                 <Card title="ملاحظات من ذهب (الخبرة العملية)" icon={Lightbulb}>
@@ -184,6 +222,24 @@ export default function TrainingTestPage() {
                 </ol>
               )}
             </Card>
+            {troubles.length > 0 && (
+              <Card title="حل المشاكل" icon={Wrench}>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[520px] text-sm">
+                    <thead className="text-right text-xs text-muted"><tr className="border-b border-line"><th className="py-2 font-medium">المشكلة</th><th className="py-2 font-medium">السبب المحتمل</th><th className="py-2 font-medium">الحل</th></tr></thead>
+                    <tbody>
+                      {troubles.map((r) => (
+                        <tr key={r.id} className="border-b border-line align-top last:border-0">
+                          <td className="py-2 pe-3 font-semibold text-red-700">{r.problem}</td>
+                          <td className="py-2 pe-3">{r.cause}</td>
+                          <td className="py-2 text-brand-dark">{r.fix}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            )}
             <Card title="تعليمات السلامة والجودة" icon={ShieldCheck}>
               <ul className="list-inside list-disc text-sm">
                 {(test.safety?.trim() || settings?.defaultSafety || "").split("\n").filter((x) => x.trim()).map((x, i) => <li key={i}>{x}</li>)}
@@ -263,7 +319,13 @@ export default function TrainingTestPage() {
         </div>
       )}
 
-      {settings && <SopSheet test={test} tubes={tubes} tools={tools} settings={settings} withImages={withImages} />}
+      {settings && (
+        <div className="sop-doc hidden bg-white text-black print:block">
+          <SopPrintStyle />
+          <SopSheet test={test} tubes={tubes} tools={tools} settings={settings} withImages={withImages} />
+          <SopFooter text={settings.footer} />
+        </div>
+      )}
     </div>
   );
 }

@@ -5,10 +5,10 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Save, IdCard, TestTubes, ListOrdered, Microscope, Network, Plus, Trash2, ArrowUp, ArrowDown, AlertTriangle,
-  Lightbulb, ShieldCheck, X, Check, type LucideIcon,
+  Lightbulb, ShieldCheck, X, Check, Wrench, History, type LucideIcon,
 } from "lucide-react";
 import {
-  getTest, getTests, getTubes, getTools, saveTest, blankTest, uid,
+  getTest, getTests, getTubes, getTools, saveTest, blankTest, uid, getSettings, addMonths, today,
   type TrainingTest, type Tube, type Tool,
 } from "@/lib/training/store";
 import { ImagePicker } from "@/components/training/ImagePicker";
@@ -38,11 +38,12 @@ function Editor() {
   const [tools, setTools] = useState<Tool[]>([]);
   const [linkPick, setLinkPick] = useState("");
   const [err, setErr] = useState("");
+  const [changeNote, setChangeNote] = useState("");
 
   useEffect(() => {
     const id = params.get("id");
     const existing = id ? getTest(id) : null;
-    setT(existing ?? blankTest());
+    setT(existing ?? { ...blankTest(), nextReview: addMonths(getSettings().reviewMonths ?? 12) });
     setIsNew(!existing);
     setAll(getTests()); setTubes(getTubes()); setTools(getTools());
   }, [params]);
@@ -68,8 +69,10 @@ function Editor() {
       tips: t!.tips.map((x) => x.trim()).filter(Boolean),
       normals: t!.normals.filter((n) => n.label.trim() || n.value.trim()),
       gallery: t!.gallery.filter((g) => g.imageId),
+      troubles: (t!.troubles ?? []).filter((r) => r.problem.trim() || r.cause.trim() || r.fix.trim()),
+      reviewedBy: t!.reviewedBy?.trim() || undefined,
     };
-    saveTest(clean);
+    saveTest(clean, changeNote);
     router.push(`/training/test/${clean.id}`);
   }
 
@@ -83,7 +86,7 @@ function Editor() {
           <p className="mt-1 text-sm text-muted">كل الحقول اختيارية عدا الاسم — اكتب خبرتك بطريقتك.</p>
         </div>
         <nav className="flex flex-wrap gap-1 text-xs">
-          {[["card", "البطاقة"], ["sample", "العينة والأدوات"], ["procedure", "طريقة العمل"], ["results", "النتائج"], ["links", "الربط"]].map(([id, l]) => (
+          {[["card", "البطاقة"], ["sample", "العينة والأدوات"], ["procedure", "طريقة العمل"], ["results", "النتائج"], ["links", "الربط"], ["doc", "الإصدار"]].map(([id, l]) => (
             <a key={id} href={`#${id}`} className="rounded-full border border-line bg-surface px-2.5 py-1 text-muted hover:text-ink">{l}</a>
           ))}
         </nav>
@@ -188,6 +191,25 @@ function Editor() {
             </button>
           </div>
 
+          <div className="mt-6 flex items-center gap-2 text-sm font-bold"><Wrench className="size-4 text-red-500" /> حل المشاكل</div>
+          <p className="mb-2 text-xs text-muted">المشكلة ← السبب المحتمل ← الحل (مثال: الـ QC خارج الحدود ← كاشف منتهي ← …).</p>
+          <div className="flex flex-col gap-2">
+            {(t.troubles ?? []).map((r) => {
+              const upd = (k: "problem" | "cause" | "fix", v: string) => set("troubles", (t.troubles ?? []).map((x) => (x.id === r.id ? { ...x, [k]: v } : x)));
+              return (
+                <div key={r.id} className="grid gap-2 rounded-xl border border-line p-2 sm:grid-cols-[1fr_1fr_1fr_auto]">
+                  <input value={r.problem} onChange={(e) => upd("problem", e.target.value)} placeholder="المشكلة" className={`${inp} border-r-4 border-r-red-400`} />
+                  <input value={r.cause} onChange={(e) => upd("cause", e.target.value)} placeholder="السبب المحتمل" className={inp} />
+                  <input value={r.fix} onChange={(e) => upd("fix", e.target.value)} placeholder="الحل" className={inp} />
+                  <button type="button" onClick={() => set("troubles", (t.troubles ?? []).filter((x) => x.id !== r.id))} className="grid size-9 place-items-center rounded-lg border border-line text-red-600 hover:bg-red-50"><Trash2 className="size-4" /></button>
+                </div>
+              );
+            })}
+            <button type="button" onClick={() => set("troubles", [...(t.troubles ?? []), { id: uid(), problem: "", cause: "", fix: "" }])} className="inline-flex w-fit items-center gap-1.5 rounded-lg border border-dashed border-red-300 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50">
+              <Plus className="size-4" /> إضافة مشكلة وحلّها
+            </button>
+          </div>
+
           <label className="mt-6 block text-sm font-bold"><span className="inline-flex items-center gap-2"><ShieldCheck className="size-4 text-green-600" /> تعليمات السلامة والجودة لهذا الفحص</span>
             <textarea rows={3} value={t.safety ?? ""} onChange={(e) => set("safety", e.target.value)} placeholder="اتركه فارغاً لاستعمال التعليمات العامة من الإعدادات. كل سطر = بند." className={`mt-1 font-normal ${inp}`} />
           </label>
@@ -248,6 +270,22 @@ function Editor() {
               </button>
             </div>
             <p className="text-xs text-muted">يظهر الربط في صفحة الفحصين: هنا تحت «يرتبط بـ»، وفي الفحص الآخر تحت «فحوصات تشير إليه».</p>
+          </div>
+        </Section>
+
+        {/* ── Document control ── */}
+        <Section id="doc" title="ضبط الوثيقة (الإصدار والمراجعة)" icon={History}>
+          <div className="mb-3 text-xs text-muted">
+            الإصدار الحالي: <b dir="ltr">v{t.version ?? 1}</b> — يرتفع تلقائياً عند حفظ أي تعديل على المحتوى.
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <label className="text-sm font-medium">راجعه واعتمده<input value={t.reviewedBy ?? ""} onChange={(e) => set("reviewedBy", e.target.value)} className={`mt-1 ${inp}`} /></label>
+            <label className="text-sm font-medium">تاريخ المراجعة
+              <div className="mt-1 flex gap-1"><input type="date" value={t.reviewedAt ?? ""} onChange={(e) => set("reviewedAt", e.target.value || undefined)} className={inp} />
+                <button type="button" onClick={() => set("reviewedAt", today())} className="shrink-0 rounded-lg border border-line px-2 text-xs hover:bg-canvas">اليوم</button></div>
+            </label>
+            <label className="text-sm font-medium">المراجعة القادمة<input type="date" value={t.nextReview ?? ""} onChange={(e) => set("nextReview", e.target.value || undefined)} className={`mt-1 ${inp}`} /></label>
+            <label className="text-sm font-medium">ملاحظة التغيير (اختياري)<input value={changeNote} onChange={(e) => setChangeNote(e.target.value)} placeholder="ما الذي تغيّر؟" className={`mt-1 ${inp}`} /></label>
           </div>
         </Section>
       </div>
