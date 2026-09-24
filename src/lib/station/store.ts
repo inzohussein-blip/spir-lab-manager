@@ -114,6 +114,8 @@ export interface StationSettings {
   printPrevious?: boolean;
   /** Fold the test picker's category groups under their titles (default off). */
   collapseGroups?: boolean;
+  /** Auto-calculate derived tests (LDL, VLDL, Globulin…) — off by default. */
+  autoDerived?: boolean;
 }
 
 function read<T>(key: string, fallback: T): T {

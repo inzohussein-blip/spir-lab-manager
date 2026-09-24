@@ -10,6 +10,7 @@ import {
   type StationTest, type Gender, type StationVisit, type StationSettings, type StationPanel, type StationPatient, type NoteEntry, type StationDoctor,
 } from "@/lib/station/store";
 import { ReportSheet } from "@/components/station/ReportSheet";
+import { computeDerived } from "@/lib/station/derived";
 import { useToast } from "@/components/station/Toast";
 
 const inp =
@@ -203,6 +204,32 @@ function StationEntryPage() {
   const printPrev = settings.printPrevious === true && chosen.some((t) => prev[t.id]);
 
   // Chosen tests still missing a result value — used for incomplete-entry protection.
+  // Optional: auto-calculated derived tests (Settings). A value typed by hand is never overwritten.
+  const [autoVals, setAutoVals] = useState<Record<string, string>>({});
+  const derived = useMemo(
+    () => (settings.autoDerived ? computeDerived(chosen, results) : {}),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [settings.autoDerived, selected, tests, results]
+  );
+  useEffect(() => {
+    if (!settings.autoDerived) return;
+    const nextRes: Record<string, string> = {};
+    const nextAuto = { ...autoVals };
+    let changed = false;
+    for (const [id, d] of Object.entries(derived)) {
+      const cur = results[id] ?? "";
+      if ((cur === "" || cur === autoVals[id]) && cur !== d.value) { nextRes[id] = d.value; nextAuto[id] = d.value; changed = true; }
+    }
+    // Inputs removed → clear a value we filled ourselves.
+    for (const id of Object.keys(autoVals)) {
+      if (id in derived) continue;
+      if ((results[id] ?? "") === autoVals[id]) nextRes[id] = "";
+      delete nextAuto[id]; changed = true;
+    }
+    if (changed) { setResults((r) => ({ ...r, ...nextRes })); setAutoVals(nextAuto); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [derived]);
+
   const missingResults = chosen.filter((t) => !(results[t.id] ?? "").trim());
   const filledCount = chosen.length - missingResults.length;
 
@@ -622,6 +649,24 @@ function StationEntryPage() {
                         <div className="mt-1 text-xs text-muted">
                           المعدل الطبيعي: <span dir="ltr">{rangeLabel(t.normal, gender, t.unit)}</span>
                         </div>
+                        {derived[t.id] && (() => {
+                          const d = derived[t.id];
+                          const isAuto = (results[t.id] ?? "") !== "" && results[t.id] === autoVals[t.id];
+                          return (
+                            <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
+                              {isAuto ? (
+                                <span className="rounded-full bg-violet-50 px-2 py-0.5 font-semibold text-violet-700">محسوب تلقائياً</span>
+                              ) : d.value && d.value !== (results[t.id] ?? "") ? (
+                                <button type="button" onClick={() => { setResults((r) => ({ ...r, [t.id]: d.value })); setAutoVals((a) => ({ ...a, [t.id]: d.value })); }}
+                                  className="rounded-full border border-violet-300 px-2 py-0.5 font-semibold text-violet-700 hover:bg-violet-50">
+                                  استعمل المحسوبة: <span dir="ltr">{d.value}</span>
+                                </button>
+                              ) : null}
+                              <span className="text-muted">= {d.formula}</span>
+                              {d.note && <span className="text-amber-700">{d.note}</span>}
+                            </div>
+                          );
+                        })()}
                         {showPrev && prev[t.id] && <PrevLine prev={prev[t.id]} current={results[t.id] ?? ""} />}
                       </div>
                     );

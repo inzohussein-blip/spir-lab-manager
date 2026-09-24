@@ -171,6 +171,13 @@ export default function StationSettingsPage() {
       <div className="mb-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
         <div className="mb-3 flex items-center gap-2 text-sm font-semibold"><ListCollapse className="size-4" /> شاشة الإدخال</div>
         <Toggle
+          checked={s.autoDerived === true}
+          onChange={(v) => setOption({ autoDerived: v })}
+          label="الحساب التلقائي للفحوصات المشتقة"
+          desc="عند اختيار الفحص المشتق مع فحوصاته تُحسب النتيجة تلقائياً ويمكن تعديلها يدوياً: البيليروبين غير المباشر، الغلوبيولين، VLDL، LDL (Friedewald)، BUN، HOMA-IR."
+        />
+        <div className="h-3" />
+        <Toggle
           checked={s.collapseGroups === true}
           onChange={(v) => setOption({ collapseGroups: v })}
           label="طيّ مجموعات الفحوصات"
