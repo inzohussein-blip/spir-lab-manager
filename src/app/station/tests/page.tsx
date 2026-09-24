@@ -9,27 +9,30 @@ import {
 
 const inp = "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
 
-type RangeKind = "none" | "numeric" | "sex" | "text";
+type RangeKind = "none" | "numeric" | "sex" | "text" | "qual";
 
 const empty = {
   name_ar: "", name_en: "", category: "", sample_type: "", unit: "",
   kind: "numeric" as RangeKind,
   low: "", high: "",
   mLow: "", mHigh: "", fLow: "", fHigh: "",
-  text: "",
+  text: "", cutoff: "", note: "",
 };
 
 const numOrNull = (s: string) => (s.trim() === "" ? null : Number(s));
 
 function buildNormal(f: typeof empty): NormalRange {
-  if (f.kind === "numeric") return { kind: "numeric", low: numOrNull(f.low), high: numOrNull(f.high) };
+  const note = f.note.trim() ? { note: f.note.trim() } : {};
+  if (f.kind === "numeric") return { kind: "numeric", low: numOrNull(f.low), high: numOrNull(f.high), ...note };
   if (f.kind === "sex")
     return {
       kind: "sex",
       male: { low: numOrNull(f.mLow), high: numOrNull(f.mHigh) },
       female: { low: numOrNull(f.fLow), high: numOrNull(f.fHigh) },
+      ...note,
     };
   if (f.kind === "text") return { kind: "text", text: f.text.trim() };
+  if (f.kind === "qual") return { kind: "qual", text: f.text.trim() || "Negative", cutoff: numOrNull(f.cutoff) };
   return { kind: "none" };
 }
 
@@ -45,7 +48,9 @@ function fromTest(t: StationTest): typeof empty {
     mHigh: n.kind === "sex" ? String(n.male.high ?? "") : "",
     fLow: n.kind === "sex" ? String(n.female.low ?? "") : "",
     fHigh: n.kind === "sex" ? String(n.female.high ?? "") : "",
-    text: n.kind === "text" ? n.text : "",
+    text: n.kind === "text" || n.kind === "qual" ? n.text : "",
+    cutoff: n.kind === "qual" && n.cutoff != null ? String(n.cutoff) : "",
+    note: (n.kind === "numeric" || n.kind === "sex") && n.note ? n.note : "",
   };
 }
 
@@ -83,6 +88,7 @@ export default function StationTestsPage() {
     if (!f.name_ar.trim()) return;
     const rec: StationTest = {
       id: editId ?? uid(),
+      code: editId ? tests.find((t) => t.id === editId)?.code : undefined,
       name_ar: f.name_ar.trim(),
       name_en: f.name_en.trim() || undefined,
       category: f.category.trim() || undefined,
@@ -131,6 +137,7 @@ export default function StationTestsPage() {
             <select value={f.kind} onChange={set("kind")} className={`mt-1 ${inp}`}>
               <option value="numeric">رقمي (موحّد)</option>
               <option value="sex">حسب الجنس (ذكر/أنثى)</option>
+              <option value="qual">نوعي: سالب / موجب (+ ، ++ ، +++)</option>
               <option value="text">نصّي (وصفي)</option>
               <option value="none">بدون معدل</option>
             </select>
@@ -160,6 +167,18 @@ export default function StationTestsPage() {
                 <label className="text-xs text-muted">أعلى<input value={f.fHigh} onChange={set("fHigh")} type="number" step="any" className={`mt-1 ${inp}`} /></label>
               </div>
             </div>
+          </div>
+        )}
+        {(f.kind === "numeric" || f.kind === "sex") && (
+          <div className="mt-3 lg:w-1/2">
+            <label className="text-sm font-medium">ملاحظة على المعدل (اختياري)<input value={f.note} onChange={set("note")} placeholder="مثال: Follicular Phase" className={`mt-1 ${inp}`} /></label>
+          </div>
+        )}
+        {f.kind === "qual" && (
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:w-2/3">
+            <label className="text-sm font-medium">المعدل الطبيعي (نص)<input value={f.text} onChange={set("text")} placeholder="Negative" className={`mt-1 ${inp}`} /></label>
+            <label className="text-sm font-medium">حد الإيجابية (اختياري)<input value={f.cutoff} onChange={set("cutoff")} type="number" step="any" placeholder="مثال: 6 أو 80 للعيار 1:80" className={`mt-1 ${inp}`} /></label>
+            <p className="text-xs text-muted sm:col-span-2">يُعلَّم H عند إدخال + أو ++ أو +++ أو Positive، ويُعلَّم N عند Negative. إذا حدّدت حداً فالقيمة الرقمية أو العيار (مثل 1:160) الذي يساويه أو يزيد عليه يُعلَّم H.</p>
           </div>
         )}
         {f.kind === "text" && (
@@ -202,12 +221,12 @@ export default function StationTestsPage() {
                 <td className="px-4 py-3 text-muted">
                   {t.normal.kind === "sex" ? (
                     <span>
-                      <span className="text-blue-600">ذكر</span> {rangeLabel(t.normal, "male", t.unit)}
+                      <span className="text-blue-600">ذكر</span> <span dir="ltr">{rangeLabel(t.normal, "male", t.unit)}</span>
                       {" · "}
-                      <span className="text-pink-600">أنثى</span> {rangeLabel(t.normal, "female", t.unit)}
+                      <span className="text-pink-600">أنثى</span> <span dir="ltr">{rangeLabel(t.normal, "female", t.unit)}</span>
                     </span>
                   ) : (
-                    rangeLabel(t.normal, "", t.unit)
+                    <span dir="ltr">{rangeLabel(t.normal, "", t.unit)}</span>
                   )}
                 </td>
                 <td className="px-4 py-3">

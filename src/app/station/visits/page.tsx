@@ -261,8 +261,8 @@ export default function StationVisitsPage() {
                       <tr key={i} style={{ background: i % 2 ? "#f7f3fb" : "#ffffff", WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as React.CSSProperties}>
                         <td className="px-3 py-2 font-medium">{r.name_ar}</td>
                         <td className={`px-3 py-2 tabular-nums ${abn ? "font-bold" : "font-semibold"}`} style={abn ? { color: f === "H" ? "#b91c1c" : "#1d4ed8" } : undefined}>{r.value || "—"}</td>
-                        <td className="px-3 py-2 text-gray-600">{r.unit || "—"}</td>
-                        <td className="px-3 py-2 text-gray-600">{t ? rangeLabel(t.normal, sel.patient.gender, t.unit) : "—"}</td>
+                        <td className="px-3 py-2 text-gray-600"><span dir="ltr">{r.unit || "—"}</span></td>
+                        <td className="px-3 py-2 text-gray-600"><span dir="ltr">{t ? rangeLabel(t.normal, sel.patient.gender, t.unit) : "—"}</span></td>
                         {printPrev && (
                           <td className="px-3 py-2 text-gray-600">
                             {prev[r.testId] ? (

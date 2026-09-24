@@ -591,10 +591,24 @@ function StationEntryPage() {
                             placeholder="النتيجة"
                             className={`${inp} text-base font-semibold ${tint}`}
                           />
-                          {t.unit && <span className="shrink-0 text-xs text-muted">{t.unit}</span>}
+                          {t.unit && <span dir="ltr" className="shrink-0 text-xs text-muted">{t.unit}</span>}
                         </div>
+                        {t.normal.kind === "qual" && (
+                          <div className="mt-1.5 flex flex-wrap gap-1">
+                            {["Negative", "+", "++", "+++"].map((v) => (
+                              <button
+                                key={v}
+                                type="button"
+                                onClick={() => setResults((r) => ({ ...r, [t.id]: v }))}
+                                className={`rounded-md border px-2 py-0.5 text-xs font-semibold ${(results[t.id] ?? "") === v ? "border-brand bg-brand-light text-brand-dark" : "border-line text-muted hover:bg-canvas"}`}
+                              >
+                                {v}
+                              </button>
+                            ))}
+                          </div>
+                        )}
                         <div className="mt-1 text-xs text-muted">
-                          المعدل الطبيعي: {rangeLabel(t.normal, gender, t.unit)}
+                          المعدل الطبيعي: <span dir="ltr">{rangeLabel(t.normal, gender, t.unit)}</span>
                         </div>
                         {showPrev && prev[t.id] && <PrevLine prev={prev[t.id]} current={results[t.id] ?? ""} />}
                       </div>
@@ -678,8 +692,8 @@ function StationEntryPage() {
                   <tr key={t.id} className="align-top" style={{ background: idx % 2 ? "#f7f3fb" : "#ffffff", WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as React.CSSProperties}>
                     <td className="px-3 py-2 font-medium">{t.name_ar}</td>
                     <td className={`px-3 py-2 tabular-nums ${abn ? "font-bold" : "font-semibold"}`} style={abn ? { color: f === "H" ? "#b91c1c" : "#1d4ed8" } : undefined}>{results[t.id] || "—"}</td>
-                    <td className="px-3 py-2 text-gray-600">{t.unit || "—"}</td>
-                    <td className="px-3 py-2 text-gray-600">{rangeLabel(t.normal, gender, t.unit)}</td>
+                    <td className="px-3 py-2 text-gray-600"><span dir="ltr">{t.unit || "—"}</span></td>
+                    <td className="px-3 py-2 text-gray-600"><span dir="ltr">{rangeLabel(t.normal, gender, t.unit)}</span></td>
                     {printPrev && (
                       <td className="px-3 py-2 text-gray-600">
                         {prev[t.id] ? (
