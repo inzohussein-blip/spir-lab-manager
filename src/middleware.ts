@@ -10,13 +10,14 @@ export function middleware(req: NextRequest) {
   const hasSession = req.cookies.has("lab_session");
   const isLogin = pathname === "/login";
   // Public routes that need no login: the version chooser (portal), QR report
-  // verification, the offline Lab Station, and the standalone Purchasing app —
-  // all localStorage-only, no database.
+  // verification, the offline Lab Station, the standalone Purchasing app and
+  // the standalone Training station — all browser-storage only, no database.
   const isPublic =
     pathname === "/welcome" ||
     pathname.startsWith("/verify") ||
     pathname.startsWith("/station") ||
-    pathname.startsWith("/store");
+    pathname.startsWith("/store") ||
+    pathname.startsWith("/training");
 
   if (isPublic) {
     const res = NextResponse.next();

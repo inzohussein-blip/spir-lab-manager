@@ -94,39 +94,53 @@ main > * {
   main > * { animation: none; }
 }
 
-/* ── Lab Station interactions (scoped to .station — admin/purchasing untouched) ── */
-.station button:not(:disabled),
-.station a[href] {
+/* ── Local stations interactions (scoped to .station / .training — admin/purchasing untouched) ── */
+:is(.station, .training) button:not(:disabled),
+:is(.station, .training) a[href] {
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease,
     box-shadow 0.15s ease, transform 0.1s ease;
 }
 /* Tactile press feedback */
-.station button:not(:disabled):active {
+:is(.station, .training) button:not(:disabled):active {
   transform: scale(0.96);
 }
-.station button:disabled {
+:is(.station, .training) button:disabled {
   cursor: not-allowed;
   opacity: 0.5;
 }
 /* Primary buttons lift slightly on hover */
-.station button.bg-brand:not(:disabled):hover {
+:is(.station, .training) button.bg-brand:not(:disabled):hover {
   box-shadow: 0 4px 12px color-mix(in oklab, var(--color-brand) 35%, transparent);
 }
 /* Keyboard focus ring for buttons/links */
-.station button:focus-visible,
-.station a:focus-visible {
+:is(.station, .training) button:focus-visible,
+:is(.station, .training) a:focus-visible {
   outline: 2px solid var(--color-brand);
   outline-offset: 2px;
 }
 /* Soft glow around focused fields */
-.station input:focus,
-.station select:focus,
-.station textarea:focus {
+:is(.station, .training) input:focus,
+:is(.station, .training) select:focus,
+:is(.station, .training) textarea:focus {
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-brand) 18%, transparent);
 }
 /* Dark theme: the brand teal is bright, so text sitting on it goes dark for contrast */
-:root[data-theme="dark"] .station :is(.bg-brand, .from-brand).text-white {
+:root[data-theme="dark"] :is(.station, .training) :is(.bg-brand, .from-brand).text-white {
   color: #042f2e;
+}
+/* Training station — its own accent (indigo) so it reads as a separate app */
+.training {
+  --color-brand: #4f46e5;
+  --color-brand-dark: #4338ca;
+  --color-brand-light: #eef2ff;
+}
+:root[data-theme="dark"] .training {
+  --color-brand: #818cf8;
+  --color-brand-dark: #6366f1;
+  --color-brand-light: #1e1b4b;
+}
+:root[data-theme="dark"] .training :is(.bg-brand, .from-brand).text-white {
+  color: #1e1b4b;
 }
 /* Toast slide-in */
 @keyframes station-toast-in {
@@ -137,7 +151,7 @@ main > * {
   animation: station-toast-in 0.18s ease-out;
 }
 @media (prefers-reduced-motion: reduce) {
-  .station button:not(:disabled):active { transform: none; }
+  :is(.station, .training) button:not(:disabled):active { transform: none; }
   .station-toast { animation: none; }
 }
 

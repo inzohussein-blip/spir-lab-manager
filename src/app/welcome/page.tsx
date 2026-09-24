@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Lock, Beaker, ShoppingCart, ArrowLeft } from "lucide-react";
+import { Lock, Beaker, ShoppingCart, GraduationCap, ArrowLeft } from "lucide-react";
 
 export const metadata = { title: "مختبر التحليلات المرضية — اختيار النسخة" };
 
@@ -16,11 +16,11 @@ export default function WelcomePage() {
           <img src="/lab-logo.png" alt="" className="size-24 object-contain" />
           <h1 className="mt-3 text-3xl font-extrabold" style={{ color: "#5a2a82" }}>مختبر التحليلات المرضية</h1>
           <p className="mt-1 text-sm" style={{ color: "#9c7c1e" }}>دبلوم تحليلات مرضية / بكالوريوس علوم حياة</p>
-          <p className="mt-4 max-w-xl text-sm text-muted">اختر النسخة التي تريد الدخول إليها. النسخة الكاملة قيد التطوير حالياً، والنسختان المجانيتان تعملان محلياً بدون إنترنت.</p>
+          <p className="mt-4 max-w-xl text-sm text-muted">اختر النسخة التي تريد الدخول إليها. النسخة الكاملة قيد التطوير حالياً، والنسخ المجانية تعمل محلياً بدون إنترنت.</p>
         </div>
 
         {/* Cards */}
-        <div className="grid gap-5 md:grid-cols-3">
+        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
           {/* Paid — locked */}
           <div className="relative flex flex-col rounded-2xl border border-line bg-surface p-6 opacity-80 shadow-[var(--shadow-card)]">
             <span className="absolute left-4 top-4 inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">
@@ -61,6 +61,19 @@ export default function WelcomePage() {
             <div className="mt-4 text-lg font-bold">منظومة المشتريات</div>
             <p className="mt-1 flex-1 text-sm text-muted">نسخة محلية مستقلة لإدارة المشتريات والموردين ومتابعة المصروف — منفصلة تماماً عن النسختين الأخريين.</p>
             <span className="mt-5 inline-flex items-center justify-center gap-1.5 rounded-lg bg-amber-600 px-4 py-2.5 text-sm font-semibold text-white group-hover:bg-amber-700">
+              الدخول <ArrowLeft className="size-4" />
+            </span>
+          </Link>
+
+          {/* Free — Training & information (fully separate) */}
+          <Link href="/training" className="group flex flex-col rounded-2xl border-2 border-indigo-300 bg-surface p-6 shadow-[var(--shadow-card)] transition-colors hover:border-indigo-500">
+            <span className="absolute -mt-9 ms-auto inline-flex items-center rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700">مجانية</span>
+            <span className="grid size-12 place-items-center rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-700 text-white shadow-sm">
+              <GraduationCap className="size-6" />
+            </span>
+            <div className="mt-4 text-lg font-bold">محطة التدريب والمعلومات</div>
+            <p className="mt-1 flex-1 text-sm text-muted">دليل عملي لكل فحص: البروسيجر، العينات والتيوبات، الأدوات، التفسير والربط بين الفحوصات — مع الصور والطباعة. محطة منفصلة بالكامل.</p>
+            <span className="mt-5 inline-flex items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white group-hover:bg-indigo-700">
               الدخول <ArrowLeft className="size-4" />
             </span>
           </Link>

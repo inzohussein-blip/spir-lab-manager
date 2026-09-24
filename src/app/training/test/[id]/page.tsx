@@ -1,0 +1,269 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
+import {
+  IdCard, TestTubes, ListOrdered, Microscope, Network, Pencil, Printer, Trash2, Lightbulb, AlertTriangle,
+  ArrowRight, ArrowLeftRight, X, ShieldCheck, type LucideIcon,
+} from "lucide-react";
+import {
+  getTest, getTests, getTubes, getTools, getSettings, backlinks, deleteTest,
+  type TrainingTest, type Tube, type Tool, type TrainingSettings,
+} from "@/lib/training/store";
+import { Img } from "@/components/training/Img";
+import { SopSheet } from "@/components/training/SopSheet";
+
+type Tab = "card" | "sample" | "procedure" | "results" | "links";
+const TABS: { id: Tab; label: string; icon: LucideIcon }[] = [
+  { id: "card", label: "البطاقة التعريفية", icon: IdCard },
+  { id: "sample", label: "العينة والأدوات", icon: TestTubes },
+  { id: "procedure", label: "طريقة العمل", icon: ListOrdered },
+  { id: "results", label: "النتائج والتفسير", icon: Microscope },
+  { id: "links", label: "شبكة الربط", icon: Network },
+];
+
+export default function TrainingTestPage() {
+  const { id } = useParams<{ id: string }>();
+  const router = useRouter();
+  const [test, setTest] = useState<TrainingTest | null | undefined>(undefined);
+  const [all, setAll] = useState<TrainingTest[]>([]);
+  const [tubes, setTubes] = useState<Tube[]>([]);
+  const [tools, setTools] = useState<Tool[]>([]);
+  const [settings, setSettings] = useState<TrainingSettings | null>(null);
+  const [back, setBack] = useState<{ test: TrainingTest; note?: string }[]>([]);
+  const [tab, setTab] = useState<Tab>("card");
+  const [zoom, setZoom] = useState<string | null>(null);
+  const [withImages, setWithImages] = useState(true);
+
+  useEffect(() => {
+    setTest(getTest(id));
+    setAll(getTests()); setTubes(getTubes()); setTools(getTools()); setSettings(getSettings());
+    setBack(backlinks(id));
+    setTab("card");
+  }, [id]);
+
+  if (test === undefined) return null;
+  if (!test) return <p className="text-sm text-muted">لم يتم العثور على هذا الفحص.</p>;
+
+  const myTubes = test.tubeIds.map((x) => tubes.find((t) => t.id === x)).filter(Boolean) as Tube[];
+  const myTools = test.toolIds.map((x) => tools.find((t) => t.id === x)).filter(Boolean) as Tool[];
+  const outLinks = test.links.map((l) => ({ ...l, t: all.find((x) => x.id === l.id) })).filter((l) => l.t);
+
+  function remove() {
+    if (!window.confirm(`حذف «${test!.name_ar}» نهائياً؟ ستُزال روابطه من الفحوصات الأخرى أيضاً.`)) return;
+    deleteTest(test!.id);
+    router.push("/training");
+  }
+
+  const Card = ({ title, icon: Icon, children }: { title: string; icon?: LucideIcon; children: React.ReactNode }) => (
+    <div className="rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
+      <div className="mb-3 flex items-center gap-2 text-sm font-bold">{Icon && <Icon className="size-4 text-brand" />}{title}</div>
+      {children}
+    </div>
+  );
+  const Row = ({ k, v }: { k: string; v?: string }) =>
+    v ? <div className="grid grid-cols-[120px_1fr] gap-2 border-b border-line py-2 text-sm last:border-0"><span className="text-muted">{k}</span><span className="whitespace-pre-line">{v}</span></div> : null;
+
+  return (
+    <div>
+      <div className="no-print">
+        <Link href="/training" className="mb-3 inline-flex items-center gap-1 text-xs text-muted hover:text-ink"><ArrowRight className="size-3.5" /> مكتبة الفحوصات</Link>
+
+        {/* Header */}
+        <div className="mb-4 flex flex-wrap items-center gap-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
+          {test.coverImageId ? (
+            <Img id={test.coverImageId} className="size-20 cursor-zoom-in rounded-xl border border-line bg-white" onClick={() => setZoom(test.coverImageId!)} />
+          ) : (
+            <span className="grid size-20 place-items-center rounded-xl bg-gradient-to-br from-brand to-brand-dark text-lg font-extrabold text-white" dir="ltr">{(test.abbr || test.name_ar).slice(0, 6)}</span>
+          )}
+          <div className="min-w-0 flex-1">
+            <h1 className="text-2xl font-bold">{test.name_ar}</h1>
+            {(test.name_en || test.abbr) && <div className="text-sm text-muted" dir="ltr" style={{ textAlign: "right" }}>{test.name_en}{test.abbr ? ` (${test.abbr})` : ""}</div>}
+            <span className="mt-1.5 inline-block rounded-full bg-brand-light px-2.5 py-0.5 text-xs font-medium text-brand-dark">{test.category || "أخرى"}</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="inline-flex items-center gap-1.5 text-xs text-muted">
+              <input type="checkbox" checked={withImages} onChange={(e) => setWithImages(e.target.checked)} className="accent-[var(--color-brand)]" /> الصور في الطباعة
+            </label>
+            <button onClick={() => window.print()} className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3.5 py-2 text-sm font-semibold text-white hover:bg-brand-dark">
+              <Printer className="size-4" /> طباعة البروسيجر
+            </button>
+            <Link href={`/training/edit?id=${test.id}`} className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas">
+              <Pencil className="size-4" /> تعديل
+            </Link>
+            <button onClick={remove} title="حذف الفحص" className="grid size-9 place-items-center rounded-lg border border-line text-red-600 hover:bg-red-50"><Trash2 className="size-4" /></button>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="mb-4 flex gap-1 overflow-x-auto rounded-xl border border-line bg-surface p-1">
+          {TABS.map((t) => {
+            const Icon = t.icon;
+            return (
+              <button key={t.id} onClick={() => setTab(t.id)} className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm ${tab === t.id ? "bg-brand text-white font-semibold" : "text-muted hover:bg-canvas hover:text-ink"}`}>
+                <Icon className="size-4" /> {t.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {tab === "card" && (
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card title="لماذا يُطلب هذا الفحص؟" icon={IdCard}><p className="whitespace-pre-line text-sm">{test.purpose || "—"}</p></Card>
+            <Card title="ملخّص ومبدأ الفحص" icon={Microscope}><p className="whitespace-pre-line text-sm">{test.summary || "—"}</p></Card>
+            {test.tips.length > 0 && (
+              <div className="lg:col-span-2">
+                <Card title="ملاحظات من ذهب (الخبرة العملية)" icon={Lightbulb}>
+                  <ul className="flex flex-col gap-2">
+                    {test.tips.map((t, i) => <li key={i} className="rounded-lg border-r-4 border-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-950">{t}</li>)}
+                  </ul>
+                </Card>
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab === "sample" && (
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card title="العينة وتحضير المريض" icon={TestTubes}>
+              <Row k="نوع العينة" v={test.sampleType} /><Row k="الحجم" v={test.volume} /><Row k="تحضير المريض" v={test.patientPrep} /><Row k="الثبات والحفظ" v={test.storage} />
+              {!test.sampleType && !test.volume && !test.patientPrep && !test.storage && <p className="text-sm text-muted">—</p>}
+            </Card>
+            <Card title="التيوبات / الحاويات" icon={TestTubes}>
+              {myTubes.length === 0 ? <p className="text-sm text-muted">—</p> : (
+                <div className="flex flex-col gap-2">
+                  {myTubes.map((t) => (
+                    <div key={t.id} className="flex items-center gap-3 rounded-xl border border-line p-2.5">
+                      {t.imageId ? <Img id={t.imageId} className="size-12 cursor-zoom-in rounded-lg bg-white" onClick={() => setZoom(t.imageId!)} /> : <span className="h-12 w-4 rounded-full border border-black/10" style={{ background: t.color }} />}
+                      <div className="min-w-0 flex-1 text-sm">
+                        <div className="flex items-center gap-1.5 font-semibold"><span className="size-3 rounded-full border border-black/10" style={{ background: t.color }} />{t.name}</div>
+                        {t.additive && <div className="text-xs text-muted">{t.additive}</div>}
+                        {t.notes && <div className="mt-0.5 text-xs">{t.notes}</div>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+            <div className="lg:col-span-2">
+              <Card title="الأدوات والأجهزة والكواشف" icon={Microscope}>
+                {myTools.length === 0 ? <p className="text-sm text-muted">—</p> : (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {myTools.map((t) => (
+                      <div key={t.id} className="flex items-start gap-3 rounded-xl border border-line p-2.5">
+                        {t.imageId && <Img id={t.imageId} className="size-12 shrink-0 cursor-zoom-in rounded-lg bg-white" onClick={() => setZoom(t.imageId!)} />}
+                        <div className="min-w-0 text-sm">
+                          <div className="font-semibold">{t.name} <span className="rounded-full bg-canvas px-1.5 text-[10px] font-normal text-muted">{t.kind}</span></div>
+                          {t.description && <div className="text-xs text-muted">{t.description}</div>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Card>
+            </div>
+          </div>
+        )}
+
+        {tab === "procedure" && (
+          <div className="grid gap-4">
+            <Card title="خطوات العمل (Procedure)" icon={ListOrdered}>
+              {test.steps.length === 0 ? <p className="text-sm text-muted">لم تُضف خطوات بعد.</p> : (
+                <ol className="flex flex-col gap-2.5">
+                  {test.steps.map((s, i) => (
+                    <li key={s.id} className={`flex gap-3 rounded-xl border p-3 ${s.warn ? "border-red-200 bg-red-50/60" : "border-line"}`}>
+                      <span className={`grid size-7 shrink-0 place-items-center rounded-full text-xs font-bold text-white ${s.warn ? "bg-red-600" : "bg-brand"}`}>{i + 1}</span>
+                      <div className="min-w-0 flex-1">
+                        {s.warn && <div className="mb-0.5 inline-flex items-center gap-1 text-xs font-bold text-red-700"><AlertTriangle className="size-3.5" /> تنبيه</div>}
+                        <div className="whitespace-pre-line text-sm">{s.text}</div>
+                        {s.imageId && <Img id={s.imageId} className="mt-2 h-40 cursor-zoom-in rounded-lg border border-line bg-white" onClick={() => setZoom(s.imageId!)} />}
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </Card>
+            <Card title="تعليمات السلامة والجودة" icon={ShieldCheck}>
+              <ul className="list-inside list-disc text-sm">
+                {(test.safety?.trim() || settings?.defaultSafety || "").split("\n").filter((x) => x.trim()).map((x, i) => <li key={i}>{x}</li>)}
+              </ul>
+              {!test.safety?.trim() && <p className="mt-2 text-[11px] text-muted">(التعليمات العامة من الإعدادات)</p>}
+            </Card>
+          </div>
+        )}
+
+        {tab === "results" && (
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card title="القيم الطبيعية" icon={Microscope}>
+              {test.normals.length === 0 ? <p className="text-sm text-muted">—</p> : test.normals.map((n, i) => (
+                <div key={i} className="grid grid-cols-[1fr_auto] gap-2 border-b border-line py-2 text-sm last:border-0"><span className="text-muted">{n.label}</span><b dir="ltr">{n.value}</b></div>
+              ))}
+            </Card>
+            <Card title="التفسير" icon={IdCard}>
+              {test.high && <p className="mb-2 text-sm"><b className="text-red-600">▲ الارتفاع:</b> {test.high}</p>}
+              {test.low && <p className="text-sm"><b className="text-blue-600">▼ الانخفاض:</b> {test.low}</p>}
+              {!test.high && !test.low && <p className="text-sm text-muted">—</p>}
+            </Card>
+            {test.resultNotes && (
+              <div className="lg:col-span-2"><Card title="شكل العينة والنتيجة" icon={Microscope}><p className="whitespace-pre-line text-sm">{test.resultNotes}</p></Card></div>
+            )}
+            <div className="lg:col-span-2">
+              <Card title="معرض الصور (أشكال العينات والنتائج)" icon={Microscope}>
+                {test.gallery.length === 0 ? <p className="text-sm text-muted">لا صور — أضفها من «تعديل».</p> : (
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                    {test.gallery.map((g) => (
+                      <figure key={g.id} className="overflow-hidden rounded-xl border border-line">
+                        <Img id={g.imageId} className="aspect-square w-full cursor-zoom-in bg-white" onClick={() => setZoom(g.imageId)} />
+                        <figcaption className="px-2 py-1.5 text-xs">{g.caption || "—"}</figcaption>
+                      </figure>
+                    ))}
+                  </div>
+                )}
+              </Card>
+            </div>
+          </div>
+        )}
+
+        {tab === "links" && (
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card title="يرتبط بـ" icon={Network}>
+              {outLinks.length === 0 ? <p className="text-sm text-muted">لا روابط — أضفها من «تعديل».</p> : (
+                <div className="flex flex-col gap-2">
+                  {outLinks.map((l) => (
+                    <Link key={l.id} href={`/training/test/${l.id}`} className="rounded-xl border border-line p-3 hover:border-brand">
+                      <div className="flex items-center gap-2 text-sm font-semibold text-brand-dark"><ArrowLeftRight className="size-4" /> {l.t!.name_ar} {l.t!.abbr && <span className="text-xs font-normal text-muted" dir="ltr">({l.t!.abbr})</span>}</div>
+                      {l.note && <div className="mt-1 text-xs text-muted">{l.note}</div>}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </Card>
+            <Card title="فحوصات تشير إلى هذا الفحص" icon={Network}>
+              {back.length === 0 ? <p className="text-sm text-muted">—</p> : (
+                <div className="flex flex-col gap-2">
+                  {back.map((b) => (
+                    <Link key={b.test.id} href={`/training/test/${b.test.id}`} className="rounded-xl border border-line p-3 hover:border-brand">
+                      <div className="text-sm font-semibold">{b.test.name_ar}</div>
+                      {b.note && <div className="mt-1 text-xs text-muted">{b.note}</div>}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </Card>
+          </div>
+        )}
+      </div>
+
+      {/* Lightbox */}
+      {zoom && (
+        <div className="no-print fixed inset-0 z-50 grid place-items-center bg-black/80 p-6" onClick={() => setZoom(null)}>
+          <button className="absolute left-4 top-4 grid size-10 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20" aria-label="إغلاق"><X className="size-5" /></button>
+          <Img id={zoom} className="max-h-[85vh] max-w-[90vw] rounded-lg" />
+        </div>
+      )}
+
+      {settings && <SopSheet test={test} tubes={tubes} tools={tools} settings={settings} withImages={withImages} />}
+    </div>
+  );
+}
