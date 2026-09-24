@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { query, queryOne } from "@/lib/db";
 import { barcodeSvg } from "@/lib/barcode";
+import { getLabIdentity } from "@/lib/lab-identity";
 import { money } from "@/lib/utils";
 import { PrintButton } from "@/components/PrintButton";
 import { Button } from "@/components/ui/primitives";
@@ -32,6 +33,7 @@ export default async function ReceiptPage({ params }: { params: { id: string } }
     [params.id]
   );
   if (!order) notFound();
+  const identity = await getLabIdentity();
 
   const items = await query<{ name_ar: string; price: number }>(
     `select t.name_ar, i.price
@@ -57,6 +59,7 @@ export default async function ReceiptPage({ params }: { params: { id: string } }
       >
         <div className="text-center">
           <div className="text-base font-bold" style={{ color: "#5a2a82" }}>مختبر التحليلات المرضية</div>
+          {identity.subtitle && <div className="text-[10px] text-gray-600">{identity.subtitle}</div>}
           <div className="mt-0.5 text-[11px] text-gray-600">وصل استلام طلب فحص</div>
         </div>
 
@@ -113,6 +116,12 @@ export default async function ReceiptPage({ params }: { params: { id: string } }
           <span className="mt-1 block h-9 w-full" dangerouslySetInnerHTML={{ __html: barcode }} />
         )}
         <div className="text-center font-mono text-[11px]">{order.accession_no}</div>
+        {identity.footer && (
+          <>
+            <div className="my-2 border-t border-dashed border-gray-400" />
+            <div className="text-center text-[10px] text-gray-600">{identity.footer}</div>
+          </>
+        )}
       </div>
     </div>
   );

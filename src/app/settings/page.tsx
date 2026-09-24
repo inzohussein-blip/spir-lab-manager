@@ -1,5 +1,9 @@
-import { PageHeader, Card } from "@/components/ui/primitives";
+import { PageHeader, Card, Button } from "@/components/ui/primitives";
 import { cloudApiConfigured } from "@/lib/whatsapp";
+import { getLabIdentity } from "@/lib/lab-identity";
+import { updateLabIdentity } from "@/app/actions/settings";
+
+const field = "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +27,8 @@ function Row({ label, value, ok }: { label: string; value: string; ok?: boolean 
   );
 }
 
-export default function SettingsPage() {
+export default async function SettingsPage() {
+  const identity = await getLabIdentity();
   const hostedDb = !!process.env.DATABASE_URL;
   const aiOn = !!process.env.ANTHROPIC_API_KEY;
   const waCloud = cloudApiConfigured();
@@ -31,6 +36,22 @@ export default function SettingsPage() {
   return (
     <div className="max-w-2xl">
       <PageHeader title="الإعدادات" subtitle="حالة النظام والميزات" />
+
+      <Card className="mb-4">
+        <div className="mb-1 font-semibold">بيانات الترويسة والطباعة</div>
+        <p className="mb-3 text-xs text-muted">تظهر في تقرير النتائج المطبوع ووصل استلام الطلب. اتركها فارغة لإخفائها.</p>
+        <form action={updateLabIdentity} className="flex flex-col gap-3">
+          <label className="text-sm font-medium">
+            السطر تحت اسم المختبر (المؤهّل / الوصف)
+            <input name="subtitle" defaultValue={identity.subtitle} maxLength={300} className={`mt-1 ${field}`} />
+          </label>
+          <label className="text-sm font-medium">
+            العنوان ورقم الهاتف (أسفل التقرير والوصل)
+            <input name="footer" defaultValue={identity.footer} maxLength={300} placeholder="العنوان - الهاتف" className={`mt-1 ${field}`} />
+          </label>
+          <div><Button>حفظ</Button></div>
+        </form>
+      </Card>
 
       <Card className="mb-4">
         <div className="mb-2 font-semibold">قاعدة البيانات</div>
