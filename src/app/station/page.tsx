@@ -6,7 +6,7 @@ import { Search, Printer, Save, Check, Beaker, Layers, Pencil, UserRound, Sticky
 import {
   getTests, addVisit, updateVisit, getVisit, getSettings, getPanels, nextAccession, uid, rangeLabel, flagFor,
   getPatients, getPatient, upsertPatient, addPatientNote, deductStockForTests, getDoctors, addDoctor,
-  previousResults, resultDelta,
+  previousResults, resultDelta, localYmd,
   type StationTest, type Gender, type StationVisit, type StationSettings, type StationPanel, type StationPatient, type NoteEntry, type StationDoctor,
 } from "@/lib/station/store";
 import { ReportSheet } from "@/components/station/ReportSheet";
@@ -259,7 +259,7 @@ function StationEntryPage() {
   function onSave() {
     if (!requireName()) return;
     const wasEdit = !!editId;
-    saveVisit();
+    if (!saveVisit()) return;
     toast.show(wasEdit ? "تم تحديث الزيارة" : "تم حفظ الزيارة محلياً");
     setJustSaved(true);
     setTimeout(() => setJustSaved(false), 1600);
@@ -293,8 +293,9 @@ function StationEntryPage() {
     });
   }
 
-  function saveVisit(acc?: string) {
-    if (!name.trim()) return;
+  /** Returns false (and warns) when the browser storage refused the save. */
+  function saveVisit(acc?: string): boolean {
+    if (!name.trim()) return false;
     // Link (or create) the patient record and persist any new note.
     const pid = upsertPatient({ id: patientId ?? undefined, name: name.trim(), gender, age, phone });
     setPatientId(pid);
@@ -313,10 +314,12 @@ function StationEntryPage() {
         testId: t.id, name_ar: t.name_ar, value: results[t.id] ?? "", unit: t.unit,
       })),
     };
-    if (editId) {
-      updateVisit(v);
-    } else {
-      addVisit(v);
+    const stored = editId ? updateVisit(v) : addVisit(v);
+    if (!stored) {
+      toast.show("تعذّر الحفظ: مساحة التخزين في المتصفح ممتلئة — خذ نسخة احتياطية واحذف زيارات قديمة من «الزيارات المحفوظة».", "warn");
+      return false;
+    }
+    if (!editId) {
       setEditId(v.id);
       setCreatedAt(v.created_at);
       // Deduct one unit of stock per linked test — only on a new visit.
@@ -324,6 +327,7 @@ function StationEntryPage() {
     }
     setBaseline(snapshot);
     setSavedTick((n) => n + 1);
+    return true;
   }
 
   function onPrint() {
@@ -342,12 +346,13 @@ function StationEntryPage() {
     }
     const acc = accession || nextAccession();
     setAccession(acc);
-    saveVisit(acc);
+    if (!saveVisit(acc)) return;
     toast.show("تم الحفظ — جارٍ فتح نافذة الطباعة");
     setTimeout(() => window.print(), 80);
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  // Local date (not UTC); an edited visit keeps its original date on reprint.
+  const today = localYmd(createdAt ?? undefined);
 
   return (
     <div>

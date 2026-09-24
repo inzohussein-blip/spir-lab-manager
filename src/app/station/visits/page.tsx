@@ -80,9 +80,11 @@ export default function StationVisitsPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `visits-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `visits-${dayOf(Date.now())}.csv`;
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000); // let the download start first
   }
 
   function refresh() { setVisits(getVisits()); }
@@ -200,7 +202,7 @@ export default function StationVisitsPage() {
           <ReportSheet
             className="mt-4"
             settings={settings}
-            date={new Date(sel.created_at).toISOString().slice(0, 10)}
+            date={dayOf(sel.created_at)}
             accession={sel.accession}
             patient={sel.patient}
             referrer={sel.referrer}

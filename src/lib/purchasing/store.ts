@@ -47,11 +47,13 @@ function read<T>(key: string, fallback: T): T {
     return fallback;
   }
 }
-function write<T>(key: string, value: T): void {
+/** Returns false when the browser refused the write (storage full or blocked). */
+function write<T>(key: string, value: T): boolean {
   try {
     localStorage.setItem(key, JSON.stringify(value));
+    return true;
   } catch {
-    /* ignore */
+    return false;
   }
 }
 
@@ -76,8 +78,8 @@ export function getPurchases(): Purchase[] {
 export function savePurchases(p: Purchase[]): void {
   write(K_PUR, p);
 }
-export function addPurchase(p: Purchase): void {
-  write(K_PUR, [p, ...getPurchases()]);
+export function addPurchase(p: Purchase): boolean {
+  return write(K_PUR, [p, ...getPurchases()]);
 }
 export function updatePurchase(p: Purchase): void {
   write(K_PUR, getPurchases().map((x) => (x.id === p.id ? p : x)));

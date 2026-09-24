@@ -12,14 +12,9 @@ export function middleware(req: NextRequest) {
   // Public routes that need no login: the version chooser (portal), QR report
   // verification, the offline Lab Station, the standalone Purchasing app and
   // the standalone Training station — all browser-storage only, no database.
-  const isPublic =
-    pathname === "/welcome" ||
-    pathname.startsWith("/verify") ||
-    pathname.startsWith("/station") ||
-    pathname.startsWith("/store") ||
-    pathname.startsWith("/training") ||
-    pathname.startsWith("/qc") ||
-    pathname.startsWith("/roster");
+  // Whole path segments only, so e.g. "/stations-x" or "/storeroom" stay protected.
+  const under = (base: string) => pathname === base || pathname.startsWith(base + "/");
+  const isPublic = ["/welcome", "/verify", "/station", "/store", "/training", "/qc", "/roster"].some(under);
 
   if (isPublic) {
     const res = NextResponse.next();

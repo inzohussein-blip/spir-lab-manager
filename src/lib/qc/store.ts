@@ -11,7 +11,9 @@ import { readLS, writeLS, newId, todayYmd, addDays, addMonthsYmd, daysUntil } fr
 // ── Types ────────────────────────────────────────────────────────────────────
 export interface QcLevel { id: string; label: string; lot?: string; mean: number; sd: number; expiry?: string }
 export interface Analyte { id: string; name: string; unit?: string; device?: string; levels: QcLevel[]; active: boolean }
-export interface QcResult { id: string; analyteId: string; levelId: string; date: string; at: number; value: number; note?: string; by?: string }
+/** `mean`/`sd`: the level's targets when the value was entered, so changing a lot's
+ *  targets later does not re-judge older results. */
+export interface QcResult { id: string; analyteId: string; levelId: string; date: string; at: number; value: number; note?: string; by?: string; mean?: number; sd?: number }
 
 export interface TempUnit { id: string; name: string; kind: string; min: number; max: number }
 export interface TempReading { id: string; unitId: string; date: string; slot: "AM" | "PM"; value: number; by?: string; action?: string }
@@ -75,7 +77,8 @@ export function saveResults(r: QcResult[]) { writeLS(K.results, r); }
 /** Set one day's value for an analyte level (replaces that day's value; empty clears it). */
 export function setResult(analyteId: string, levelId: string, date: string, value: number | null, extra: { note?: string; by?: string } = {}) {
   const rest = getResults().filter((r) => !(r.analyteId === analyteId && r.levelId === levelId && r.date === date));
-  if (value != null && Number.isFinite(value)) rest.push({ id: newId(), analyteId, levelId, date, at: Date.now(), value, ...extra });
+  const lv = getAnalytes().find((a) => a.id === analyteId)?.levels.find((l) => l.id === levelId);
+  if (value != null && Number.isFinite(value)) rest.push({ id: newId(), analyteId, levelId, date, at: Date.now(), value, ...(lv ? { mean: lv.mean, sd: lv.sd } : {}), ...extra });
   saveResults(rest);
 }
 export function deleteAnalyte(id: string) {
@@ -123,7 +126,8 @@ export function evaluateAnalyte(a: Analyte, results: QcResult[]): Map<string, Ev
   const mine = results.filter((r) => r.analyteId === a.id);
   const z = (r: QcResult) => {
     const l = a.levels.find((x) => x.id === r.levelId);
-    return l && l.sd > 0 ? (r.value - l.mean) / l.sd : 0;
+    const mean = r.mean ?? l?.mean, sd = r.sd ?? l?.sd;
+    return mean != null && sd != null && sd > 0 ? (r.value - mean) / sd : 0;
   };
   for (const lv of a.levels) {
     const series = mine.filter((r) => r.levelId === lv.id).sort((x, y) => x.date.localeCompare(y.date) || x.at - y.at);
@@ -179,7 +183,7 @@ export function summary() {
     }
   }
   const units = getUnits();
-  const temps = getTemps().filter((t) => t.date === today);
+  const temps = getTemps().filter((t) => t.date === today && units.some((u) => u.id === t.unitId));
   const tempsMissing = units.length * 2 - temps.length;
   const tempsOut = temps.filter((t) => { const u = units.find((x) => x.id === t.unitId); return u && !tempOk(u, t.value); }).length;
   const devices = getDevices();

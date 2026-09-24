@@ -91,7 +91,7 @@ export default function AttendancePage() {
             <input type="month" value={month} onChange={(e) => e.target.value && setMonth(e.target.value)} className={inp} />
             <button onClick={() => window.print()} className="ms-auto inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white hover:bg-brand-dark"><Printer className="size-4" /> طباعة التقرير</button>
           </div>
-          <SummaryTable rows={summaries} />
+          <div className="overflow-x-auto"><SummaryTable rows={summaries} /></div>
         </div>
       </div>
 

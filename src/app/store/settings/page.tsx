@@ -13,7 +13,7 @@ export default function StoreSettingsPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `purchasing-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `purchasing-backup-${new Date().toLocaleDateString("en-CA")}.json`;
     a.click();
     URL.revokeObjectURL(url);
   }

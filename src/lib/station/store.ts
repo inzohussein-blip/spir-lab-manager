@@ -130,11 +130,13 @@ function read<T>(key: string, fallback: T): T {
     return fallback;
   }
 }
-function write<T>(key: string, value: T): void {
+/** Returns false when the browser refused the write (storage full or blocked). */
+function write<T>(key: string, value: T): boolean {
   try {
     localStorage.setItem(key, JSON.stringify(value));
+    return true;
   } catch {
-    /* storage unavailable — ignore */
+    return false;
   }
 }
 
@@ -191,9 +193,10 @@ export function saveTests(tests: StationTest[]): void {
 export function getVisits(): StationVisit[] {
   return read<StationVisit[]>(K_VISITS, []);
 }
-export function addVisit(v: StationVisit): void {
+/** Returns false if the visit could not be stored (browser storage full). */
+export function addVisit(v: StationVisit): boolean {
   // No cap — local storage stays open and growable (backed up as a file).
-  write(K_VISITS, [v, ...getVisits()]);
+  return write(K_VISITS, [v, ...getVisits()]);
 }
 export function saveVisitsRaw(visits: StationVisit[]): void {
   write(K_VISITS, visits);
@@ -202,8 +205,8 @@ export function getVisit(id: string): StationVisit | null {
   return getVisits().find((v) => v.id === id) ?? null;
 }
 /** Replace an existing visit (used when re-saving after an edit). */
-export function updateVisit(v: StationVisit): void {
-  write(K_VISITS, getVisits().map((x) => (x.id === v.id ? v : x)));
+export function updateVisit(v: StationVisit): boolean {
+  return write(K_VISITS, getVisits().map((x) => (x.id === v.id ? v : x)));
 }
 export function deleteVisits(ids: string[]): void {
   const set = new Set(ids);
@@ -393,11 +396,17 @@ export function unlinkTestFromStock(testId: string): void {
   if (!list.some((s) => s.linkedTestId === testId)) return;
   saveStock(list.map((s) => (s.linkedTestId === testId ? { ...s, linkedTestId: undefined } : s)));
 }
-/** Days until expiry (negative = expired), or null when no expiry set. */
+/** Calendar days until expiry (0 = expires today, negative = expired), or null when no expiry set. */
 export function daysToExpiry(expiry?: string): number | null {
   if (!expiry) return null;
-  const d = new Date(expiry + "T00:00:00").getTime();
-  return Math.floor((d - Date.now()) / 86400000);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  return Math.round((new Date(expiry + "T00:00:00").getTime() - today) / 86400000);
+}
+
+/** Local calendar date YYYY-MM-DD (not UTC — avoids yesterday's date after midnight). */
+export function localYmd(ms: number = Date.now()): string {
+  return new Date(ms).toLocaleDateString("en-CA");
 }
 
 // ── Sample-number counter (LAB-YYYYMMDD-NNN) ─────────────────────────────────
@@ -446,15 +455,15 @@ export function importBackup(data: unknown): boolean {
   try {
     const b = data as Partial<StationBackup>;
     if (!b || b.app !== "spir-lab-station" || !Array.isArray(b.tests)) return false;
-    if (b.tests) write(K_TESTS, b.tests);
-    if (b.visits) write(K_VISITS, b.visits);
-    if (b.pages) write(K_PAGES, b.pages);
-    if (b.panels) write(K_PANELS, b.panels);
-    if (b.settings) write(K_SETTINGS, b.settings);
-    if (b.patients) write(K_PATIENTS, b.patients);
-    if (b.stock) write(K_STOCK, b.stock);
-    if (b.doctors) write(K_DOCTORS, b.doctors);
-    return true;
+    let ok = write(K_TESTS, b.tests);
+    if (b.visits) ok = write(K_VISITS, b.visits) && ok;
+    if (b.pages) ok = write(K_PAGES, b.pages) && ok;
+    if (b.panels) ok = write(K_PANELS, b.panels) && ok;
+    if (b.settings) ok = write(K_SETTINGS, b.settings) && ok;
+    if (b.patients) ok = write(K_PATIENTS, b.patients) && ok;
+    if (b.stock) ok = write(K_STOCK, b.stock) && ok;
+    if (b.doctors) ok = write(K_DOCTORS, b.doctors) && ok;
+    return ok;
   } catch {
     return false;
   }

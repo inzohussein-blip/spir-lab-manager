@@ -11,7 +11,7 @@ import {
 import { money } from "@/lib/utils";
 
 const inp = "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => new Date().toLocaleDateString("en-CA"); // local date, not UTC
 
 function StatCard({ label, value, tone }: { label: string; value: string; tone?: "danger" }) {
   return (
@@ -62,7 +62,7 @@ export default function PurchasesPage() {
       items: clean.map((it) => ({ name: it.name.trim(), qty: Number(it.qty) || 0, unitPrice: Number(it.unitPrice) || 0 })),
       total: purchaseTotal(clean), paid, notes: notes.trim() || undefined,
     };
-    addPurchase(p);
+    if (!addPurchase(p)) { alert("تعذّر الحفظ: مساحة التخزين في المتصفح ممتلئة — خذ نسخة احتياطية من الإعدادات."); return; }
     setPurchases(getPurchases());
     resetForm();
   }
@@ -129,11 +129,11 @@ export default function PurchasesPage() {
           <div className="mb-2 text-xs font-semibold text-muted">البنود</div>
           <div className="flex flex-col gap-2">
             {items.map((it, i) => (
-              <div key={i} className="grid grid-cols-[1fr_80px_110px_110px_auto] items-center gap-2">
+              <div key={i} className="grid grid-cols-[minmax(0,1fr)_64px_88px_auto] items-center gap-2 sm:grid-cols-[1fr_80px_110px_110px_auto]">
                 <input value={it.name} onChange={(e) => setItem(i, { name: e.target.value })} placeholder="الصنف" className={inp} />
                 <input type="number" step="any" min="0" value={it.qty} onChange={(e) => setItem(i, { qty: Number(e.target.value) })} placeholder="الكمية" className={`${inp} tabular-nums`} />
                 <input type="number" step="any" min="0" value={it.unitPrice} onChange={(e) => setItem(i, { unitPrice: Number(e.target.value) })} placeholder="سعر الوحدة" className={`${inp} tabular-nums`} />
-                <div className="text-sm tabular-nums text-muted">{money(Number(it.qty || 0) * Number(it.unitPrice || 0))} د.ع</div>
+                <div className="hidden text-sm tabular-nums text-muted sm:block">{money(Number(it.qty || 0) * Number(it.unitPrice || 0))} د.ع</div>
                 <button onClick={() => removeRow(i)} className="grid size-8 place-items-center rounded-lg border border-line text-red-600 hover:bg-red-50" title="حذف البند"><X className="size-4" /></button>
               </div>
             ))}
@@ -167,7 +167,7 @@ export default function PurchasesPage() {
       </div>
 
       {/* List */}
-      <div className="overflow-hidden rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)]">
+      <div className="overflow-x-auto rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)]">
         <table className="w-full text-sm">
           <thead className="border-b border-line text-right text-muted">
             <tr>

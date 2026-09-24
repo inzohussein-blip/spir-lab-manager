@@ -137,7 +137,7 @@ export default function InventoryPage() {
                     <div className="flex flex-wrap gap-1">
                       {low && <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-600"><AlertTriangle className="size-3" /> نقص</span>}
                       {expired && <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-600">منتهي</span>}
-                      {soon && !expired && <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700"><CalendarClock className="size-3" /> {d} يوم</span>}
+                      {soon && !expired && <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700"><CalendarClock className="size-3" /> {d === 0 ? "ينتهي اليوم" : `${d} يوم`}</span>}
                       {!low && !expired && !soon && <span className="rounded-full bg-teal-50 px-2 py-0.5 text-xs text-brand-dark">جيد</span>}
                     </div>
                   </td>

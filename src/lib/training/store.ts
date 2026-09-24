@@ -220,7 +220,8 @@ export function contentMatch(t: TrainingTest, term: string): { field: string; be
 /** Review status from the next-review date: overdue, due within 30 days, or fine. */
 export function reviewStatus(t: TrainingTest): "overdue" | "soon" | "ok" | null {
   if (!t.nextReview) return null;
-  const days = Math.floor((new Date(t.nextReview + "T00:00:00").getTime() - Date.now()) / 86400000);
+  const now = new Date();
+  const days = Math.round((new Date(t.nextReview + "T00:00:00").getTime() - new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()) / 86400000);
   return days < 0 ? "overdue" : days <= 30 ? "soon" : "ok";
 }
 /** Create empty test cards from pasted lines: "الاسم | English | ABBR | التصنيف". Skips existing names. */

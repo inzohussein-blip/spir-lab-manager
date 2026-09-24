@@ -3,9 +3,9 @@ import { PurchasingSidebar } from "@/components/purchasing/PurchasingSidebar";
 
 export default function StoreLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-screen">
+    <div className="min-h-screen md:flex">
       <PurchasingSidebar />
-      <main className="flex-1 p-5 md:p-7">{children}</main>
+      <main className="min-w-0 flex-1 p-4 md:p-7">{children}</main>
     </div>
   );
 }

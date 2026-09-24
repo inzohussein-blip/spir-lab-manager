@@ -77,7 +77,7 @@ export default function StationSettingsPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `station-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `station-backup-${new Date().toLocaleDateString("en-CA")}.json`;
     a.click();
     URL.revokeObjectURL(url);
     markBackupNow();
@@ -92,7 +92,7 @@ export default function StationSettingsPage() {
     reader.onload = () => {
       try {
         const ok = importBackup(JSON.parse(String(reader.result)));
-        setMsg(ok ? "تم الاستيراد بنجاح — سيُعاد التحميل." : "ملف غير صالح.");
+        setMsg(ok ? "تم الاستيراد بنجاح — سيُعاد التحميل." : "لم يكتمل الاستيراد: الملف غير صالح أو أن مساحة التخزين في المتصفح لا تكفي.");
         if (ok) setTimeout(() => location.reload(), 900);
       } catch {
         setMsg("تعذّرت قراءة الملف.");

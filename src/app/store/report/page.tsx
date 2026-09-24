@@ -75,7 +75,7 @@ export default function PurchasingReportPage() {
             <h2 className="text-xl font-bold text-amber-700">{settings.orgName || "منظومة المشتريات"}</h2>
             <p className="text-sm text-gray-600">{title}</p>
           </div>
-          <div className="text-left text-xs text-gray-600">تاريخ الإصدار: {new Date().toISOString().slice(0, 10)}</div>
+          <div className="text-left text-xs text-gray-600">تاريخ الإصدار: {new Date().toLocaleDateString("en-CA")}</div>
         </div>
 
         {/* Summary */}

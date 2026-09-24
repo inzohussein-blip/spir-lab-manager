@@ -44,7 +44,7 @@ function SettingsInner() {
       const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = `training-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = `training-backup-${new Date().toLocaleDateString("en-CA")}.json`;
       document.body.appendChild(a);
       a.click();
       a.remove();
