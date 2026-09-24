@@ -102,7 +102,6 @@ export default async function ReportPage({
             <img src="/lab-logo.png" alt="" width={64} height={64} className="size-16 object-contain" />
             <div>
               <h1 className="text-2xl font-extrabold" style={{ color: "#5a2a82" }}>مختبر التحليلات المرضية</h1>
-              <p className="text-sm font-medium" style={{ color: "#9c7c1e" }}>دبلوم تحليلات مرضية / بكالوريوس علوم حياة</p>
             </div>
           </div>
           <div className="text-center">
@@ -251,12 +250,6 @@ export default async function ReportPage({
             </div>
           </div>
 
-          <div
-            className="mt-6 rounded-md px-4 py-2 text-center text-xs font-medium text-white"
-            style={{ background: "#5a2a82", WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" }}
-          >
-            النجف الأشرف - حي ميسان - مقابل بريد ميسان / 0789038080
-          </div>
         </div>
       </div>
     </div>

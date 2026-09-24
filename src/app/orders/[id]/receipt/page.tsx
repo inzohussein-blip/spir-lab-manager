@@ -57,7 +57,6 @@ export default async function ReceiptPage({ params }: { params: { id: string } }
       >
         <div className="text-center">
           <div className="text-base font-bold" style={{ color: "#5a2a82" }}>مختبر التحليلات المرضية</div>
-          <div className="text-[10px] text-gray-600">دبلوم تحليلات مرضية / بكالوريوس علوم حياة</div>
           <div className="mt-0.5 text-[11px] text-gray-600">وصل استلام طلب فحص</div>
         </div>
 
@@ -114,12 +113,6 @@ export default async function ReceiptPage({ params }: { params: { id: string } }
           <span className="mt-1 block h-9 w-full" dangerouslySetInnerHTML={{ __html: barcode }} />
         )}
         <div className="text-center font-mono text-[11px]">{order.accession_no}</div>
-
-        <div className="my-2 border-t border-dashed border-gray-400" />
-        <div className="text-center text-[10px] text-gray-600">
-          النجف الأشرف - حي ميسان - مقابل بريد ميسان
-          <div>0789038080</div>
-        </div>
       </div>
     </div>
   );
