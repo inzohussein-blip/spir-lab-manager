@@ -207,9 +207,11 @@ function StationEntryPage() {
   // Optional: auto-calculated derived tests (Settings). A value typed by hand is never overwritten.
   const [autoVals, setAutoVals] = useState<Record<string, string>>({});
   const derived = useMemo(
-    () => (settings.autoDerived ? computeDerived(chosen, results) : {}),
+    () => (settings.autoDerived
+      ? computeDerived(chosen, results, { egfr: settings.derivedEgfr === true, sampson: settings.derivedSampson === true, age, gender })
+      : {}),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [settings.autoDerived, selected, tests, results]
+    [settings.autoDerived, settings.derivedEgfr, settings.derivedSampson, age, gender, selected, tests, results]
   );
   useEffect(() => {
     if (!settings.autoDerived) return;

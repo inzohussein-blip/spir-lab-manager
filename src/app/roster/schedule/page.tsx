@@ -30,7 +30,7 @@ export default function SchedulePage() {
 
   const days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
   const leaves = getLeaves();
-  const reload = () => setSched(getSchedule());
+  const reload = () => { setSched(getSchedule()); setSubs(getSubs()); };
   function set(d: string, sid: string, v: string) { setShift(d, sid, v); reload(); }
   function copyPrev() {
     if (!window.confirm("نسخ جدول الأسبوع السابق إلى هذا الأسبوع؟ سيُستبدل ما هو موجود.")) return;

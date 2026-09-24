@@ -53,6 +53,7 @@ export function setShift(date: string, staffId: string, shiftId: string | "") {
   const s = getSchedule();
   if (shiftId) s[`${date}|${staffId}`] = shiftId; else delete s[`${date}|${staffId}`];
   writeLS(K.schedule, s);
+  pruneSubs([date]);
 }
 /** Copy the 7 days starting at `fromStart` onto the week starting at `toStart`. */
 export function copyWeek(fromStart: string, toStart: string) {
@@ -63,6 +64,7 @@ export function copyWeek(fromStart: string, toStart: string) {
     for (const [k, v] of Object.entries(s)) if (k.startsWith(from + "|")) s[`${to}|${k.slice(from.length + 1)}`] = v;
   }
   writeLS(K.schedule, s);
+  pruneSubs(Array.from({ length: 7 }, (_, i) => addDays(toStart, i)));
 }
 
 // Substitutes: "date|staffId" (the person being replaced) → who covers, and which shift.
@@ -74,6 +76,19 @@ export function setSub(date: string, staffId: string, sub: Substitute | null) {
   const s = getSubs();
   if (sub) s[`${date}|${staffId}`] = sub; else delete s[`${date}|${staffId}`];
   writeLS(K.subs, s);
+}
+/** Drop substitutes that no longer make sense on `dates`: the replaced person has no
+ *  real shift any more (removed or set to rest) and is not on leave. */
+export function pruneSubs(dates: string[]) {
+  const subs = getSubs(), sched = getSchedule(), leaves = getLeaves(), shifts = getShifts();
+  let changed = false;
+  for (const k of Object.keys(subs)) {
+    const [date, staffId] = k.split("|");
+    if (!dates.includes(date) || leaveOn(leaves, staffId, date)) continue;
+    const own = sched[k];
+    if (!own || own === OFF || !shifts.some((x) => x.id === own)) { delete subs[k]; changed = true; }
+  }
+  if (changed) writeLS(K.subs, subs);
 }
 /** Whom `staffId` covers on `date` (first match), with the covered shift id. */
 export function coverOf(subs: Subs, sched: Schedule, date: string, staffId: string): { forId: string; shiftId?: string } | undefined {

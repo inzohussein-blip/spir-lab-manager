@@ -176,6 +176,22 @@ export default function StationSettingsPage() {
           label="الحساب التلقائي للفحوصات المشتقة"
           desc="عند اختيار الفحص المشتق مع فحوصاته تُحسب النتيجة تلقائياً ويمكن تعديلها يدوياً: البيليروبين غير المباشر، الغلوبيولين، VLDL، LDL (Friedewald)، BUN، HOMA-IR."
         />
+        {s.autoDerived === true && (
+          <div className="mt-3 flex flex-col gap-3 border-s-2 border-line ps-4">
+            <Toggle
+              checked={s.derivedEgfr === true}
+              onChange={(v) => setOption({ derivedEgfr: v })}
+              label="حساب eGFR (CKD-EPI 2021)"
+              desc="من الكرياتينين (mg/dL) والعمر بالسنوات والجنس — للبالغين 18 سنة فأكثر."
+            />
+            <Toggle
+              checked={s.derivedSampson === true}
+              onChange={(v) => setOption({ derivedSampson: v })}
+              label="حساب LDL بمعادلة Sampson عندما تكون TG بين 400 و800"
+              desc="بدل ترك LDL فارغاً حين لا تصلح معادلة Friedewald. فوق 800 يبقى فارغاً ويُنصح بالقياس المباشر."
+            />
+          </div>
+        )}
         <div className="h-3" />
         <Toggle
           checked={s.collapseGroups === true}

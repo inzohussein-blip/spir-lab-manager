@@ -116,6 +116,10 @@ export interface StationSettings {
   collapseGroups?: boolean;
   /** Auto-calculate derived tests (LDL, VLDL, Globulin…) — off by default. */
   autoDerived?: boolean;
+  /** Under autoDerived: eGFR by CKD-EPI 2021 — off by default. */
+  derivedEgfr?: boolean;
+  /** Under autoDerived: LDL by Sampson when TG 400–800 — off by default. */
+  derivedSampson?: boolean;
 }
 
 function read<T>(key: string, fallback: T): T {

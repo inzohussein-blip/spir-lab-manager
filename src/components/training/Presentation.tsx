@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight, X, Maximize2, Minimize2, AlertTriangle, Lightbulb } from "lucide-react";
 import type { TrainingTest, Tube, Tool } from "@/lib/training/store";
 import { Img } from "./Img";
@@ -12,7 +12,8 @@ import { RichText } from "./RichText";
  * Slides are always light (projector friendly) whatever the app theme.
  */
 
-interface Slide { title: string; body: ReactNode }
+/** `fit`: text-only slide whose font grows (or shrinks) to fill the slide. */
+interface Slide { title: string; body: ReactNode; fit?: boolean }
 
 const chunk = <T,>(a: T[], n: number): T[][] => Array.from({ length: Math.ceil(a.length / n) }, (_, i) => a.slice(i * n, i * n + n));
 
@@ -48,8 +49,9 @@ export function Presentation({ test, all, tubes, tools, onClose }: {
     if (test.purpose?.trim() || test.summary?.trim()) {
       s.push({
         title: "لماذا يُطلب؟ ومبدأ الفحص",
+        fit: true,
         body: (
-          <div className="grid h-full gap-[1em] md:grid-cols-2">
+          <div className="grid gap-[1em] md:grid-cols-2">
             {test.purpose?.trim() && <Box label="لماذا يُطلب هذا الفحص؟"><RichText text={test.purpose} /></Box>}
             {test.summary?.trim() && <Box label="الملخّص والمبدأ"><RichText text={test.summary} /></Box>}
           </div>
@@ -62,8 +64,9 @@ export function Presentation({ test, all, tubes, tools, onClose }: {
     if (sampleRows.length || myTubes.length || myTools.length) {
       s.push({
         title: "العينة والتيوبات والأدوات",
+        fit: true,
         body: (
-          <div className="grid h-full gap-[1em] md:grid-cols-2">
+          <div className="grid gap-[1em] md:grid-cols-2">
             <Box label="العينة">
               {sampleRows.length === 0 ? "—" : sampleRows.map(([k, v]) => (
                 <div key={k} className="mb-[0.5em]"><span className="font-bold text-brand-dark">{k}: </span><RichText text={v} className="inline" /></div>
@@ -100,6 +103,7 @@ export function Presentation({ test, all, tubes, tools, onClose }: {
       const g = group;
       s.push({
         title: "خطوات العمل",
+        fit: true,
         body: <div className="flex flex-col gap-[0.7em]">{g.map((x) => <Step key={x.id} n={x.n} warn={x.warn} text={x.text} />)}</div>,
       });
       group = [];
@@ -127,6 +131,7 @@ export function Presentation({ test, all, tubes, tools, onClose }: {
     for (const g of chunk(test.tips.filter((t) => t.trim()), 4)) {
       s.push({
         title: "ملاحظات من ذهب",
+        fit: true,
         body: (
           <ul className="flex flex-col gap-[0.7em]">
             {g.map((t, n) => (
@@ -143,6 +148,7 @@ export function Presentation({ test, all, tubes, tools, onClose }: {
     for (const g of chunk((test.troubles ?? []).filter((r) => r.problem.trim()), 4)) {
       s.push({
         title: "حل المشاكل",
+        fit: true,
         body: (
           <table className="w-full border-collapse">
             <thead><tr className="bg-slate-100 text-right"><th className="p-[0.5em]">المشكلة</th><th className="p-[0.5em]">السبب المحتمل</th><th className="p-[0.5em]">الحل</th></tr></thead>
@@ -165,8 +171,9 @@ export function Presentation({ test, all, tubes, tools, onClose }: {
     if (normals.length || test.high?.trim() || test.low?.trim() || test.resultNotes?.trim()) {
       s.push({
         title: "النتائج والتفسير",
+        fit: true,
         body: (
-          <div className="grid h-full gap-[1em] md:grid-cols-2">
+          <div className="grid gap-[1em] md:grid-cols-2">
             <Box label="القيم الطبيعية">
               {normals.length === 0 ? "—" : normals.map((n, k) => (
                 <div key={k} className="flex justify-between gap-[1em] border-b border-slate-200 py-[0.35em] last:border-0">
@@ -203,6 +210,7 @@ export function Presentation({ test, all, tubes, tools, onClose }: {
     for (const g of chunk(links, 5)) {
       s.push({
         title: "يرتبط بـ",
+        fit: true,
         body: (
           <div className="flex flex-col gap-[0.6em]">
             {g.map((l) => (
@@ -250,6 +258,30 @@ export function Presentation({ test, all, tubes, tools, onClose }: {
   }, [last, close]);
 
   const slide = slides[i];
+
+  // Text slides: scale the font so the content fills the slide without overflowing.
+  const boxRef = useRef<HTMLDivElement>(null);
+  const innerRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const box = boxRef.current, inner = innerRef.current;
+    if (!box || !inner) return;
+    if (!slide.fit) { inner.style.fontSize = ""; return; }
+    const fit = () => {
+      const cs = getComputedStyle(box);
+      const room = box.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+      let lo = 0.55, hi = 1.8;
+      for (let n = 0; n < 9; n++) {
+        const mid = (lo + hi) / 2;
+        inner.style.fontSize = `${mid}em`;
+        if (inner.scrollHeight <= room) lo = mid; else hi = mid;
+      }
+      inner.style.fontSize = `${lo}em`;
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(box);
+    return () => ro.disconnect();
+  }, [slide]);
   return (
     <div className="no-print fixed inset-0 z-[60] flex flex-col bg-slate-950 text-white" role="dialog" aria-label="وضع العرض">
       <div className="flex items-center justify-between gap-3 px-4 py-2 text-sm text-white/70">
@@ -271,7 +303,9 @@ export function Presentation({ test, all, tubes, tools, onClose }: {
               <span className="ms-auto text-[0.8em] text-slate-400">{test.abbr || test.name_ar}</span>
             </div>
           )}
-          <div className="min-h-0 flex-1 overflow-hidden px-[1.6em] py-[1em] text-[1.15em] leading-relaxed">{slide.body}</div>
+          <div ref={boxRef} className="min-h-0 flex-1 overflow-hidden px-[1.6em] py-[1em] text-[1.15em] leading-relaxed">
+            <div ref={innerRef} className={slide.fit ? "" : "h-full"}>{slide.body}</div>
+          </div>
           <div className="h-[0.35em] bg-slate-100"><div className="h-full bg-brand transition-all" style={{ width: `${((i + 1) / slides.length) * 100}%` }} /></div>
         </div>
       </div>
