@@ -25,6 +25,7 @@ export interface RosterSettings {
 const K = {
   staff: "roster.staff.v1", shifts: "roster.shifts.v1", schedule: "roster.schedule.v1", attendance: "roster.attendance.v1",
   leaves: "roster.leaves.v1", advances: "roster.advances.v1", settings: "roster.settings.v1", seeded: "roster.seeded.v1",
+  subs: "roster.subs.v1",
 };
 export const OFF = "off";
 export const STAFF_COLORS = ["#0284c7", "#16a34a", "#d97706", "#db2777", "#7c3aed", "#0d9488", "#dc2626", "#4f46e5"];
@@ -62,6 +63,27 @@ export function copyWeek(fromStart: string, toStart: string) {
     for (const [k, v] of Object.entries(s)) if (k.startsWith(from + "|")) s[`${to}|${k.slice(from.length + 1)}`] = v;
   }
   writeLS(K.schedule, s);
+}
+
+// Substitutes: "date|staffId" (the person being replaced) → who covers, and which shift.
+export interface Substitute { by: string; shiftId?: string; note?: string }
+export type Subs = Record<string, Substitute>;
+export function getSubs(): Subs { ensureSeed(); return readLS<Subs>(K.subs, {}); }
+export const subFor = (subs: Subs, date: string, staffId: string): Substitute | undefined => subs[`${date}|${staffId}`];
+export function setSub(date: string, staffId: string, sub: Substitute | null) {
+  const s = getSubs();
+  if (sub) s[`${date}|${staffId}`] = sub; else delete s[`${date}|${staffId}`];
+  writeLS(K.subs, s);
+}
+/** Whom `staffId` covers on `date` (first match), with the covered shift id. */
+export function coverOf(subs: Subs, sched: Schedule, date: string, staffId: string): { forId: string; shiftId?: string } | undefined {
+  for (const [k, v] of Object.entries(subs)) {
+    if (v.by !== staffId || !k.startsWith(date + "|")) continue;
+    const forId = k.slice(date.length + 1);
+    const own = shiftOn(sched, date, forId);
+    return { forId, shiftId: v.shiftId ?? (own && own !== OFF ? own : undefined) };
+  }
+  return undefined;
 }
 
 export function getAttendance(): Attendance[] { ensureSeed(); return readLS<Attendance[]>(K.attendance, []); }
@@ -113,31 +135,52 @@ export function weekStartOf(date: string, weekStart: number): string {
   return addDays(date, -diff);
 }
 
-export type DayStatus = "present" | "late" | "absent" | "leave" | "off" | "pending" | "unscheduled";
+export type DayStatus = "present" | "late" | "absent" | "leave" | "off" | "pending" | "unscheduled" | "replaced";
 export const STATUS_LABEL: Record<DayStatus, string> = {
-  present: "حاضر", late: "متأخر", absent: "غائب", leave: "إجازة", off: "راحة", pending: "لم يحضر بعد", unscheduled: "غير مجدول",
+  present: "حاضر", late: "متأخر", absent: "غائب", leave: "إجازة", off: "راحة", pending: "لم يحضر بعد", unscheduled: "غير مجدول", replaced: "مُستبدَل",
 };
-/** Attendance status for one staff member on one day. */
-export function dayStatus(staffId: string, date: string, ctx: { sched: Schedule; shifts: ShiftType[]; att: Attendance[]; leaves: Leave[]; grace: number }): { status: DayStatus; lateMin: number; workedMin: number; shift?: ShiftType } {
-  if (leaveOn(ctx.leaves, staffId, date)) return { status: "leave", lateMin: 0, workedMin: 0 };
+export interface RosterCtx { sched: Schedule; shifts: ShiftType[]; att: Attendance[]; leaves: Leave[]; grace: number; subs?: Subs }
+export function rosterCtx(): RosterCtx {
+  return { sched: getSchedule(), shifts: getShifts(), att: getAttendance(), leaves: getLeaves(), grace: getSettings().graceMin, subs: getSubs() };
+}
+export interface DayResult {
+  status: DayStatus; lateMin: number; workedMin: number; shift?: ShiftType;
+  /** Who covers this person today (leave / replaced). */
+  coveredBy?: string;
+  /** This person covers someone else today. */
+  covering?: { forId: string; shift?: ShiftType };
+}
+/** Attendance status for one staff member on one day. A substitute with no shift of
+ *  their own takes the covered shift; the replaced person is not counted absent. */
+export function dayStatus(staffId: string, date: string, ctx: RosterCtx): DayResult {
+  const subs = ctx.subs ?? {};
+  const sub = subFor(subs, date, staffId);
+  const cov = coverOf(subs, ctx.sched, date, staffId);
+  const covering = cov ? { forId: cov.forId, shift: ctx.shifts.find((s) => s.id === cov.shiftId) } : undefined;
+  if (leaveOn(ctx.leaves, staffId, date)) return { status: "leave", lateMin: 0, workedMin: 0, coveredBy: sub?.by };
   const sid = shiftOn(ctx.sched, date, staffId);
   const a = ctx.att.find((x) => x.staffId === staffId && x.date === date);
   const worked = a?.in && a?.out ? minutesBetween(a.in, a.out) : 0;
-  if (sid === OFF) return { status: "off", lateMin: 0, workedMin: worked };
-  const shift = ctx.shifts.find((s) => s.id === sid);
-  if (!shift) return { status: a?.in ? "present" : "unscheduled", lateMin: 0, workedMin: worked };
-  if (!a?.in) return { status: date < todayYmd() ? "absent" : "pending", lateMin: 0, workedMin: 0, shift };
+  const shift = ctx.shifts.find((s) => s.id === sid) ?? covering?.shift;
+  if (!shift) {
+    if (sid === OFF) return { status: "off", lateMin: 0, workedMin: worked, covering };
+    return { status: a?.in ? "present" : "unscheduled", lateMin: 0, workedMin: worked, covering };
+  }
+  if (!a?.in) {
+    if (sub) return { status: "replaced", lateMin: 0, workedMin: 0, shift, coveredBy: sub.by };
+    return { status: date < todayYmd() ? "absent" : "pending", lateMin: 0, workedMin: 0, shift, covering };
+  }
   const late = minutesBetween(shift.start, a.in);
   const lateMin = late < 12 * 60 && late > ctx.grace ? late : 0; // ignore "early" arrivals wrapping past midnight
-  return { status: lateMin ? "late" : "present", lateMin, workedMin: worked, shift };
+  return { status: lateMin ? "late" : "present", lateMin, workedMin: worked, shift, covering };
 }
 
 /** Month summary for one staff member (YYYY-MM). */
 export function monthSummary(staffId: string, ym: string) {
-  const ctx = { sched: getSchedule(), shifts: getShifts(), att: getAttendance(), leaves: getLeaves(), grace: getSettings().graceMin };
+  const ctx = rosterCtx();
   const [y, m] = ym.split("-").map(Number);
   const days = new Date(y, m, 0).getDate();
-  const s = { present: 0, late: 0, absent: 0, leave: 0, lateMin: 0, workedMin: 0 };
+  const s = { present: 0, late: 0, absent: 0, leave: 0, lateMin: 0, workedMin: 0, covered: 0, replaced: 0 };
   for (let i = 1; i <= days; i++) {
     const d = `${ym}-${String(i).padStart(2, "0")}`;
     if (d > todayYmd()) break;
@@ -146,6 +189,8 @@ export function monthSummary(staffId: string, ym: string) {
     if (r.status === "late") { s.late++; s.lateMin += r.lateMin; }
     if (r.status === "absent") s.absent++;
     if (r.status === "leave") s.leave++;
+    if (r.status === "replaced") s.replaced++;
+    if (r.covering && (r.status === "present" || r.status === "late")) s.covered++;
     s.workedMin += r.workedMin;
   }
   return s;
@@ -156,7 +201,7 @@ export function exportBackup() {
   return {
     app: "spir-roster", version: 1, exported_at: new Date().toISOString(),
     staff: getStaff(), shifts: getShifts(), schedule: getSchedule(), attendance: getAttendance(),
-    leaves: getLeaves(), advances: getAdvances(), settings: getSettings(),
+    leaves: getLeaves(), advances: getAdvances(), subs: getSubs(), settings: getSettings(),
   };
 }
 export function importBackup(data: unknown): boolean {
@@ -164,6 +209,7 @@ export function importBackup(data: unknown): boolean {
   if (!b || b.app !== "spir-roster" || !Array.isArray(b.staff)) return false;
   writeLS(K.staff, b.staff); writeLS(K.shifts, b.shifts ?? []); writeLS(K.schedule, b.schedule ?? {});
   writeLS(K.attendance, b.attendance ?? []); writeLS(K.leaves, b.leaves ?? []); writeLS(K.advances, b.advances ?? []);
+  writeLS(K.subs, b.subs ?? {});
   if (b.settings) writeLS(K.settings, b.settings);
   writeLS(K.seeded, true);
   return true;

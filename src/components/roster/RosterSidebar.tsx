@@ -2,7 +2,7 @@
 
 import { Users, LayoutDashboard, CalendarDays, Clock, Plane, Wallet, UserCog, Settings } from "lucide-react";
 import { AppSidebar, type SideBadges, type SideSection } from "@/components/local/AppSidebar";
-import { getStaff, getSchedule, getShifts, getAttendance, getLeaves, getSettings, dayStatus } from "@/lib/roster/store";
+import { getStaff, rosterCtx, dayStatus } from "@/lib/roster/store";
 import { todayYmd } from "@/lib/local/util";
 
 const SECTIONS: SideSection[] = [
@@ -11,7 +11,7 @@ const SECTIONS: SideSection[] = [
     { href: "/roster/attendance", label: "الحضور والانصراف", hint: "التأخير والغياب والساعات", icon: Clock },
   ] },
   { title: "التخطيط", items: [
-    { href: "/roster/schedule", label: "جدول المناوبات", hint: "الأسبوع وطباعته", icon: CalendarDays },
+    { href: "/roster/schedule", label: "جدول المناوبات", hint: "الأسبوع والبدلاء وطباعته", icon: CalendarDays },
     { href: "/roster/leaves", label: "الإجازات", hint: "الطلبات والأرصدة", icon: Plane },
     { href: "/roster/payroll", label: "السلف والرواتب", hint: "كشف الراتب الشهري", icon: Wallet },
   ] },
@@ -23,7 +23,7 @@ const SECTIONS: SideSection[] = [
 
 function badges(): SideBadges {
   const d = todayYmd();
-  const ctx = { sched: getSchedule(), shifts: getShifts(), att: getAttendance(), leaves: getLeaves(), grace: getSettings().graceMin };
+  const ctx = rosterCtx();
   const pending = getStaff().filter((s) => s.active && dayStatus(s.id, d, ctx).status === "pending").length;
   return { "/roster/attendance": { n: pending, tone: "warn" } };
 }
