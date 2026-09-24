@@ -209,7 +209,7 @@ export default function StationVisitsPage() {
             rows={sel.results.map((r) => ({ key: r.testId, name: r.name_ar, value: r.value, unit: r.unit, test: byId(r.testId) }))}
             prev={prev}
             printPrev={printPrev}
-            emptyText="لا نتائج"
+            emptyText="No results"
           />
         </>
       )}

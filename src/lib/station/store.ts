@@ -7,6 +7,8 @@
  * window or blocked storage never throws.
  */
 
+import { clearOldDefault } from "@/lib/local/util";
+
 export type Gender = "male" | "female" | "";
 
 /** A test's fixed reference range — entered once in the catalog.
@@ -100,6 +102,8 @@ const K_STOCK = "station.stock.v1";
 const K_DOCTORS = "station.doctors.v1";
 const K_BACKUP_AT = "station.backupAt.v1";
 const K_CATALOG_VER = "station.catalogVersion.v1";
+/** One-time fix: the urine test's built-in range text became English ("Normal"). */
+const K_FIX_GUE = "station.fixGueNormal.v1";
 /** Bump when DEFAULT_TESTS gains tests, so existing installs receive them. */
 const CATALOG_VERSION = 2;
 
@@ -154,6 +158,12 @@ export function getTests(): StationTest[] {
     write(K_TESTS, seed);
     write(K_CATALOG_VER, CATALOG_VERSION);
     return seed;
+  }
+  if (!read<boolean>(K_FIX_GUE, false)) {
+    const fixed = t.map((x) => (x.code === "GUE" && x.normal.kind === "text" && x.normal.text === "طبيعي" ? { ...x, normal: { kind: "text" as const, text: "Normal" } } : x));
+    write(K_TESTS, fixed);
+    write(K_FIX_GUE, true);
+    t.splice(0, t.length, ...fixed);
   }
   if (read<number>(K_CATALOG_VER, 1) < CATALOG_VERSION) {
     const merged = mergeDefaultTests(t);
@@ -223,12 +233,14 @@ export function savePages(pages: StationPage[]): void {
 
 // ── Settings ─────────────────────────────────────────────────────────────────
 export function getSettings(): StationSettings {
-  return read<StationSettings>(K_SETTINGS, {
+  const s = read<StationSettings>(K_SETTINGS, {
     labName: "مختبر التحليلات المرضية",
-    labSubtitle: "دبلوم تحليلات مرضية / بكالوريوس علوم حياة",
-    footer: "النجف الأشرف - حي ميسان - مقابل بريد ميسان / 0789038080",
+    labSubtitle: "",
+    footer: "",
     logo: "/lab-logo.png",
   });
+  // Subtitle and address/phone are entered by the lab in Settings (no built-in text).
+  return { ...s, labSubtitle: clearOldDefault(s.labSubtitle) ?? "", footer: clearOldDefault(s.footer) };
 }
 export function saveSettings(s: StationSettings): void {
   write(K_SETTINGS, s);
@@ -686,7 +698,7 @@ function DEFAULT_TESTS(): DefaultTest[] {
 
   cat = "أدرار";
   sample = "إدرار";
-  add("GUE", "تحليل البول العام", "General Urine Examination", "", { kind: "text", text: "طبيعي" });
+  add("GUE", "تحليل البول العام", "General Urine Examination", "", { kind: "text", text: "Normal" });
 
   return list;
 }

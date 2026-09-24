@@ -21,6 +21,24 @@ export interface ReportRow {
 
 const ymd = (ms: number) => new Date(ms).toLocaleDateString("en-CA");
 
+/** English headings for the built-in categories (the printed results table is English). */
+const CATEGORY_EN: Record<string, string> = {
+  "أمراض الدم": "Hematology",
+  "وظائف الكلى": "Renal Function Tests",
+  "وظائف الكبد": "Liver Function Tests",
+  "السكري": "Diabetes",
+  "الدهون": "Lipid Profile",
+  "الهرمونات": "Hormones",
+  "الفيتامينات والحديد": "Vitamins & Iron",
+  "العظام والمعادن": "Bone & Minerals",
+  "المصليات والمناعة": "Serology & Immunology",
+  "حساسية الحنطة": "Wheat Allergy / Celiac",
+  "فحوصات TORCH": "TORCH Panel",
+  "الفيروسات": "Virology",
+  "أدرار": "Urinalysis",
+  "فحوصات أخرى": "Other Tests",
+};
+
 /**
  * The printable A4/A5 result sheet, shared by the entry screen and reprints.
  *
@@ -31,7 +49,7 @@ const ymd = (ms: number) => new Date(ms).toLocaleDateString("en-CA");
  */
 export function ReportSheet({
   settings, paper = "A4", date, accession, patient, referrer, rows, prev = {}, printPrev = false,
-  emptyText = "لم تُختَر فحوصات بعد", className = "",
+  emptyText = "No tests selected", className = "",
 }: {
   settings: StationSettings;
   paper?: "A4" | "A5";
@@ -51,7 +69,8 @@ export function ReportSheet({
   // Group rows by catalog category, keeping first-appearance order.
   const groups: { cat: string; rows: ReportRow[] }[] = [];
   for (const r of rows) {
-    const cat = r.test?.category?.trim() || "فحوصات أخرى";
+    const ar = r.test?.category?.trim() || "فحوصات أخرى";
+    const cat = CATEGORY_EN[ar] ?? ar;
     const g = groups.find((x) => x.cat === cat);
     if (g) g.rows.push(r);
     else groups.push({ cat, rows: [r] });
@@ -99,7 +118,7 @@ export function ReportSheet({
             )}
             <div>
               <h2 className="text-2xl font-extrabold leading-tight" style={{ color: PURPLE }}>{settings.labName}</h2>
-              <p className="text-sm font-medium" style={{ color: GOLD_DARK }}>{settings.labSubtitle}</p>
+              {settings.labSubtitle && <p className="text-sm font-medium" style={{ color: GOLD_DARK }}>{settings.labSubtitle}</p>}
             </div>
           </div>
           <div className="text-left text-xs text-gray-600">
@@ -118,21 +137,21 @@ export function ReportSheet({
           {referrer && <div><span style={{ color: PURPLE }} className="font-semibold">الطبيب المُحيل:</span> {referrer}</div>}
         </div>
 
-        {/* Results */}
-        <div className="mt-5 flex items-center gap-2">
+        {/* Results — printed in English, left to right (the entry screen stays Arabic). */}
+        <div dir="ltr" className="mt-5 flex items-center gap-2">
           <span className="h-5 w-1.5 rounded" style={{ background: GOLD, ...exact }} />
-          <span className="text-sm font-bold" style={{ color: PURPLE }}>نتائج الفحوصات</span>
+          <span className="text-sm font-bold" style={{ color: PURPLE }}>Test Results</span>
         </div>
-        <div className="mt-2 overflow-hidden rounded-lg border" style={{ borderColor: GOLD }}>
+        <div dir="ltr" className="mt-2 overflow-hidden rounded-lg border text-left" style={{ borderColor: GOLD }}>
           <table className="w-full border-collapse text-sm">
             <thead>
-              <tr className="text-right text-xs text-white" style={{ background: PURPLE, ...exact }}>
-                <th className="px-3 py-2.5 font-semibold">الفحص</th>
-                <th className="px-3 py-2.5 font-semibold">النتيجة</th>
-                <th className="px-3 py-2.5 font-semibold">الوحدة</th>
-                <th className="px-3 py-2.5 font-semibold">المعدل الطبيعي</th>
-                {printPrev && <th className="px-3 py-2.5 font-semibold">النتيجة السابقة</th>}
-                <th className="px-3 py-2.5 font-semibold">الحالة</th>
+              <tr className="text-left text-xs text-white" style={{ background: PURPLE, ...exact }}>
+                <th className="px-3 py-2.5 font-semibold">Test</th>
+                <th className="px-3 py-2.5 font-semibold">Result</th>
+                <th className="px-3 py-2.5 font-semibold">Unit</th>
+                <th className="px-3 py-2.5 font-semibold">Reference Range</th>
+                {printPrev && <th className="px-3 py-2.5 font-semibold">Previous</th>}
+                <th className="px-3 py-2.5 font-semibold">Flag</th>
               </tr>
             </thead>
             <tbody>
@@ -152,10 +171,10 @@ export function ReportSheet({
                   const p = prev[r.key];
                   return (
                     <tr key={r.key} className="align-top" style={{ background: idx % 2 ? "#f7f3fb" : "#ffffff", ...exact }}>
-                      <td className="px-3 py-2 font-medium">{r.name}</td>
+                      <td className="px-3 py-2 font-medium">{t?.name_en?.trim() || r.name}</td>
                       <td className={`px-3 py-2 tabular-nums ${abn ? "font-bold" : "font-semibold"}`} style={abn ? { color: f === "H" ? "#b91c1c" : "#1d4ed8" } : undefined}>{r.value || "—"}</td>
-                      <td className="px-3 py-2 text-gray-600"><span dir="ltr">{r.unit || "—"}</span></td>
-                      <td className="px-3 py-2 text-gray-600"><span dir="ltr">{t ? rangeLabel(t.normal, gender, t.unit) : "—"}</span></td>
+                      <td className="px-3 py-2 text-gray-600">{r.unit || "—"}</td>
+                      <td className="px-3 py-2 text-gray-600">{t ? rangeLabel(t.normal, gender, t.unit) : "—"}</td>
                       {printPrev && (
                         <td className="px-3 py-2 text-gray-600">
                           {p ? (

@@ -6,7 +6,7 @@
  * in localStorage under "qc.*". Nothing here is shared with any other station.
  */
 
-import { readLS, writeLS, newId, todayYmd, addDays, addMonthsYmd, daysUntil } from "@/lib/local/util";
+import { readLS, writeLS, newId, todayYmd, addDays, addMonthsYmd, daysUntil, clearOldDefault } from "@/lib/local/util";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 export interface QcLevel { id: string; label: string; lot?: string; mean: number; sd: number; expiry?: string }
@@ -101,10 +101,11 @@ export function getDevices(): Device[] { ensureSeed(); return readLS<Device[]>(K
 export function saveDevices(d: Device[]) { writeLS(K.devices, d); }
 
 export function getSettings(): QcSettings {
-  return readLS<QcSettings>(K.settings, {
+  const s = readLS<QcSettings>(K.settings, {
     title: "مختبر التحليلات المرضية", subtitle: "سجلات الجودة والأجهزة",
-    footer: "النجف الأشرف - حي ميسان - مقابل بريد ميسان / 0789038080",
+    footer: "",
   });
+  return { ...s, footer: clearOldDefault(s.footer) }; // address/phone is typed by the lab
 }
 export function saveSettings(s: QcSettings) { writeLS(K.settings, s); }
 

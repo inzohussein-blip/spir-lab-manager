@@ -18,6 +18,14 @@ export function writeLS<T>(key: string, value: T): boolean {
     return false;
   }
 }
+/** Old built-in letterhead lines — the lab now types its own details in Settings.
+ *  A saved setting still holding one of these exact defaults is shown as empty. */
+const OLD_DEFAULT_LINES = new Set([
+  "دبلوم تحليلات مرضية / بكالوريوس علوم حياة",
+  "النجف الأشرف - حي ميسان - مقابل بريد ميسان / 0789038080",
+]);
+export const clearOldDefault = (v?: string) => (v && OLD_DEFAULT_LINES.has(v.trim()) ? "" : v);
+
 export function newId(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()

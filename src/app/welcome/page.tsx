@@ -17,7 +17,6 @@ export default function WelcomePage() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/lab-logo.png" alt="" className="size-24 object-contain" />
           <h1 className="mt-3 text-3xl font-extrabold" style={{ color: "#5a2a82" }}>مختبر التحليلات المرضية</h1>
-          <p className="mt-1 text-sm" style={{ color: "#9c7c1e" }}>دبلوم تحليلات مرضية / بكالوريوس علوم حياة</p>
           <p className="mt-4 max-w-xl text-sm text-muted">اختر النسخة التي تريد الدخول إليها. النسخة الكاملة قيد التطوير حالياً، والنسخ المجانية تعمل محلياً بدون إنترنت.</p>
         </div>
 
@@ -107,7 +106,6 @@ export default function WelcomePage() {
           </Link>
         </div>
 
-        <p className="mt-10 text-center text-xs text-muted">النجف الأشرف - حي ميسان - مقابل بريد ميسان / 0789038080</p>
       </div>
     </div>
   );

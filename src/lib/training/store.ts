@@ -8,6 +8,7 @@
  * Lab Station, Purchasing, or the admin panel.
  */
 
+import { clearOldDefault } from "@/lib/local/util";
 import { exportImages, importImages, exportImagesByIds, importImageIfMissing, type MediaExport } from "./media";
 
 export interface TStep { id: string; text: string; imageId?: string; warn?: boolean }
@@ -339,13 +340,14 @@ export function saveTools(list: Tool[]): void { write(K_TOOLS, list); }
 
 // ── Settings ─────────────────────────────────────────────────────────────────
 export function getSettings(): TrainingSettings {
-  return read<TrainingSettings>(K_SETTINGS, {
+  const s = read<TrainingSettings>(K_SETTINGS, {
     title: "مختبر التحليلات المرضية",
     subtitle: "دليل العمل والتدريب",
-    footer: "النجف الأشرف - حي ميسان - مقابل بريد ميسان / 0789038080",
+    footer: "",
     defaultSafety:
       "ارتدِ القفازات والصدرية ونظارات الوقاية.\nتعامل مع كل عينة على أنها معدية محتملة.\nتخلّص من الإبر في حاوية الأدوات الحادة فوراً ومن النفايات في الأكياس الصفراء.\nشغّل عينة سيطرة (QC) قبل عينات المرضى ودوّن نتيجتها.\nعقّم سطح العمل بعد الانتهاء.",
   });
+  return { ...s, footer: clearOldDefault(s.footer) }; // address/phone is typed by the lab
 }
 export function saveSettings(s: TrainingSettings): void { write(K_SETTINGS, s); }
 

@@ -6,7 +6,7 @@
  * nothing is shared with any other station.
  */
 
-import { readLS, writeLS, newId, todayYmd, addDays } from "@/lib/local/util";
+import { readLS, writeLS, newId, todayYmd, addDays, clearOldDefault } from "@/lib/local/util";
 
 export interface Staff { id: string; name: string; role?: string; phone?: string; hireDate?: string; salary?: number; color: string; active: boolean }
 export interface ShiftType { id: string; name: string; start: string; end: string; color: string }
@@ -130,11 +130,12 @@ export function getAdvances(): Advance[] { ensureSeed(); return readLS<Advance[]
 export function saveAdvances(a: Advance[]) { writeLS(K.advances, a); }
 
 export function getSettings(): RosterSettings {
-  return readLS<RosterSettings>(K.settings, {
+  const s = readLS<RosterSettings>(K.settings, {
     title: "مختبر التحليلات المرضية", subtitle: "شؤون الكادر والدوام",
-    footer: "النجف الأشرف - حي ميسان - مقابل بريد ميسان / 0789038080",
+    footer: "",
     graceMin: 10, annualLeaveDays: 20, weekStart: 6,
   });
+  return { ...s, footer: clearOldDefault(s.footer) }; // address/phone is typed by the lab
 }
 export function saveSettings(s: RosterSettings) { writeLS(K.settings, s); }
 
