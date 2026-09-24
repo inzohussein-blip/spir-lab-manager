@@ -5,13 +5,15 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
   IdCard, TestTubes, ListOrdered, Microscope, Network, Pencil, Printer, Trash2, Lightbulb, AlertTriangle,
-  ArrowRight, ArrowLeftRight, X, ShieldCheck, Star, Wrench, History, CalendarClock, type LucideIcon,
+  ArrowRight, ArrowLeftRight, X, ShieldCheck, Star, Wrench, History, CalendarClock, Share2, type LucideIcon,
 } from "lucide-react";
 import {
-  getTest, getTests, getTubes, getTools, getSettings, backlinks, deleteTest, getFavs, toggleFav, pushRecent, reviewStatus,
+  getTest, getTests, getTubes, getTools, getSettings, backlinks, deleteTest, getFavs, toggleFav, pushRecent, reviewStatus, exportTestPackage,
   type TrainingTest, type Tube, type Tool, type TrainingSettings,
 } from "@/lib/training/store";
 import { Img } from "@/components/training/Img";
+import { RichText } from "@/components/training/RichText";
+import { useEditLock } from "@/lib/training/lock";
 import { SopSheet, SopPrintStyle, SopFooter, sopCode } from "@/components/training/SopSheet";
 
 type Tab = "card" | "sample" | "procedure" | "results" | "links";
@@ -36,6 +38,7 @@ export default function TrainingTestPage() {
   const [zoom, setZoom] = useState<string | null>(null);
   const [withImages, setWithImages] = useState(true);
   const [fav, setFav] = useState(false);
+  const { canEdit } = useEditLock();
 
   useEffect(() => {
     setTest(getTest(id));
@@ -55,6 +58,18 @@ export default function TrainingTestPage() {
   const troubles = (test.troubles ?? []).filter((r) => r.problem.trim());
   const outLinks = test.links.map((l) => ({ ...l, t: all.find((x) => x.id === l.id) })).filter((l) => l.t);
 
+  async function share() {
+    const pkg = await exportTestPackage(test!.id);
+    if (!pkg) return;
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(pkg)], { type: "application/json" }));
+    a.download = `training-test-${((test!.abbr || test!.name_en || "test").replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "") || "test")}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000); // let the download start first
+  }
+
   function remove() {
     if (!window.confirm(`حذف «${test!.name_ar}» نهائياً؟ ستُزال روابطه من الفحوصات الأخرى أيضاً.`)) return;
     deleteTest(test!.id);
@@ -68,7 +83,7 @@ export default function TrainingTestPage() {
     </div>
   );
   const Row = ({ k, v }: { k: string; v?: string }) =>
-    v ? <div className="grid grid-cols-[120px_1fr] gap-2 border-b border-line py-2 text-sm last:border-0"><span className="text-muted">{k}</span><span className="whitespace-pre-line">{v}</span></div> : null;
+    v ? <div className="grid grid-cols-[120px_1fr] gap-2 border-b border-line py-2 text-sm last:border-0"><span className="text-muted">{k}</span><RichText text={v} /></div> : null;
 
   return (
     <div>
@@ -104,13 +119,20 @@ export default function TrainingTestPage() {
             <label className="inline-flex items-center gap-1.5 text-xs text-muted">
               <input type="checkbox" checked={withImages} onChange={(e) => setWithImages(e.target.checked)} className="accent-[var(--color-brand)]" /> الصور في الطباعة
             </label>
+            <button onClick={share} title="تصدير هذا الفحص مع صوره في ملف لمشاركته" className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas">
+              <Share2 className="size-4" /> مشاركة
+            </button>
             <button onClick={() => window.print()} className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3.5 py-2 text-sm font-semibold text-white hover:bg-brand-dark">
               <Printer className="size-4" /> طباعة البروسيجر
             </button>
-            <Link href={`/training/edit?id=${test.id}`} className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas">
-              <Pencil className="size-4" /> تعديل
-            </Link>
-            <button onClick={remove} title="حذف الفحص" className="grid size-9 place-items-center rounded-lg border border-line text-red-600 hover:bg-red-50"><Trash2 className="size-4" /></button>
+            {canEdit && (
+              <>
+                <Link href={`/training/edit?id=${test.id}`} className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas">
+                  <Pencil className="size-4" /> تعديل
+                </Link>
+                <button onClick={remove} title="حذف الفحص" className="grid size-9 place-items-center rounded-lg border border-line text-red-600 hover:bg-red-50"><Trash2 className="size-4" /></button>
+              </>
+            )}
           </div>
         </div>
 
@@ -128,8 +150,8 @@ export default function TrainingTestPage() {
 
         {tab === "card" && (
           <div className="grid gap-4 lg:grid-cols-2">
-            <Card title="لماذا يُطلب هذا الفحص؟" icon={IdCard}><p className="whitespace-pre-line text-sm">{test.purpose || "—"}</p></Card>
-            <Card title="ملخّص ومبدأ الفحص" icon={Microscope}><p className="whitespace-pre-line text-sm">{test.summary || "—"}</p></Card>
+            <Card title="لماذا يُطلب هذا الفحص؟" icon={IdCard}>{test.purpose ? <RichText text={test.purpose} className="text-sm" /> : <p className="text-sm">—</p>}</Card>
+            <Card title="ملخّص ومبدأ الفحص" icon={Microscope}>{test.summary ? <RichText text={test.summary} className="text-sm" /> : <p className="text-sm">—</p>}</Card>
             <div className="lg:col-span-2">
               <Card title="ضبط الوثيقة" icon={History}>
                 <div className="grid gap-2 text-sm sm:grid-cols-4">
@@ -154,7 +176,7 @@ export default function TrainingTestPage() {
               <div className="lg:col-span-2">
                 <Card title="ملاحظات من ذهب (الخبرة العملية)" icon={Lightbulb}>
                   <ul className="flex flex-col gap-2">
-                    {test.tips.map((t, i) => <li key={i} className="rounded-lg border-r-4 border-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-950">{t}</li>)}
+                    {test.tips.map((t, i) => <li key={i} className="rounded-lg border-r-4 border-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-950"><RichText text={t} /></li>)}
                   </ul>
                 </Card>
               </div>
@@ -214,7 +236,7 @@ export default function TrainingTestPage() {
                       <span className={`grid size-7 shrink-0 place-items-center rounded-full text-xs font-bold text-white ${s.warn ? "bg-red-600" : "bg-brand"}`}>{i + 1}</span>
                       <div className="min-w-0 flex-1">
                         {s.warn && <div className="mb-0.5 inline-flex items-center gap-1 text-xs font-bold text-red-700"><AlertTriangle className="size-3.5" /> تنبيه</div>}
-                        <div className="whitespace-pre-line text-sm">{s.text}</div>
+                        <RichText text={s.text} className="text-sm" />
                         {s.imageId && <Img id={s.imageId} className="mt-2 h-40 cursor-zoom-in rounded-lg border border-line bg-white" onClick={() => setZoom(s.imageId!)} />}
                       </div>
                     </li>
@@ -230,9 +252,9 @@ export default function TrainingTestPage() {
                     <tbody>
                       {troubles.map((r) => (
                         <tr key={r.id} className="border-b border-line align-top last:border-0">
-                          <td className="py-2 pe-3 font-semibold text-red-700">{r.problem}</td>
-                          <td className="py-2 pe-3">{r.cause}</td>
-                          <td className="py-2 text-brand-dark">{r.fix}</td>
+                          <td className="py-2 pe-3 font-semibold text-red-700"><RichText text={r.problem} /></td>
+                          <td className="py-2 pe-3"><RichText text={r.cause} /></td>
+                          <td className="py-2 text-brand-dark"><RichText text={r.fix} /></td>
                         </tr>
                       ))}
                     </tbody>
@@ -257,12 +279,12 @@ export default function TrainingTestPage() {
               ))}
             </Card>
             <Card title="التفسير" icon={IdCard}>
-              {test.high && <p className="mb-2 text-sm"><b className="text-red-600">▲ الارتفاع:</b> {test.high}</p>}
-              {test.low && <p className="text-sm"><b className="text-blue-600">▼ الانخفاض:</b> {test.low}</p>}
+              {test.high && <div className="mb-2 text-sm"><b className="text-red-600">▲ الارتفاع:</b> <RichText text={test.high} /></div>}
+              {test.low && <div className="text-sm"><b className="text-blue-600">▼ الانخفاض:</b> <RichText text={test.low} /></div>}
               {!test.high && !test.low && <p className="text-sm text-muted">—</p>}
             </Card>
             {test.resultNotes && (
-              <div className="lg:col-span-2"><Card title="شكل العينة والنتيجة" icon={Microscope}><p className="whitespace-pre-line text-sm">{test.resultNotes}</p></Card></div>
+              <div className="lg:col-span-2"><Card title="شكل العينة والنتيجة" icon={Microscope}><RichText text={test.resultNotes} className="text-sm" /></Card></div>
             )}
             <div className="lg:col-span-2">
               <Card title="معرض الصور (أشكال العينات والنتائج)" icon={Microscope}>

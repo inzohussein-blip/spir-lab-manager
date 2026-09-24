@@ -131,3 +131,20 @@ export async function importImages(items: MediaExport[]): Promise<void> {
   urlCache.forEach((u) => URL.revokeObjectURL(u));
   urlCache.clear();
 }
+
+/** Export only the given images (for sharing a single test). */
+export async function exportImagesByIds(ids: string[]): Promise<MediaExport[]> {
+  const out: MediaExport[] = [];
+  for (const id of Array.from(new Set(ids))) {
+    const rec = await getImage(id);
+    if (rec) { const { blob, ...m } = rec; out.push({ ...m, dataUrl: await toDataUrl(blob) }); }
+  }
+  return out;
+}
+/** Add a shared image unless one with the same id already exists. */
+export async function importImageIfMissing(item: MediaExport): Promise<void> {
+  if (await getImage(item.id)) return;
+  const { dataUrl, ...m } = item;
+  const blob = await (await fetch(dataUrl)).blob(); // resolve before opening the transaction
+  await tx("readwrite", (s) => s.put({ ...m, blob }));
+}

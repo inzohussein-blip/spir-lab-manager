@@ -6,6 +6,7 @@ import { getTubes, saveTubes, unlinkFromTests, usageCount, uid, getSettings, typ
 import { SopLetterhead, SopPrintStyle, SopFooter, SOP_INK, exact } from "@/components/training/SopSheet";
 import { ImagePicker } from "@/components/training/ImagePicker";
 import { Img } from "@/components/training/Img";
+import { useEditLock } from "@/lib/training/lock";
 
 const inp = "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
 const empty = { name: "", color: "#7c3aed", additive: "", uses: "", notes: "", imageId: undefined as string | undefined };
@@ -14,6 +15,7 @@ export default function TubesPage() {
   const [list, setList] = useState<Tube[]>([]);
   const [f, setF] = useState({ ...empty });
   const [editId, setEditId] = useState<string | null>(null);
+  const { canEdit } = useEditLock();
   const [settings, setSettings] = useState<TrainingSettings | null>(null);
 
   useEffect(() => { setList(getTubes()); setSettings(getSettings()); }, []);
@@ -59,6 +61,7 @@ export default function TubesPage() {
         </div>
       </div>
 
+      {canEdit && (
       <div className="mb-5 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
         <div className="mb-3 flex items-center justify-between">
           <div className="text-sm font-semibold">{editId ? "تعديل تيوب" : "إضافة تيوب / حاوية"}</div>
@@ -78,6 +81,7 @@ export default function TubesPage() {
           <Plus className="size-4" /> {editId ? "حفظ التعديل" : "إضافة"}
         </button>
       </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {list.map((t) => (
@@ -91,10 +95,10 @@ export default function TubesPage() {
             <div className="min-w-0 flex-1 text-sm">
               <div className="flex items-start justify-between gap-2">
                 <div className="font-bold">{t.name}</div>
-                <div className="flex shrink-0 gap-1">
+                {canEdit && <div className="flex shrink-0 gap-1">
                   <button onClick={() => edit(t)} title="تعديل" className="grid size-7 place-items-center rounded-lg border border-line hover:bg-canvas"><Pencil className="size-3.5" /></button>
                   <button onClick={() => del(t)} title="حذف" className="grid size-7 place-items-center rounded-lg border border-line text-red-600 hover:bg-red-50"><Trash2 className="size-3.5" /></button>
-                </div>
+                </div>}
               </div>
               {t.additive && <div className="text-xs text-muted">{t.additive}</div>}
               {t.uses && <div className="mt-1 text-xs"><b>الاستعمال:</b> {t.uses}</div>}

@@ -1,5 +1,6 @@
 "use client";
 
+import { LockGate } from "@/components/training/LockGate";
 import { useEffect, useRef, useState } from "react";
 import { Images, Upload, Trash2, Loader2, X } from "lucide-react";
 import { addImage, deleteImage, listImages, setCaption, type MediaMeta } from "@/lib/training/media";
@@ -8,7 +9,7 @@ import { Img } from "@/components/training/Img";
 
 const kb = (n: number) => (n > 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 
-export default function MediaPage() {
+function MediaInner() {
   const [items, setItems] = useState<MediaMeta[] | null>(null);
   const [busy, setBusy] = useState(0);
   const [q, setQ] = useState("");
@@ -86,5 +87,13 @@ export default function MediaPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function MediaPage() {
+  return (
+    <LockGate>
+      <MediaInner />
+    </LockGate>
   );
 }

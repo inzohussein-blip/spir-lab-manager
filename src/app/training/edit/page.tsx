@@ -12,6 +12,8 @@ import {
   type TrainingTest, type Tube, type Tool,
 } from "@/lib/training/store";
 import { ImagePicker } from "@/components/training/ImagePicker";
+import { RichTextarea } from "@/components/training/RichText";
+import { LockGate } from "@/components/training/LockGate";
 
 const inp = "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
 const SAMPLE_TYPES = ["مصل (Serum)", "بلازما (Plasma)", "دم كامل (Whole blood)", "إدرار (Urine)", "براز (Stool)", "مسحة (Swab)", "سائل شوكي (CSF)", "سائل جسمي"];
@@ -104,8 +106,8 @@ function Editor() {
               <datalist id="cats">{cats.map((c) => <option key={c} value={c} />)}</datalist>
             </label>
             <div className="text-sm font-medium sm:col-span-2 lg:col-span-3">صورة الفحص (اختياري)<div className="mt-1"><ImagePicker value={t.coverImageId} onChange={(v) => set("coverImageId", v)} label={t.name_ar || "صورة فحص"} size="size-16" /></div></div>
-            <label className="text-sm font-medium sm:col-span-2">لماذا يطلبه الطبيب؟<textarea rows={3} value={t.purpose ?? ""} onChange={(e) => set("purpose", e.target.value)} className={`mt-1 ${inp}`} /></label>
-            <label className="text-sm font-medium sm:col-span-2">ملخّص ومبدأ الفحص<textarea rows={3} value={t.summary ?? ""} onChange={(e) => set("summary", e.target.value)} className={`mt-1 ${inp}`} /></label>
+            <div className="text-sm font-medium sm:col-span-2">لماذا يطلبه الطبيب؟<RichTextarea rows={3} value={t.purpose ?? ""} onChange={(v) => set("purpose", v)} className="mt-1" /></div>
+            <div className="text-sm font-medium sm:col-span-2">ملخّص ومبدأ الفحص<RichTextarea rows={3} value={t.summary ?? ""} onChange={(v) => set("summary", v)} className="mt-1" /></div>
           </div>
           {err && <p className="mt-2 text-sm font-medium text-red-600">{err}</p>}
         </Section>
@@ -118,8 +120,8 @@ function Editor() {
               <datalist id="samples">{SAMPLE_TYPES.map((s) => <option key={s} value={s} />)}</datalist>
             </label>
             <label className="text-sm font-medium">الحجم المطلوب<input value={t.volume ?? ""} onChange={(e) => set("volume", e.target.value)} placeholder="2–3 مل" className={`mt-1 ${inp}`} /></label>
-            <label className="text-sm font-medium">تحضير المريض<textarea rows={2} value={t.patientPrep ?? ""} onChange={(e) => set("patientPrep", e.target.value)} placeholder="صيام، توقيت…" className={`mt-1 ${inp}`} /></label>
-            <label className="text-sm font-medium">الثبات والحفظ والنقل<textarea rows={2} value={t.storage ?? ""} onChange={(e) => set("storage", e.target.value)} className={`mt-1 ${inp}`} /></label>
+            <div className="text-sm font-medium">تحضير المريض<RichTextarea rows={2} value={t.patientPrep ?? ""} onChange={(v) => set("patientPrep", v)} placeholder="صيام، توقيت…" className="mt-1" /></div>
+            <div className="text-sm font-medium">الثبات والحفظ والنقل<RichTextarea rows={2} value={t.storage ?? ""} onChange={(v) => set("storage", v)} className="mt-1" /></div>
           </div>
 
           <div className="mt-4 text-sm font-medium">التيوبات / الحاويات <Link href="/training/tubes" className="text-xs font-normal text-brand-dark hover:underline">(إدارة القائمة)</Link></div>
@@ -158,7 +160,7 @@ function Editor() {
                   <button type="button" title="أسفل" onClick={() => set("steps", move(t.steps, i, 1))} className="grid size-6 place-items-center rounded text-muted hover:bg-canvas"><ArrowDown className="size-3.5" /></button>
                 </div>
                 <div className="flex min-w-0 flex-1 flex-col gap-2">
-                  <textarea rows={2} value={s.text} onChange={(e) => set("steps", t.steps.map((x) => (x.id === s.id ? { ...x, text: e.target.value } : x)))} placeholder={`الخطوة ${i + 1}…`} className={inp} />
+                  <RichTextarea rows={2} value={s.text} onChange={(v) => set("steps", t.steps.map((x) => (x.id === s.id ? { ...x, text: v } : x)))} placeholder={`الخطوة ${i + 1}…`} />
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <ImagePicker value={s.imageId} onChange={(v) => set("steps", t.steps.map((x) => (x.id === s.id ? { ...x, imageId: v } : x)))} label={`${t.name_ar} — خطوة ${i + 1}`} size="size-14" />
                     <div className="flex items-center gap-2">
@@ -182,7 +184,7 @@ function Editor() {
           <div className="flex flex-col gap-2">
             {t.tips.map((tip, i) => (
               <div key={i} className="flex gap-2">
-                <textarea rows={2} value={tip} onChange={(e) => set("tips", t.tips.map((x, j) => (j === i ? e.target.value : x)))} className={`${inp} border-r-4 border-r-amber-400`} />
+                <RichTextarea rows={2} value={tip} onChange={(v) => set("tips", t.tips.map((x, j) => (j === i ? v : x)))} className="flex-1 border-r-4 border-r-amber-400" />
                 <button type="button" onClick={() => set("tips", t.tips.filter((_, j) => j !== i))} className="grid size-9 shrink-0 place-items-center rounded-lg border border-line text-red-600 hover:bg-red-50"><Trash2 className="size-4" /></button>
               </div>
             ))}
@@ -230,9 +232,9 @@ function Editor() {
           </div>
 
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <label className="text-sm font-medium"><span className="text-red-600">▲</span> أسباب الارتفاع<textarea rows={3} value={t.high ?? ""} onChange={(e) => set("high", e.target.value)} className={`mt-1 ${inp}`} /></label>
-            <label className="text-sm font-medium"><span className="text-blue-600">▼</span> أسباب الانخفاض<textarea rows={3} value={t.low ?? ""} onChange={(e) => set("low", e.target.value)} className={`mt-1 ${inp}`} /></label>
-            <label className="text-sm font-medium sm:col-span-2">شكل العينة والنتيجة والتداخلات<textarea rows={3} value={t.resultNotes ?? ""} onChange={(e) => set("resultNotes", e.target.value)} placeholder="متحلل، دهني، شكل الراسب والبلورات…" className={`mt-1 ${inp}`} /></label>
+            <div className="text-sm font-medium"><span className="text-red-600">▲</span> أسباب الارتفاع<RichTextarea rows={3} value={t.high ?? ""} onChange={(v) => set("high", v)} className="mt-1" /></div>
+            <div className="text-sm font-medium"><span className="text-blue-600">▼</span> أسباب الانخفاض<RichTextarea rows={3} value={t.low ?? ""} onChange={(v) => set("low", v)} className="mt-1" /></div>
+            <div className="text-sm font-medium sm:col-span-2">شكل العينة والنتيجة والتداخلات<RichTextarea rows={3} value={t.resultNotes ?? ""} onChange={(v) => set("resultNotes", v)} placeholder="متحلل، دهني، شكل الراسب والبلورات…" className="mt-1" /></div>
           </div>
 
           <div className="mt-4 text-sm font-medium">معرض الصور (أشكال العينات حسب النتائج)</div>
@@ -314,8 +316,10 @@ function GalleryAdd({ onAdd, name }: { onAdd: (id: string) => void; name: string
 
 export default function TrainingEditPage() {
   return (
-    <Suspense fallback={<div className="p-6 text-sm text-muted">جارٍ التحميل…</div>}>
-      <Editor />
-    </Suspense>
+    <LockGate>
+      <Suspense fallback={<div className="p-6 text-sm text-muted">جارٍ التحميل…</div>}>
+        <Editor />
+      </Suspense>
+    </LockGate>
   );
 }

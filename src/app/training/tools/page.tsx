@@ -5,6 +5,7 @@ import { Wrench, Plus, Pencil, Trash2, X } from "lucide-react";
 import { getTools, saveTools, unlinkFromTests, usageCount, uid, type Tool } from "@/lib/training/store";
 import { ImagePicker } from "@/components/training/ImagePicker";
 import { Img } from "@/components/training/Img";
+import { useEditLock } from "@/lib/training/lock";
 
 const inp = "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
 const KINDS = ["جهاز", "أداة", "كاشف", "مستهلكات"];
@@ -14,6 +15,7 @@ export default function ToolsPage() {
   const [list, setList] = useState<Tool[]>([]);
   const [f, setF] = useState({ ...empty });
   const [editId, setEditId] = useState<string | null>(null);
+  const { canEdit } = useEditLock();
   const [kind, setKind] = useState("");
 
   useEffect(() => { setList(getTools()); }, []);
@@ -47,6 +49,7 @@ export default function ToolsPage() {
       <h1 className="mb-1 flex items-center gap-2 text-2xl font-bold"><Wrench className="size-6 text-brand" /> الأدوات والأجهزة</h1>
       <p className="mb-5 text-sm text-muted">الأجهزة والأدوات والكواشف والمستهلكات مع وصف مختصر وطريقة الاستعمال وصورة.</p>
 
+      {canEdit && (
       <div className="mb-5 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
         <div className="mb-3 flex items-center justify-between">
           <div className="text-sm font-semibold">{editId ? "تعديل" : "إضافة أداة / جهاز / كاشف"}</div>
@@ -65,6 +68,7 @@ export default function ToolsPage() {
           <Plus className="size-4" /> {editId ? "حفظ التعديل" : "إضافة"}
         </button>
       </div>
+      )}
 
       <div className="mb-4 flex flex-wrap gap-1.5">
         {["", ...kinds].map((k) => (
@@ -84,10 +88,10 @@ export default function ToolsPage() {
                   <div className="font-bold">{t.name}</div>
                   <span className="rounded-full bg-brand-light px-2 py-0.5 text-[10px] font-medium text-brand-dark">{t.kind}</span>
                 </div>
-                <div className="flex shrink-0 gap-1">
+                {canEdit && <div className="flex shrink-0 gap-1">
                   <button onClick={() => edit(t)} title="تعديل" className="grid size-7 place-items-center rounded-lg border border-line hover:bg-canvas"><Pencil className="size-3.5" /></button>
                   <button onClick={() => del(t)} title="حذف" className="grid size-7 place-items-center rounded-lg border border-line text-red-600 hover:bg-red-50"><Trash2 className="size-3.5" /></button>
-                </div>
+                </div>}
               </div>
               {t.description && <div className="mt-1.5 text-xs text-muted">{t.description}</div>}
             </div>

@@ -1,7 +1,9 @@
 "use client";
 
+import { LockGate } from "@/components/training/LockGate";
 import { useEffect, useMemo, useState } from "react";
-import { Users, Plus, Trash2, Printer, UserRound } from "lucide-react";
+import { Users, Plus, Trash2, Printer, UserRound, Award } from "lucide-react";
+import { Certificate } from "@/components/training/Certificate";
 import {
   getTests, getTrainees, saveTrainees, setCompetency, getSettings, uid, today, COMP_LEVELS,
   type TrainingTest, type Trainee, type CompLevel, type TrainingSettings,
@@ -15,7 +17,7 @@ const LEVEL_STYLE: Record<CompLevel, string> = {
   3: "border-green-400 bg-green-50 text-green-700",
 };
 
-export default function TraineesPage() {
+function TraineesInner() {
   const [tests, setTests] = useState<TrainingTest[]>([]);
   const [list, setList] = useState<Trainee[]>([]);
   const [sel, setSel] = useState<string | null>(null);
@@ -59,6 +61,24 @@ export default function TraineesPage() {
   const done = tr ? tests.filter((t) => tr.comp[t.id]?.level === 3).length : 0;
   const started = tr ? tests.filter((t) => tr.comp[t.id]).length : 0;
   const pct = tests.length ? Math.round((done / tests.length) * 100) : 0;
+  // Certificate scopes: categories (or everything) the trainee is independent in.
+  const [printMode, setPrintMode] = useState<"record" | "cert">("record");
+  const [certScope, setCertScope] = useState("");
+  const scopes = tr ? [
+    ...(tests.length && tests.every((t) => tr.comp[t.id]?.level === 3) ? [{ key: "__all", label: "كل الفحوصات", tests }] : []),
+    ...groups.filter(([, items]) => items.length && items.every((t) => tr.comp[t.id]?.level === 3)).map(([g, items]) => ({ key: g, label: g, tests: items })),
+  ] : [];
+  const scope = scopes.find((x) => x.key === certScope) ?? scopes[0];
+  useEffect(() => {
+    const back = () => setPrintMode("record");
+    window.addEventListener("afterprint", back);
+    return () => window.removeEventListener("afterprint", back);
+  }, []);
+  function printCert() {
+    setPrintMode("cert");
+    setTimeout(() => window.print(), 60);
+  }
+
   const best = tr?.quiz.length ? Math.max(...tr.quiz.map((q) => Math.round((q.score / q.total) * 100))) : null;
 
   return (
@@ -107,8 +127,26 @@ export default function TraineesPage() {
                   {best !== null && <div className="mt-1 text-xs text-muted">أفضل نتيجة اختبار: <b className="tabular-nums">{best}%</b> ({tr.quiz.length} محاولة)</div>}
                 </div>
                 <label className="text-xs text-muted">اسم المشرف (يُسجَّل مع كل تقييم)<input value={by} onChange={(e) => setBy(e.target.value)} className={`mt-1 ${inp} w-44`} /></label>
-                <button onClick={() => window.print()} className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas"><Printer className="size-4" /> طباعة السجل</button>
+                <button onClick={() => { setPrintMode("record"); setTimeout(() => window.print(), 60); }} className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas"><Printer className="size-4" /> طباعة السجل</button>
                 <button onClick={() => remove(tr)} title="حذف المتدرب" className="grid size-9 place-items-center rounded-lg border border-line text-red-600 hover:bg-red-50"><Trash2 className="size-4" /></button>
+              </div>
+
+              {/* Completion certificate */}
+              <div className={`flex flex-wrap items-center gap-3 rounded-2xl border p-4 ${scopes.length ? "border-amber-300 bg-amber-50/60" : "border-dashed border-line"}`}>
+                <Award className={`size-6 ${scopes.length ? "text-amber-500" : "text-muted"}`} />
+                {scopes.length ? (
+                  <>
+                    <div className="flex-1 text-sm"><b>شهادة إتمام تدريب</b> — المتدرب مستقل في كل فحوصات {scopes.length > 1 ? "عدة تصنيفات" : `«${scopes[0].label}»`}.</div>
+                    {scopes.length > 1 && (
+                      <select value={scope?.key} onChange={(e) => setCertScope(e.target.value)} className="rounded-lg border border-line bg-surface px-3 py-2 text-sm">
+                        {scopes.map((x) => <option key={x.key} value={x.key}>{x.label} ({x.tests.length})</option>)}
+                      </select>
+                    )}
+                    <button onClick={printCert} className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600"><Printer className="size-4" /> طباعة الشهادة</button>
+                  </>
+                ) : (
+                  <div className="flex-1 text-xs text-muted">تظهر شهادة الإتمام عندما يصبح المتدرب «مستقلاً» في كل فحوصات تصنيف واحد على الأقل.</div>
+                )}
               </div>
 
               {groups.map(([g, items]) => (
@@ -143,8 +181,12 @@ export default function TraineesPage() {
         </div>
       </div>
 
+      {tr && settings && printMode === "cert" && scope && (
+        <Certificate trainee={tr} settings={settings} scopeLabel={scope.label} tests={scope.tests} />
+      )}
+
       {/* Printed competency record */}
-      {tr && settings && (
+      {tr && settings && printMode === "record" && (
         <div className="sop-doc hidden bg-white text-[12px] text-black print:block">
           <SopPrintStyle />
           <SopLetterhead settings={settings} right={<><div className="font-bold" style={{ color: SOP_INK }}>سجل كفاءة متدرب</div><div>تاريخ الطباعة: <span dir="ltr">{today()}</span></div></>} />
@@ -194,5 +236,13 @@ export default function TraineesPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function TraineesPage() {
+  return (
+    <LockGate>
+      <TraineesInner />
+    </LockGate>
   );
 }

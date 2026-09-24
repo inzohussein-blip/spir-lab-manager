@@ -5,10 +5,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   GraduationCap, Library, FilePlus2, TestTubes, Wrench, Images, Settings, Home, Menu, X, ChevronLeft,
-  Network, BrainCircuit, Users, BookOpen, type LucideIcon,
+  Network, BrainCircuit, Users, BookOpen, Layers, type LucideIcon,
 } from "lucide-react";
 import { getTests, getTubes, getTools } from "@/lib/training/store";
 import { cn } from "@/lib/utils";
+import { useEditLock, lockNow } from "@/lib/training/lock";
+import { UnlockForm } from "./LockGate";
 
 interface NavItem { href: string; label: string; hint: string; icon: LucideIcon; exact?: boolean }
 
@@ -25,6 +27,7 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
     title: "التدريب",
     items: [
       { href: "/training/quiz", label: "اختبر نفسك", hint: "أسئلة تلقائية من المكتبة", icon: BrainCircuit },
+      { href: "/training/cards", label: "بطاقات المراجعة", hint: "مراجعة سريعة قبل العمل", icon: Layers },
       { href: "/training/trainees", label: "سجل المتدربين", hint: "الكفاءة لكل فحص", icon: Users },
     ],
   },
@@ -49,6 +52,10 @@ export function TrainingSidebar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [counts, setCounts] = useState({ tests: 0, tubes: 0, tools: 0 });
+  const { lockOn, canEdit } = useEditLock();
+  const [showUnlock, setShowUnlock] = useState(false);
+  // Edit-only destinations are hidden in read-only mode.
+  const EDIT_ONLY = ["/training/edit", "/training/media", "/training/trainees", "/training/settings"];
 
   useEffect(() => {
     setCounts({ tests: getTests().length, tubes: getTubes().length, tools: getTools().length });
@@ -117,7 +124,7 @@ export function TrainingSidebar() {
                 <span className="h-px flex-1 bg-line" />
               </div>
               <div className="flex flex-col gap-1">
-                {sec.items.map((it) => {
+                {sec.items.filter((it) => canEdit || !EDIT_ONLY.includes(it.href)).map((it) => {
                   const active = isActive(it);
                   const Icon = it.icon;
                   const badge = it.href === "/training" ? counts.tests : it.href === "/training/tubes" ? counts.tubes : it.href === "/training/tools" ? counts.tools : 0;
@@ -156,6 +163,23 @@ export function TrainingSidebar() {
         </nav>
 
         <div className="border-t border-line p-3">
+          {lockOn && (
+            <div className="mb-2 rounded-xl border border-line px-3 py-2 text-xs">
+              {canEdit ? (
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium text-brand-dark">التعديل مفتوح</span>
+                  <button onClick={lockNow} className="rounded-md border border-line px-2 py-1 hover:bg-canvas">قفل</button>
+                </div>
+              ) : showUnlock ? (
+                <UnlockForm compact />
+              ) : (
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted">وضع القراءة فقط</span>
+                  <button onClick={() => setShowUnlock(true)} className="rounded-md border border-line px-2 py-1 hover:bg-canvas">فتح التعديل</button>
+                </div>
+              )}
+            </div>
+          )}
           <p className="mb-2 rounded-xl bg-canvas px-3 py-2 text-[11px] text-muted">
             محطة مستقلة — بياناتها محفوظة على هذا الجهاز فقط ولا ترتبط بمحطة المختبر.
           </p>

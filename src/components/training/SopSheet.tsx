@@ -3,6 +3,7 @@
 import type { CSSProperties } from "react";
 import type { TrainingSettings, TrainingTest, Tube, Tool } from "@/lib/training/store";
 import { Img } from "./Img";
+import { RichText } from "./RichText";
 
 export const SOP_INK = "#312e81"; // indigo-900
 export const SOP_ACCENT = "#4f46e5";
@@ -92,8 +93,8 @@ export function SopSheet({
       {(test.purpose || test.summary) && (
         <>
           <H>الغرض ومبدأ الفحص</H>
-          {test.purpose && <p><b>الغرض:</b> {test.purpose}</p>}
-          {test.summary && <p><b>المبدأ:</b> {test.summary}</p>}
+          {test.purpose && <div><b>الغرض:</b> <RichText text={test.purpose} /></div>}
+          {test.summary && <div><b>المبدأ:</b> <RichText text={test.summary} /></div>}
         </>
       )}
 
@@ -103,7 +104,7 @@ export function SopSheet({
           <table className="sop-keep w-full border-collapse text-[11.5px]">
             <tbody>
               {sampleRows.map(([k, v]) => (
-                <tr key={k}><td className="w-32 border border-gray-300 bg-gray-50 px-2 py-1 font-semibold" style={exact}>{k}</td><td className="border border-gray-300 px-2 py-1">{v}</td></tr>
+                <tr key={k}><td className="w-32 border border-gray-300 bg-gray-50 px-2 py-1 font-semibold" style={exact}>{k}</td><td className="border border-gray-300 px-2 py-1"><RichText text={v} /></td></tr>
               ))}
             </tbody>
           </table>
@@ -141,7 +142,7 @@ export function SopSheet({
               <li key={s.id} className={`flex gap-2 rounded-md px-2 py-1.5 ${s.warn ? "border border-red-300 bg-red-50" : ""}`} style={exact}>
                 <span className="grid size-5 shrink-0 place-items-center rounded-full text-[10px] font-bold text-white" style={{ background: s.warn ? "#dc2626" : SOP_ACCENT, ...exact }}>{i + 1}</span>
                 <div className="flex-1">
-                  <div className="whitespace-pre-line">{s.text}</div>
+                  <RichText text={s.text} />
                   {withImages && s.imageId && <Img id={s.imageId} className="mt-1 h-28 rounded border border-gray-200" />}
                 </div>
               </li>
@@ -154,7 +155,7 @@ export function SopSheet({
         <>
           <H>ملاحظات من الخبرة العملية</H>
           <ul className="flex flex-col gap-1">
-            {test.tips.map((t, i) => <li key={i} className="rounded-md border-r-4 bg-amber-50 px-2 py-1" style={{ borderColor: "#f59e0b", ...exact }}>{t}</li>)}
+            {test.tips.map((t, i) => <li key={i} className="rounded-md border-r-4 bg-amber-50 px-2 py-1" style={{ borderColor: "#f59e0b", ...exact }}><RichText text={t} /></li>)}
           </ul>
         </>
       )}
@@ -173,9 +174,9 @@ export function SopSheet({
             <tbody>
               {troubles.map((r) => (
                 <tr key={r.id}>
-                  <td className="border border-gray-300 px-2 py-1 font-semibold">{r.problem}</td>
-                  <td className="border border-gray-300 px-2 py-1">{r.cause}</td>
-                  <td className="border border-gray-300 px-2 py-1">{r.fix}</td>
+                  <td className="border border-gray-300 px-2 py-1 font-semibold"><RichText text={r.problem} /></td>
+                  <td className="border border-gray-300 px-2 py-1"><RichText text={r.cause} /></td>
+                  <td className="border border-gray-300 px-2 py-1"><RichText text={r.fix} /></td>
                 </tr>
               ))}
             </tbody>
@@ -199,8 +200,8 @@ export function SopSheet({
       {(test.high || test.low) && (
         <>
           <H>التفسير</H>
-          {test.high && <p><b style={{ color: "#b91c1c" }}>الارتفاع:</b> {test.high}</p>}
-          {test.low && <p><b style={{ color: "#1d4ed8" }}>الانخفاض:</b> {test.low}</p>}
+          {test.high && <div><b style={{ color: "#b91c1c" }}>الارتفاع:</b> <RichText text={test.high} /></div>}
+          {test.low && <div><b style={{ color: "#1d4ed8" }}>الانخفاض:</b> <RichText text={test.low} /></div>}
         </>
       )}
 

@@ -8,7 +8,7 @@
  * Lab Station, Purchasing, or the admin panel.
  */
 
-import { exportImages, importImages, type MediaExport } from "./media";
+import { exportImages, importImages, exportImagesByIds, importImageIfMissing, type MediaExport } from "./media";
 
 export interface TStep { id: string; text: string; imageId?: string; warn?: boolean }
 export interface TGalleryItem { id: string; imageId: string; caption: string }
@@ -85,6 +85,9 @@ export interface TrainingSettings {
   preparedBy?: string;
   /** Default months until an SOP's next review (document control). */
   reviewMonths?: number;
+  /** Optional read-only mode: editing needs a PIN (off by default). */
+  lockEnabled?: boolean;
+  pinHash?: string;
 }
 
 /** Competency levels: 1 observed · 2 performed under supervision · 3 independent. */
@@ -185,6 +188,35 @@ export function saveTest(t: TrainingTest, changeNote?: string): TrainingTest {
   write(K_TESTS, prev ? all.map((x) => (x.id === t.id ? rec : x)) : [...all, rec]);
   return rec;
 }
+/** Full-text match inside a test's content (not its name). Returns the first
+ *  matching field with a short snippet around the hit, or null. */
+export function contentMatch(t: TrainingTest, term: string): { field: string; before: string; hit: string; after: string } | null {
+  const q = term.trim().toLowerCase();
+  if (!q) return null;
+  const fields: [string, string | undefined][] = [
+    ["الغرض", t.purpose], ["الملخّص", t.summary], ["العينة", t.sampleType], ["تحضير المريض", t.patientPrep], ["الحفظ", t.storage],
+    ...t.steps.map((s, i) => [`الخطوة ${i + 1}`, s.text] as [string, string]),
+    ...t.tips.map((x) => ["ملاحظة", x] as [string, string]),
+    ...(t.troubles ?? []).map((r) => ["حل المشاكل", `${r.problem} — ${r.cause} — ${r.fix}`] as [string, string]),
+    ["القيم الطبيعية", t.normals.map((n) => `${n.label} ${n.value}`).join(" · ")],
+    ["الارتفاع", t.high], ["الانخفاض", t.low], ["شكل العينة", t.resultNotes], ["السلامة", t.safety],
+    ...t.gallery.map((g) => ["صورة", g.caption] as [string, string]),
+  ];
+  for (const [field, raw] of fields) {
+    const text = (raw ?? "").replace(/\*\*|==/g, "");
+    const i = text.toLowerCase().indexOf(q);
+    if (i === -1) continue;
+    const start = Math.max(0, i - 40), end = Math.min(text.length, i + q.length + 60);
+    return {
+      field,
+      before: (start > 0 ? "…" : "") + text.slice(start, i),
+      hit: text.slice(i, i + q.length),
+      after: text.slice(i + q.length, end) + (end < text.length ? "…" : ""),
+    };
+  }
+  return null;
+}
+
 /** Review status from the next-review date: overdue, due within 30 days, or fine. */
 export function reviewStatus(t: TrainingTest): "overdue" | "soon" | "ok" | null {
   if (!t.nextReview) return null;
@@ -363,6 +395,95 @@ export async function importBackup(data: unknown): Promise<boolean> {
   write(K_SEEDED, true);
   if (Array.isArray(b.images)) await importImages(b.images);
   return true;
+}
+
+// ── Share a single test (with its tubes, tools and images) ───────────────────
+export interface TestPackage {
+  app: "spir-training-test";
+  version: 1;
+  exported_at: string;
+  test: TrainingTest;
+  tubes: Tube[];
+  tools: Tool[];
+  /** Linked tests by name, so links can be re-attached on another device. */
+  linkNames: { id: string; name_ar: string }[];
+  images: MediaExport[];
+}
+export async function exportTestPackage(id: string): Promise<TestPackage | null> {
+  const t = getTest(id);
+  if (!t) return null;
+  const tubes = getTubes().filter((x) => t.tubeIds.includes(x.id));
+  const tools = getTools().filter((x) => t.toolIds.includes(x.id));
+  const imageIds = [
+    t.coverImageId, ...t.steps.map((s) => s.imageId), ...t.gallery.map((g) => g.imageId),
+    ...tubes.map((x) => x.imageId), ...tools.map((x) => x.imageId),
+  ].filter(Boolean) as string[];
+  const all = getTests();
+  return {
+    app: "spir-training-test", version: 1, exported_at: new Date().toISOString(),
+    test: t, tubes, tools,
+    linkNames: t.links.map((l) => ({ id: l.id, name_ar: all.find((x) => x.id === l.id)?.name_ar ?? "" })),
+    images: await exportImagesByIds(imageIds),
+  };
+}
+/** Find a local test matching a shared one (same id, else same Arabic name). */
+export function findExisting(pkg: TestPackage): TrainingTest | null {
+  const all = getTests();
+  const n = pkg.test.name_ar.trim().toLowerCase();
+  return all.find((x) => x.id === pkg.test.id) ?? all.find((x) => x.name_ar.trim().toLowerCase() === n) ?? null;
+}
+export function isTestPackage(d: unknown): d is TestPackage {
+  const p = d as Partial<TestPackage>;
+  return !!p && p.app === "spir-training-test" && !!p.test && typeof p.test.name_ar === "string";
+}
+/** Import a shared test. mode "replace" overwrites the matching local test; "copy" adds it alongside. */
+export async function importTestPackage(pkg: TestPackage, mode: "replace" | "copy" | "new"): Promise<{ id: string; addedTubes: number; addedTools: number; droppedLinks: number }> {
+  const norm = (s: string) => s.trim().toLowerCase();
+  // Tubes / tools: reuse local ones with the same id or name, add the rest.
+  const mapRefs = <T extends { id: string; name: string }>(incoming: T[], local: T[]) => {
+    const map = new Map<string, string>();
+    const added: T[] = [];
+    for (const x of incoming) {
+      const hit = local.find((l) => l.id === x.id) ?? local.find((l) => norm(l.name) === norm(x.name));
+      if (hit) map.set(x.id, hit.id);
+      else { const nx = { ...x, id: local.some((l) => l.id === x.id) ? uid() : x.id }; added.push(nx); map.set(x.id, nx.id); }
+    }
+    return { map, added };
+  };
+  const tb = mapRefs(pkg.tubes, getTubes());
+  const tl = mapRefs(pkg.tools, getTools());
+  if (tb.added.length) saveTubes([...getTubes(), ...tb.added]);
+  if (tl.added.length) saveTools([...getTools(), ...tl.added]);
+  for (const img of pkg.images) await importImageIfMissing(img);
+
+  // Links: keep those whose target exists here (by id or by name).
+  const all = getTests();
+  let dropped = 0;
+  const links: TLink[] = [];
+  for (const l of pkg.test.links) {
+    const name = pkg.linkNames.find((x) => x.id === l.id)?.name_ar ?? "";
+    const hit = all.find((x) => x.id === l.id) ?? (name ? all.find((x) => norm(x.name_ar) === norm(name)) : undefined);
+    if (hit) links.push({ ...l, id: hit.id }); else dropped++;
+  }
+
+  const existing = findExisting(pkg);
+  const base: TrainingTest = {
+    ...pkg.test,
+    tubeIds: pkg.test.tubeIds.map((id) => tb.map.get(id) ?? id).filter((id) => getTubes().some((x) => x.id === id)),
+    toolIds: pkg.test.toolIds.map((id) => tl.map.get(id) ?? id).filter((id) => getTools().some((x) => x.id === id)),
+    links,
+  };
+  let rec: TrainingTest;
+  if (mode === "replace" && existing) {
+    rec = saveTest({ ...base, id: existing.id, version: existing.version, history: existing.history }, "استيراد نسخة مشتركة");
+  } else {
+    const id = mode === "copy" || all.some((x) => x.id === base.id) ? uid() : base.id;
+    const name = mode === "copy" ? `${base.name_ar} (نسخة مستوردة)` : base.name_ar;
+    const now = Date.now();
+    rec = { ...base, id, name_ar: name, version: 1, history: [{ version: 1, at: now, note: "استيراد" }], updated_at: now };
+    write(K_TESTS, [...getTests(), rec]);
+  }
+  return { id: rec.id, addedTubes: tb.added.length, addedTools: tl.added.length, droppedLinks: dropped };
 }
 
 // ── Starter library (editable/deletable by the user) ─────────────────────────

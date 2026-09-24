@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Library, Search, FilePlus2, ListOrdered, Link2, Lightbulb, Star, Clock, CalendarClock, ListPlus, X } from "lucide-react";
-import { getTests, getFavs, getRecent, reviewStatus, bulkCreate, toggleFav, type TrainingTest } from "@/lib/training/store";
+import { Library, Search, FilePlus2, ListOrdered, Link2, Lightbulb, Star, Clock, CalendarClock, ListPlus, X, FileDown } from "lucide-react";
+import { getTests, getFavs, getRecent, reviewStatus, bulkCreate, toggleFav, contentMatch, isTestPackage, findExisting, importTestPackage, type TrainingTest } from "@/lib/training/store";
 import { Img } from "@/components/training/Img";
+import { useEditLock } from "@/lib/training/lock";
 
 type Filter = "" | "fav" | "review";
+const nameHit = (t: TrainingTest, term: string) => [t.name_ar, t.name_en, t.abbr, t.category].some((x) => (x ?? "").toLowerCase().includes(term));
 
 export default function TrainingLibraryPage() {
   const [tests, setTests] = useState<TrainingTest[]>([]);
@@ -18,6 +21,29 @@ export default function TrainingLibraryPage() {
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkText, setBulkText] = useState("");
   const [bulkMsg, setBulkMsg] = useState("");
+  const { canEdit } = useEditLock();
+  const importRef = useRef<HTMLInputElement>(null);
+  const router = useRouter();
+
+  async function onImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    let data: unknown;
+    try { data = JSON.parse(await f.text()); } catch { window.alert("تعذّرت قراءة الملف."); return; }
+    if (!isTestPackage(data)) { window.alert("هذا الملف ليس فحصاً مُصدَّراً من محطة التدريب."); return; }
+    const ex = findExisting(data);
+    let mode: "replace" | "copy" | "new" = "new";
+    if (ex) {
+      if (window.confirm(`يوجد فحص باسم «${ex.name_ar}».\n\nموافق = استبداله بالنسخة المستوردة (يرتفع رقم الإصدار)\nإلغاء = خيارات أخرى`)) mode = "replace";
+      else if (window.confirm("إضافة النسخة المستوردة كفحص منفصل؟")) mode = "copy";
+      else return;
+    }
+    const r = await importTestPackage(data, mode);
+    const notes = [r.addedTubes && `${r.addedTubes} تيوب`, r.addedTools && `${r.addedTools} أداة`].filter(Boolean).join(" و ");
+    if (notes || r.droppedLinks) window.alert(`تم الاستيراد.${notes ? `\nأُضيف: ${notes}.` : ""}${r.droppedLinks ? `\n${r.droppedLinks} ربط لم يُضف لأن الفحص المرتبط غير موجود هنا.` : ""}`);
+    router.push(`/training/test/${r.id}`);
+  }
 
   const load = () => { setTests(getTests()); setFavs(getFavs()); setRecent(getRecent()); };
   useEffect(load, []);
@@ -32,7 +58,7 @@ export default function TrainingLibraryPage() {
       .filter((t) => !cat || (t.category?.trim() || "أخرى") === cat)
       .filter((t) => filter !== "fav" || favs.includes(t.id))
       .filter((t) => { if (filter !== "review") return true; const r = reviewStatus(t); return r === "overdue" || r === "soon"; })
-      .filter((t) => !term || [t.name_ar, t.name_en, t.abbr, t.category, t.purpose].some((x) => (x ?? "").toLowerCase().includes(term)))
+      .filter((t) => !term || nameHit(t, term) || !!contentMatch(t, term))
       .sort((a, b) => a.name_ar.localeCompare(b.name_ar, "ar"));
   }, [tests, q, cat, filter, favs]);
 
@@ -64,14 +90,18 @@ export default function TrainingLibraryPage() {
           <h1 className="flex items-center gap-2 text-2xl font-bold"><Library className="size-6 text-brand" /> مكتبة الفحوصات</h1>
           <p className="mt-1 text-sm text-muted">دليل عملي لكل فحص: طريقة العمل، العينة والتيوب، الأدوات، التفسير، والربط مع الفحوصات الأخرى.</p>
         </div>
-        <div className="flex gap-2">
+        {canEdit && <div className="flex gap-2">
+          <button onClick={() => importRef.current?.click()} title="استيراد فحص مُصدَّر من جهاز آخر" className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas">
+            <FileDown className="size-4" /> استيراد فحص
+          </button>
+          <input ref={importRef} type="file" accept="application/json,.json" onChange={onImport} className="hidden" />
           <button onClick={() => { setBulkOpen(true); setBulkMsg(""); }} className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas">
             <ListPlus className="size-4" /> إنشاء سريع
           </button>
           <Link href="/training/edit" className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark">
             <FilePlus2 className="size-4" /> إضافة فحص
           </Link>
-        </div>
+        </div>}
       </div>
 
       {/* Favourites + recently viewed */}
@@ -94,7 +124,7 @@ export default function TrainingLibraryPage() {
 
       <div className="relative mb-3">
         <Search className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="ابحث بالاسم العربي أو الإنجليزي أو الاختصار…" className="w-full rounded-xl border border-line bg-surface py-2.5 pl-3 pr-9 text-sm outline-none focus:border-brand" />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="ابحث بالاسم أو داخل المحتوى (الخطوات، الملاحظات، حل المشاكل…)" className="w-full rounded-xl border border-line bg-surface py-2.5 pl-3 pr-9 text-sm outline-none focus:border-brand" />
       </div>
       <div className="mb-5 flex flex-wrap items-center gap-1.5">
         {["", ...cats].map((c) => (
@@ -151,7 +181,17 @@ export default function TrainingLibraryPage() {
                     </div>
                   </div>
                 </div>
-                {t.purpose && <p className="line-clamp-2 px-4 text-xs text-muted">{t.purpose}</p>}
+                {(() => {
+                  // Searching inside content: show where the word was found.
+                  const term = q.trim().toLowerCase();
+                  const m = term && !nameHit(t, term) ? contentMatch(t, term) : null;
+                  if (m) return (
+                    <p className="mx-4 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs text-amber-950">
+                      <b className="text-amber-700">{m.field}:</b> {m.before}<mark className="rounded bg-amber-300 px-0.5 text-amber-950">{m.hit}</mark>{m.after}
+                    </p>
+                  );
+                  return t.purpose ? <p className="line-clamp-2 px-4 text-xs text-muted">{t.purpose}</p> : null;
+                })()}
                 <div className="mt-auto flex items-center gap-4 border-t border-line px-4 py-2.5 text-[11px] text-muted">
                   <span className="inline-flex items-center gap-1"><ListOrdered className="size-3.5" /> {t.steps.length} خطوة</span>
                   <span className="inline-flex items-center gap-1"><Lightbulb className="size-3.5" /> {t.tips.length} ملاحظة</span>
