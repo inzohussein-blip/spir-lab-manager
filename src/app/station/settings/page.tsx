@@ -7,6 +7,7 @@ import {
   type StationSettings, type StationDoctor,
 } from "@/lib/station/store";
 import { InstallButton } from "@/components/station/InstallButton";
+import { OfflineStatusLine } from "@/components/local/OfflineReady";
 
 const inp = "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
 
@@ -288,6 +289,7 @@ export default function StationSettingsPage() {
         <div className="mb-1 flex items-center gap-2 text-sm font-semibold"><Smartphone className="size-4" /> تثبيت كتطبيق</div>
         <p className="mb-3 text-xs text-muted">ثبّت محطة المختبر كتطبيق مستقلّ يفتح مباشرةً على شاشة الإدخال ويعمل بدون إنترنت.</p>
         <InstallButton />
+        <div className="mt-2"><OfflineStatusLine /></div>
       </div>
     </div>
   );

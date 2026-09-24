@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { OfflineReady } from "@/components/local/OfflineReady";
 import { Lock, Beaker, ShoppingCart, GraduationCap, ShieldCheck, Users, ArrowLeft } from "lucide-react";
 
 export const metadata = { title: "مختبر التحليلات المرضية — اختيار النسخة" };
@@ -9,6 +10,7 @@ const PAID_UNLOCKED = false;
 export default function WelcomePage() {
   return (
     <div className="min-h-screen bg-canvas">
+      <OfflineReady />
       <div className="mx-auto max-w-5xl px-4 py-10">
         {/* Header */}
         <div className="mb-10 flex flex-col items-center text-center">

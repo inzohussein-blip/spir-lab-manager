@@ -98,11 +98,8 @@ export function StationSidebar() {
     setOpen(false);
   }, [pathname]);
 
-  // Register the PWA service worker so the station is installable/offline.
+  // Offline support is registered by <OfflineReady /> in the layout.
   useEffect(() => {
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js").catch(() => {});
-    }
     // Keep station data from being auto-evicted by the browser.
     void requestPersistentStorage();
   }, []);

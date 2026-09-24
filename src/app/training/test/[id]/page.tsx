@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
+import { useRouteId } from "@/lib/local/useRouteId";
 import {
   IdCard, TestTubes, ListOrdered, Microscope, Network, Pencil, Printer, Trash2, Lightbulb, AlertTriangle,
   ArrowRight, ArrowLeftRight, X, ShieldCheck, Star, Wrench, History, CalendarClock, Share2, Presentation as PresentIcon, type LucideIcon,
@@ -27,7 +28,7 @@ const TABS: { id: Tab; label: string; icon: LucideIcon }[] = [
 ];
 
 export default function TrainingTestPage() {
-  const { id } = useParams<{ id: string }>();
+  const id = useRouteId();
   const router = useRouter();
   const [test, setTest] = useState<TrainingTest | null | undefined>(undefined);
   const [all, setAll] = useState<TrainingTest[]>([]);
@@ -43,6 +44,7 @@ export default function TrainingTestPage() {
   const { canEdit } = useEditLock();
 
   useEffect(() => {
+    if (!id) return;
     setTest(getTest(id));
     setAll(getTests()); setTubes(getTubes()); setTools(getTools()); setSettings(getSettings());
     setBack(backlinks(id));

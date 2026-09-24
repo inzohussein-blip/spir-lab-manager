@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
+import { useRouteId } from "@/lib/local/useRouteId";
 import { FileText, Trash2, Check } from "lucide-react";
 import { getPages, savePages, type StationPage } from "@/lib/station/store";
 
@@ -10,14 +11,15 @@ const inp = "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm o
 /** A user-created custom interface (a titled notes page), stored locally. Lets
  *  the lab add its own sidebar pages without touching code. */
 export default function CustomPage() {
-  const { id } = useParams<{ id: string }>();
+  const id = useRouteId();
   const router = useRouter();
-  const [page, setPage] = useState<StationPage | null>(null);
+  const [page, setPage] = useState<StationPage | null | undefined>(undefined);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
+    if (!id) return;
     const p = getPages().find((x) => x.id === id) ?? null;
     setPage(p);
     if (p) { setTitle(p.title); setContent(p.content); }
@@ -35,6 +37,7 @@ export default function CustomPage() {
     router.push("/station");
   }
 
+  if (page === undefined) return null;
   if (!page) {
     return <p className="text-sm text-muted">لم يتم العثور على هذه الواجهة.</p>;
   }
