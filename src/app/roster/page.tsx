@@ -18,9 +18,11 @@ const TONE: Record<DayStatus, string> = {
 export default function RosterDashboard() {
   const [tick, setTick] = useState(0);
   const [staff, setStaff] = useState<Staff[]>([]);
-  useEffect(() => { setStaff(getStaff().filter((s) => s.active)); }, [tick]);
+  // Today is read in the browser, so a page saved for offline use never shows a stale day.
+  const [d, setD] = useState("");
+  useEffect(() => { setStaff(getStaff().filter((s) => s.active)); setD(todayYmd()); }, [tick]);
+  if (!d) return null;
 
-  const d = todayYmd();
   const ctx = rosterCtx();
   const nameOf = (id?: string) => staff.find((x) => x.id === id)?.name ?? getStaff().find((x) => x.id === id)?.name ?? "—";
   const rows = staff.map((s) => ({ s, r: dayStatus(s.id, d, ctx), a: ctx.att.find((x) => x.staffId === s.id && x.date === d) }))

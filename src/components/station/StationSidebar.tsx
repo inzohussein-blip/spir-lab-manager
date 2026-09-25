@@ -129,7 +129,11 @@ export function StationSidebar() {
     ?? pages.find((p) => pathname === `/station/page/${p.id}`)?.title
     ?? "محطة المختبر";
 
-  const today = new Date().toLocaleDateString("ar-IQ-u-nu-latn", { weekday: "long", day: "numeric", month: "long" });
+  // Computed in the browser: a page saved for offline use must not show the day it was saved.
+  const [today, setToday] = useState("");
+  useEffect(() => {
+    setToday(new Date().toLocaleDateString("ar-IQ-u-nu-latn", { weekday: "long", day: "numeric", month: "long" }));
+  }, [pathname]);
 
   return (
     <>

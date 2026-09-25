@@ -4,8 +4,9 @@
    - Registered once per station scope; every registration shares one versioned cache,
      so the app is downloaded once.
    - On the first online visit the whole app (every station page + its scripts, styles,
-     icons and the Arabic font) is saved. After that pages open from this computer,
-     with or without internet.
+     icons and the Arabic font) is saved. After that pages open without internet.
+   - Pages: online → the latest version from the server (so updates show at once);
+     no internet, or no answer within a few seconds → the saved copy.
    - When online, a page asks for a check: if the server has a newer build it is
      downloaded in the background into a new cache, switched atomically, and the page
      is told an update is ready (the old version keeps working until then). */
@@ -94,12 +95,19 @@ async function rscFetch(req) {
   }
 }
 
+const withTimeout = (p, ms) => Promise.race([p, new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), ms))]);
+
 async function navigate(req, url) {
   const meta = await getMeta();
-  if (meta) {
-    const hit = await (await caches.open(meta.cache)).match(pageKey(url.pathname));
-    if (hit) return hit;
+  const cached = meta ? await (await caches.open(meta.cache)).match(pageKey(url.pathname)) : undefined;
+  if (!(self.navigator && self.navigator.onLine === false)) {
+    try {
+      // With a saved copy, don't keep the user waiting on a slow connection.
+      const res = await withTimeout(fetch(req), cached ? 3000 : 20000);
+      if (res.ok || res.type === "opaqueredirect" || !cached) return res;
+    } catch { /* offline or too slow → saved copy */ }
   }
+  if (cached) return cached;
   try {
     return await fetch(req);
   } catch {
@@ -221,12 +229,13 @@ async function prepare(tell) {
     await cacheFonts();
   } catch (e) {
     await caches.delete(name);
-    return { status: meta ? "ready" : "error", error: String(e && e.message || e) };
+    // Keep the previous saved version; the next page open simply tries again.
+    return { status: meta ? "update-failed" : "error", error: String(e && e.message || e) };
   }
 
   await setMeta({ cache: name, build, at: Date.now() });
   for (const k of await caches.keys()) if (k.startsWith(PREFIX) && k !== name) await caches.delete(k);
-  return { status: meta ? "updated" : "installed" };
+  return { status: meta ? "updated" : "installed", build };
 }
 
 async function cacheFonts() {

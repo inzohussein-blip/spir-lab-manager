@@ -10,14 +10,23 @@ import { CloudOff, CheckCircle2, RefreshCw, X } from "lucide-react";
  * a reload. The admin panel is not involved — it keeps its own worker.
  */
 const SCOPES = ["/welcome", "/station", "/store", "/training", "/qc", "/roster"];
-const CHECK_KEY = "local-offline-check";
-const CHECK_EVERY = 10 * 60 * 1000;
+const RECHECK_EVERY = 30 * 60 * 1000; // while a page stays open
+
+/** Build id of the code running in this page (from Next's inline data). */
+function pageBuild(): string | null {
+  for (const s of Array.from(document.scripts)) {
+    const m = /buildId\\?"\s*:\s*\\?"([^"\\]+)/.exec(s.textContent ?? "");
+    if (m) return m[1];
+  }
+  return null;
+}
 
 type State =
   | { kind: "idle" }
   | { kind: "progress"; done: number; total: number }
   | { kind: "installed" }
   | { kind: "updated" }
+  | { kind: "refreshed" }
   | { kind: "error" };
 
 function activeWorker(reg?: ServiceWorkerRegistration): Promise<ServiceWorker | null> {
@@ -50,33 +59,47 @@ export function OfflineReady() {
         setSt({ kind: "installed" });
         try { localStorage.setItem("local-offline-ready", String(Date.now())); } catch { /* ignore */ }
         later(() => setSt((s) => (s.kind === "installed" ? { kind: "idle" } : s)), 6000);
-      } else if (d.status === "updated") setSt({ kind: "updated" });
-      else if (d.status === "error") {
-        try { sessionStorage.removeItem(CHECK_KEY); } catch { /* ignore */ } // retry on the next page load
+      } else if (d.status === "updated") {
+        // This page already runs the new version (it came from the server) → just confirm.
+        if (d.build && d.build === pageBuild()) {
+          setSt({ kind: "refreshed" });
+          later(() => setSt((s) => (s.kind === "refreshed" ? { kind: "idle" } : s)), 6000);
+        } else setSt({ kind: "updated" });
+      } else if (d.status === "error") {
         setSt((s) => (s.kind === "progress" ? { kind: "error" } : s));
         later(() => setSt((s) => (s.kind === "error" ? { kind: "idle" } : s)), 7000);
       } else setSt((s) => (s.kind === "progress" ? { kind: "idle" } : s));
     };
     navigator.serviceWorker.addEventListener("message", onMsg);
 
+    // Look for a newer version: on every page open, every 30 minutes while open, and
+    // when the connection comes back. One small request; nothing happens offline.
+    let reg: ServiceWorkerRegistration | undefined;
+    const check = async () => {
+      if (!alive || !navigator.onLine) return;
+      try {
+        reg?.update().catch(() => {}); // also refresh the worker script itself
+        const sw = await activeWorker(reg);
+        if (sw && alive) sw.postMessage({ type: "local-prepare" });
+      } catch { /* ignore */ }
+    };
     (async () => {
       try {
         await Promise.all(SCOPES.map((scope) => navigator.serviceWorker.register("/local-sw.js", { scope })));
-        const sw = await activeWorker(await navigator.serviceWorker.getRegistration(location.pathname));
-        if (!sw || !alive) return;
-        // One small request at most every 10 minutes per tab to look for updates.
-        const last = Number(sessionStorage.getItem(CHECK_KEY) || 0);
-        if (Date.now() - last < CHECK_EVERY) return;
-        sessionStorage.setItem(CHECK_KEY, String(Date.now()));
-        sw.postMessage({ type: "local-prepare" });
+        reg = await navigator.serviceWorker.getRegistration(location.pathname);
+        await check();
       } catch {
         /* unsupported / private window — the stations still work online */
       }
     })();
+    const every = setInterval(check, RECHECK_EVERY);
+    window.addEventListener("online", check);
 
     return () => {
       alive = false;
       timers.forEach(clearTimeout);
+      clearInterval(every);
+      window.removeEventListener("online", check);
       navigator.serviceWorker.removeEventListener("message", onMsg);
     };
   }, []);
@@ -99,6 +122,14 @@ export function OfflineReady() {
       <div className={box} role="status">
         <div className="flex items-center gap-2 font-semibold text-green-700"><CheckCircle2 className="size-4" /> جاهز للعمل بدون إنترنت</div>
         <div className="mt-1 text-xs text-muted">حُفظت كل المحطات على هذا الجهاز، وستفتح من الآن بدون إنترنت.</div>
+      </div>
+    );
+  }
+  if (st.kind === "refreshed") {
+    return (
+      <div className={box} role="status">
+        <div className="flex items-center gap-2 font-semibold text-green-700"><CheckCircle2 className="size-4" /> تم تحديث المحطات إلى أحدث نسخة</div>
+        <div className="mt-1 text-xs text-muted">وحُدِّثت النسخة المحفوظة للعمل بدون إنترنت أيضاً.</div>
       </div>
     );
   }

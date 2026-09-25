@@ -90,6 +90,9 @@ function StationEntryPage() {
   const [justSaved, setJustSaved] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [createdAt, setCreatedAt] = useState<number | null>(null);
+  // Today's date is read in the browser (a page saved for offline use keeps no stale date).
+  const [nowMs, setNowMs] = useState<number | null>(null);
+  useEffect(() => setNowMs(Date.now()), []);
 
   // Recurring-patient linkage + notes
   const [patients, setPatients] = useState<StationPatient[]>([]);
@@ -352,7 +355,7 @@ function StationEntryPage() {
   }
 
   // Local date (not UTC); an edited visit keeps its original date on reprint.
-  const today = localYmd(createdAt ?? undefined);
+  const today = createdAt ? localYmd(createdAt) : nowMs ? localYmd(nowMs) : "";
 
   return (
     <div>
