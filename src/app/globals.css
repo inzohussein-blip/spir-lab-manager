@@ -152,6 +152,13 @@ main > * {
 :root[data-theme="dark"] .training .slide-light :is(.bg-brand, .from-brand).text-white {
   color: #fff;
 }
+/* Purchasing station — its amber accents, readable in dark mode (screen only: print stays as is) */
+@media screen {
+  :root[data-theme="dark"] .store .bg-amber-100 { background-color: rgb(245 158 11 / 0.18); }
+  :root[data-theme="dark"] .store .bg-amber-50 { background-color: rgb(245 158 11 / 0.1); }
+  :root[data-theme="dark"] .store .text-amber-800 { color: #fcd34d; }
+  :root[data-theme="dark"] .store .text-amber-700 { color: #fbbf24; }
+}
 /* Quality & devices station — rose accent */
 .qc {
   --color-brand: #e11d48;

@@ -317,6 +317,8 @@ function StationEntryPage() {
         testId: t.id, name_ar: t.name_ar, value: results[t.id] ?? "", unit: t.unit,
       })),
     };
+    // Tests already on the saved visit had their stock deducted when first saved.
+    const before = editId ? new Set(getVisit(editId)?.results.map((r) => r.testId) ?? []) : null;
     const stored = editId ? updateVisit(v) : addVisit(v);
     if (!stored) {
       toast.show("تعذّر الحفظ: مساحة التخزين في المتصفح ممتلئة — خذ نسخة احتياطية واحذف زيارات قديمة من «الزيارات المحفوظة».", "warn");
@@ -325,8 +327,11 @@ function StationEntryPage() {
     if (!editId) {
       setEditId(v.id);
       setCreatedAt(v.created_at);
-      // Deduct one unit of stock per linked test — only on a new visit.
+      // Deduct one unit of stock per linked test.
       deductStockForTests(Array.from(selected));
+    } else {
+      // Editing: deduct only the tests added since the last save (never twice).
+      deductStockForTests(Array.from(selected).filter((id) => !before!.has(id)));
     }
     setBaseline(snapshot);
     setSavedTick((n) => n + 1);
