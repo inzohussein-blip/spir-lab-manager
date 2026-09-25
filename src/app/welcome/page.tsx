@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { OfflineReady } from "@/components/local/OfflineReady";
+import { ActivationGate } from "@/components/local/ActivationGate";
+import { ACTIVATION_SCRIPT } from "@/lib/local/activation";
 import { Lock, Beaker, ShoppingCart, GraduationCap, ShieldCheck, Users, ArrowLeft } from "lucide-react";
 
 export const metadata = { title: "مختبر التحليلات المرضية — اختيار النسخة" };
@@ -10,6 +12,8 @@ const PAID_UNLOCKED = false;
 export default function WelcomePage() {
   return (
     <div className="min-h-screen bg-canvas">
+      <script dangerouslySetInnerHTML={{ __html: ACTIVATION_SCRIPT }} />
+      <ActivationGate />
       <OfflineReady />
       <div className="mx-auto max-w-5xl px-4 py-10">
         {/* Header */}
