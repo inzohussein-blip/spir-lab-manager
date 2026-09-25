@@ -7,6 +7,15 @@ import { Topbar } from "@/components/Topbar";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canAccess } from "@/lib/permissions";
 import { OfflineProvider } from "@/components/offline/OfflineProvider";
+// Arabic UI font bundled with the app (no Google Fonts request) — works offline.
+import "@fontsource/ibm-plex-sans-arabic/arabic-400.css";
+import "@fontsource/ibm-plex-sans-arabic/arabic-500.css";
+import "@fontsource/ibm-plex-sans-arabic/arabic-600.css";
+import "@fontsource/ibm-plex-sans-arabic/arabic-700.css";
+import "@fontsource/ibm-plex-sans-arabic/latin-400.css";
+import "@fontsource/ibm-plex-sans-arabic/latin-500.css";
+import "@fontsource/ibm-plex-sans-arabic/latin-600.css";
+import "@fontsource/ibm-plex-sans-arabic/latin-700.css";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -40,12 +49,6 @@ export default async function RootLayout({
         <link rel="manifest" href="/manifest.webmanifest" />
         <meta name="theme-color" content="#5a2a82" />
         <link rel="apple-touch-icon" href="/icon-192.png" />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap"
-          rel="stylesheet"
-        />
         {/* No-flash theme: apply the saved (or system) theme before paint. */}
         <script
           dangerouslySetInnerHTML={{

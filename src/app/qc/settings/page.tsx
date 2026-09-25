@@ -1,5 +1,7 @@
 "use client";
 
+import { ThemeCard } from "@/components/local/LocalTheme";
+import { THEME_KEYS } from "@/lib/local/theme";
 import { useEffect, useRef, useState } from "react";
 import { Settings, Check, Download, Upload, HardDrive } from "lucide-react";
 import { getSettings, saveSettings, exportBackup, importBackup, type QcSettings } from "@/lib/qc/store";
@@ -34,6 +36,8 @@ export default function QcSettingsPage() {
   return (
     <div className="max-w-2xl">
       <h1 className="mb-5 flex items-center gap-2 text-2xl font-bold"><Settings className="size-6 text-brand" /> إعدادات محطة الجودة</h1>
+
+      <ThemeCard storageKey={THEME_KEYS.qc} />
       <div className="mb-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
         <div className="mb-3 text-sm font-semibold">ترويسة التقارير المطبوعة</div>
         <div className="grid gap-3 sm:grid-cols-2">

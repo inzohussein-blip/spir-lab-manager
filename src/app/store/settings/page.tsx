@@ -1,5 +1,7 @@
 "use client";
 
+import { ThemeCard } from "@/components/local/LocalTheme";
+import { THEME_KEYS } from "@/lib/local/theme";
 import { useRef, useState } from "react";
 import { Settings, Download, Upload } from "lucide-react";
 import { exportBackup, importBackup } from "@/lib/purchasing/store";
@@ -35,6 +37,8 @@ export default function StoreSettingsPage() {
   return (
     <div className="max-w-lg">
       <h1 className="mb-5 flex items-center gap-2 text-2xl font-bold"><Settings className="size-6" /> الإعدادات والنسخ الاحتياطي</h1>
+
+      <ThemeCard storageKey={THEME_KEYS.store} />
       <div className="rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
         <div className="mb-1 text-sm font-semibold">النسخ الاحتياطي</div>
         <p className="mb-3 text-xs text-muted">كل بيانات المشتريات محفوظة على هذا الحاسوب فقط. صدّر نسخة احتياطية بانتظام أو انقلها لجهاز آخر.</p>

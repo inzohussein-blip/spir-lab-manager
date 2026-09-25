@@ -4,7 +4,7 @@
    - Registered once per station scope; every registration shares one versioned cache,
      so the app is downloaded once.
    - On the first online visit the whole app (every station page + its scripts, styles,
-     icons and the Arabic font) is saved. After that pages open without internet.
+     icons and the bundled Arabic font) is saved. After that pages open without internet.
    - Pages: online → the latest version from the server (so updates show at once);
      no internet, or no answer within a few seconds → the saved copy.
    - When online, a page asks for a check: if the server has a newer build it is
@@ -12,7 +12,6 @@
      is told an update is ready (the old version keeps working until then). */
 
 const META_CACHE = "local-meta";
-const FONT_CACHE = "local-fonts";
 const PREFIX = "local-app-";
 const BASES = ["/welcome", "/station", "/store", "/training", "/qc", "/roster"];
 const ROUTES = [
@@ -27,7 +26,6 @@ const ROUTES = [
 // Pages with an id in the URL are client pages: one saved copy serves every id.
 const TEMPLATES = [["/training/test/", "/training/test/_"], ["/station/page/", "/station/page/_"]];
 const EXTRA = ["/lab-logo.png", "/icon.svg", "/icon-192.png", "/icon-512.png", "/manifest.webmanifest"];
-const FONT_CSS = "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap";
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
@@ -62,10 +60,6 @@ self.addEventListener("fetch", (event) => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
 
-  if (url.origin === "https://fonts.googleapis.com" || url.origin === "https://fonts.gstatic.com") {
-    event.respondWith(cacheFirst(req, FONT_CACHE));
-    return;
-  }
   if (url.origin !== self.location.origin) return;
 
   // Client-side navigation data (RSC). Online: normal. Offline or very slow: fail fast,
@@ -226,7 +220,6 @@ async function prepare(tell) {
     for (const u of EXTRA) {
       try { const r = await fetch(u); if (r.ok) await cache.put(u, r); } catch { /* optional */ }
     }
-    await cacheFonts();
   } catch (e) {
     await caches.delete(name);
     // Keep the previous saved version; the next page open simply tries again.
@@ -234,20 +227,6 @@ async function prepare(tell) {
   }
 
   await setMeta({ cache: name, build, at: Date.now() });
-  for (const k of await caches.keys()) if (k.startsWith(PREFIX) && k !== name) await caches.delete(k);
+  for (const k of await caches.keys()) if ((k.startsWith(PREFIX) && k !== name) || k === "local-fonts") await caches.delete(k);
   return { status: meta ? "updated" : "installed", build };
-}
-
-async function cacheFonts() {
-  try {
-    const fc = await caches.open(FONT_CACHE);
-    const res = await fetch(FONT_CSS, { mode: "cors" });
-    if (!res.ok) return;
-    const css = await res.clone().text();
-    await fc.put(FONT_CSS, res);
-    for (const m of css.matchAll(/url\((https:\/\/fonts\.gstatic\.com\/[^)]+)\)/g)) {
-      if (await fc.match(m[1])) continue;
-      try { const f = await fetch(m[1], { mode: "cors" }); if (f.ok) await fc.put(m[1], f); } catch { /* next time */ }
-    }
-  } catch { /* the app still works with the system font */ }
 }

@@ -610,7 +610,7 @@ function StationEntryPage() {
               ) : (
                 <div className="flex flex-col gap-3">
                   {chosen.map((t, idx) => {
-                    const f = flagFor(results[t.id] ?? "", t.normal, gender);
+                    const f = flagFor(results[t.id] ?? "", t.normal, gender, age);
                     const tint =
                       f === "H" ? "!border-red-300 bg-red-50/50 text-red-700"
                       : f === "L" ? "!border-blue-300 bg-blue-50/50 text-blue-700"
@@ -657,7 +657,7 @@ function StationEntryPage() {
                           </div>
                         )}
                         <div className="mt-1 text-xs text-muted">
-                          المعدل الطبيعي: <span dir="ltr">{rangeLabel(t.normal, gender, t.unit)}</span>
+                          المعدل الطبيعي: <span dir="ltr">{rangeLabel(t.normal, gender, t.unit, age)}</span>
                         </div>
                         {derived[t.id] && (() => {
                           const d = derived[t.id];

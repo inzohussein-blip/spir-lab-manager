@@ -1,5 +1,7 @@
 "use client";
 
+import { ThemeCard } from "@/components/local/LocalTheme";
+import { THEME_KEYS } from "@/lib/local/theme";
 import { LockGate } from "@/components/training/LockGate";
 import { useEffect, useRef, useState } from "react";
 import { Settings, Check, ShieldCheck, Download, Upload, HardDrive, FileText, Loader2, Lock } from "lucide-react";
@@ -70,6 +72,8 @@ function SettingsInner() {
   return (
     <div className="max-w-2xl">
       <h1 className="mb-5 flex items-center gap-2 text-2xl font-bold"><Settings className="size-6 text-brand" /> إعدادات محطة التدريب</h1>
+
+      <ThemeCard storageKey={THEME_KEYS.training} />
 
       {/* Letterhead */}
       <div className="mb-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">

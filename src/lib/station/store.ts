@@ -19,13 +19,38 @@ export type NormalRange =
   | { kind: "none" }
   | { kind: "text"; text: string }
   | { kind: "qual"; text: string; cutoff?: number | null }
-  | { kind: "numeric"; low: number | null; high: number | null; note?: string }
+  | { kind: "numeric"; low: number | null; high: number | null; note?: string; ages?: AgeBand[] }
   | {
       kind: "sex";
       male: { low: number | null; high: number | null };
       female: { low: number | null; high: number | null };
       note?: string;
+      ages?: AgeBand[];
     };
+
+/** Optional age-specific range (e.g. children). `from` ≤ age < `to` (to = null → no upper
+ *  limit), both in `unit`. When the patient's age falls in a band, it replaces the
+ *  default range for both sexes. */
+export type AgeUnit = "d" | "m" | "y";
+export interface AgeBand { from: number; to: number | null; unit: AgeUnit; low: number | null; high: number | null }
+export const AGE_UNIT_LABEL: Record<AgeUnit, string> = { d: "يوم", m: "شهر", y: "سنة" };
+const DAYS: Record<AgeUnit, number> = { d: 1, m: 30.4375, y: 365.25 };
+
+/** Patient age in days from the free-text age field: "35", "35 سنة", "6 أشهر", "10 أيام",
+ *  "2 أسبوع", "6m", "10d". A bare number means years. null when it cannot be read. */
+export function ageInDays(raw?: string): number | null {
+  const s = (raw ?? "").trim().toLowerCase().replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)));
+  const m = /^(\d+(?:[.,]\d+)?)\s*(.*)$/.exec(s);
+  if (!m) return null;
+  const n = Number(m[1].replace(",", "."));
+  const u = m[2].trim();
+  if (!u || /^(y|yr|yrs|year|years|سن|سنة|سنه|سنوات|سنين|عام|أعوام|اعوام)$/.test(u)) return n * DAYS.y;
+  if (/^(m|mo|month|months|شهر|شهور|أشهر|اشهر)$/.test(u)) return n * DAYS.m;
+  if (/^(w|wk|week|weeks|أسبوع|اسبوع|أسابيع|اسابيع)$/.test(u)) return n * 7;
+  if (/^(d|day|days|يوم|أيام|ايام)$/.test(u)) return n;
+  return null;
+}
+const bandLabel = (b: AgeBand) => `${b.from}${b.to != null ? `–${b.to}` : "+"} ${b.unit}`;
 
 export interface StationTest {
   id: string;
@@ -488,8 +513,19 @@ export interface ResolvedRange {
   text: string | null;
 }
 
-/** Resolve a test's reference range for a patient of a given sex. */
-export function resolveRange(n: NormalRange, gender: Gender): ResolvedRange {
+/** The age band that applies to this patient, if any. */
+export function ageBandFor(n: NormalRange, age?: string): AgeBand | null {
+  if ((n.kind !== "numeric" && n.kind !== "sex") || !n.ages?.length) return null;
+  const days = ageInDays(age);
+  if (days == null) return null;
+  return n.ages.find((b) => days >= b.from * DAYS[b.unit] && (b.to == null || days < b.to * DAYS[b.unit])) ?? null;
+}
+
+/** Resolve a test's reference range for a patient of a given sex (and age, when the
+ *  test has age-specific ranges). */
+export function resolveRange(n: NormalRange, gender: Gender, age?: string): ResolvedRange {
+  const band = ageBandFor(n, age);
+  if (band) return { low: band.low, high: band.high, text: null };
   if (n.kind === "numeric") return { low: n.low, high: n.high, text: null };
   if (n.kind === "text" || n.kind === "qual") return { low: null, high: null, text: n.text };
   if (n.kind === "sex") {
@@ -499,12 +535,13 @@ export function resolveRange(n: NormalRange, gender: Gender): ResolvedRange {
   return { low: null, high: null, text: null };
 }
 
-export function rangeLabel(n: NormalRange, gender: Gender, unit?: string): string {
-  const r = resolveRange(n, gender);
+export function rangeLabel(n: NormalRange, gender: Gender, unit?: string, age?: string): string {
+  const r = resolveRange(n, gender, age);
   if (r.text) return r.text;
   if (r.low == null && r.high == null) return "—";
   const u = unit ? ` ${unit}` : "";
-  const note = (n.kind === "numeric" || n.kind === "sex") && n.note ? ` (${n.note})` : "";
+  const band = ageBandFor(n, age);
+  const note = band ? ` (${bandLabel(band)})` : (n.kind === "numeric" || n.kind === "sex") && n.note ? ` (${n.note})` : "";
   const body =
     r.low != null && r.high != null ? `${r.low} – ${r.high}`
     : r.high != null ? `< ${r.high}`
@@ -536,7 +573,7 @@ function numberOrTiter(value: string): number | null {
 
 /** H / L / N flag for a result vs the (sex-resolved) range.
  *  Understands "+", "++", "+++", "Positive" / "Negative" and titers. */
-export function flagFor(value: string, n: NormalRange, gender: Gender): "H" | "L" | "N" | null {
+export function flagFor(value: string, n: NormalRange, gender: Gender, age?: string): "H" | "L" | "N" | null {
   if (value == null || String(value).trim() === "") return null;
   if (n.kind === "none") return null;
   const q = qualitativeOf(String(value));
@@ -551,7 +588,7 @@ export function flagFor(value: string, n: NormalRange, gender: Gender): "H" | "L
   }
   const v = Number(value);
   if (Number.isNaN(v)) return null;
-  const r = resolveRange(n, gender);
+  const r = resolveRange(n, gender, age);
   if (r.low == null && r.high == null) return null;
   if (r.low != null && v < r.low) return "L";
   if (r.high != null && v > r.high) return "H";

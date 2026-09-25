@@ -1,5 +1,7 @@
 "use client";
 
+import { ThemeCard } from "@/components/local/LocalTheme";
+import { THEME_KEYS } from "@/lib/local/theme";
 import { useEffect, useRef, useState } from "react";
 import { Settings, Check, Download, Upload, HardDrive } from "lucide-react";
 import { getSettings, saveSettings, exportBackup, importBackup, type RosterSettings } from "@/lib/roster/store";
@@ -34,6 +36,8 @@ export default function RosterSettingsPage() {
   return (
     <div className="max-w-2xl">
       <h1 className="mb-5 flex items-center gap-2 text-2xl font-bold"><Settings className="size-6 text-brand" /> إعدادات محطة الكادر</h1>
+
+      <ThemeCard storageKey={THEME_KEYS.roster} />
       <div className="mb-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="text-sm font-medium">اسم الجهة<input value={s.title} onChange={(e) => setS({ ...s, title: e.target.value })} className={`mt-1 ${inp}`} /></label>

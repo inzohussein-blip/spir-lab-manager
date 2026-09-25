@@ -46,6 +46,13 @@ export function OfflineReady() {
   const [st, setSt] = useState<State>({ kind: "idle" });
 
   useEffect(() => {
+    // Ask the browser to keep this site's data permanently (station records, training
+    // images…), so it is never cleared automatically when the disk runs low.
+    (async () => {
+      try {
+        if (navigator.storage?.persist && !(await navigator.storage.persisted())) await navigator.storage.persist();
+      } catch { /* unsupported — nothing to do */ }
+    })();
     if (!("serviceWorker" in navigator)) return;
     let alive = true;
     const timers: ReturnType<typeof setTimeout>[] = [];

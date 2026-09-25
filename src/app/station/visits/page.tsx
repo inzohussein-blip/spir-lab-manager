@@ -68,10 +68,10 @@ export default function StationVisitsPage() {
       const g = v.patient.gender === "male" ? "ذكر" : v.patient.gender === "female" ? "أنثى" : "";
       for (const r of v.results) {
         const t = byId(r.testId);
-        const f = t ? flagFor(r.value, t.normal, v.patient.gender) : null;
+        const f = t ? flagFor(r.value, t.normal, v.patient.gender, v.patient.age) : null;
         lines.push([
           dayOf(v.created_at), v.accession ?? "", v.patient.name, g, v.patient.age ?? "", v.patient.phone ?? "",
-          r.name_ar, r.value, r.unit ?? "", t ? rangeLabel(t.normal, v.patient.gender, t.unit) : "", f ? flagText[f] : "",
+          r.name_ar, r.value, r.unit ?? "", t ? rangeLabel(t.normal, v.patient.gender, t.unit, v.patient.age) : "", f ? flagText[f] : "",
         ].map(csvCell).join(","));
       }
     }

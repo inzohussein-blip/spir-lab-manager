@@ -7,7 +7,8 @@ import {
   type StationSettings, type StationDoctor,
 } from "@/lib/station/store";
 import { InstallButton } from "@/components/station/InstallButton";
-import { StationThemeSwitch } from "@/components/station/StationTheme";
+import { ThemeCard } from "@/components/local/LocalTheme";
+import { THEME_KEYS } from "@/lib/local/theme";
 import { OfflineStatusLine } from "@/components/local/OfflineReady";
 
 const inp = "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
@@ -109,11 +110,7 @@ export default function StationSettingsPage() {
       <h1 className="mb-5 flex items-center gap-2 text-2xl font-bold"><Settings className="size-6" /> إعدادات المحطة</h1>
 
       {/* Appearance */}
-      <div className="mb-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
-        <div className="mb-1 text-sm font-semibold">مظهر المحطة</div>
-        <p className="mb-3 text-xs text-muted">الوضع الغامق يريح العين في المناوبات الليلية. يخص محطة المختبر فقط، والطباعة تبقى بيضاء دائماً.</p>
-        <StationThemeSwitch />
-      </div>
+      <ThemeCard storageKey={THEME_KEYS.station} />
 
       {/* Report letterhead */}
       <div className="mb-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">

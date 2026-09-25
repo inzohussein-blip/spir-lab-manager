@@ -3,13 +3,15 @@
 import { useEffect, useState } from "react";
 import { Plus, Trash2, Pencil, ListChecks, X, Layers } from "lucide-react";
 import {
-  getTests, saveTests, getPanels, savePanels, unlinkTestFromStock, uid, rangeLabel,
-  type StationTest, type NormalRange, type StationPanel,
+  getTests, saveTests, getPanels, savePanels, unlinkTestFromStock, uid, rangeLabel, AGE_UNIT_LABEL,
+  type StationTest, type NormalRange, type StationPanel, type AgeBand, type AgeUnit,
 } from "@/lib/station/store";
 
 const inp = "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
 
 type RangeKind = "none" | "numeric" | "sex" | "text" | "qual";
+type AgeRow = { from: string; to: string; unit: AgeUnit; low: string; high: string };
+const UNIT_DAYS: Record<AgeUnit, number> = { d: 1, m: 30.4375, y: 365.25 };
 
 const empty = {
   name_ar: "", name_en: "", category: "", sample_type: "", unit: "",
@@ -17,12 +19,23 @@ const empty = {
   low: "", high: "",
   mLow: "", mHigh: "", fLow: "", fHigh: "",
   text: "", cutoff: "", note: "",
+  ages: [] as AgeRow[],
 };
 
 const numOrNull = (s: string) => (s.trim() === "" ? null : Number(s));
 
+/** Valid age rows → bands, youngest first (the first matching band is used). */
+function buildAges(rows: AgeRow[]): AgeBand[] | undefined {
+  const out = rows
+    .filter((r) => r.from.trim() !== "" && Number.isFinite(Number(r.from)) && (r.low.trim() !== "" || r.high.trim() !== ""))
+    .map((r) => ({ from: Number(r.from), to: numOrNull(r.to), unit: r.unit, low: numOrNull(r.low), high: numOrNull(r.high) }))
+    .sort((a, b) => a.from * UNIT_DAYS[a.unit] - b.from * UNIT_DAYS[b.unit]);
+  return out.length ? out : undefined;
+}
+
 function buildNormal(f: typeof empty): NormalRange {
-  const note = f.note.trim() ? { note: f.note.trim() } : {};
+  const ages = buildAges(f.ages);
+  const note = { ...(f.note.trim() ? { note: f.note.trim() } : {}), ...(ages ? { ages } : {}) };
   if (f.kind === "numeric") return { kind: "numeric", low: numOrNull(f.low), high: numOrNull(f.high), ...note };
   if (f.kind === "sex")
     return {
@@ -51,6 +64,9 @@ function fromTest(t: StationTest): typeof empty {
     text: n.kind === "text" || n.kind === "qual" ? n.text : "",
     cutoff: n.kind === "qual" && n.cutoff != null ? String(n.cutoff) : "",
     note: (n.kind === "numeric" || n.kind === "sex") && n.note ? n.note : "",
+    ages: (n.kind === "numeric" || n.kind === "sex") && n.ages
+      ? n.ages.map((b) => ({ from: String(b.from), to: b.to == null ? "" : String(b.to), unit: b.unit, low: b.low == null ? "" : String(b.low), high: b.high == null ? "" : String(b.high) }))
+      : [],
   };
 }
 
@@ -107,8 +123,10 @@ export default function StationTestsPage() {
     if (editId === id) reset();
   }
 
-  const set = (k: keyof typeof empty) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+  const set = (k: Exclude<keyof typeof empty, "ages">) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setF((s) => ({ ...s, [k]: e.target.value }));
+  const setAge = (i: number, patch: Partial<AgeRow>) =>
+    setF((s) => ({ ...s, ages: s.ages.map((r, j) => (j === i ? { ...r, ...patch } : r)) }));
 
   return (
     <div>
@@ -174,6 +192,38 @@ export default function StationTestsPage() {
             <label className="text-sm font-medium">ملاحظة على المعدل (اختياري)<input value={f.note} onChange={set("note")} placeholder="مثال: Follicular Phase" className={`mt-1 ${inp}`} /></label>
           </div>
         )}
+        {(f.kind === "numeric" || f.kind === "sex") && (
+          <div className="mt-4 rounded-xl border border-dashed border-line p-3">
+            <div className="text-sm font-medium">معدلات حسب العمر (اختياري)</div>
+            <p className="mb-2 mt-0.5 text-xs text-muted">
+              للأطفال مثلاً. إذا وقع عمر المريض ضمن فئة يُستخدم معدلها للجنسين بدل المعدل العام، ويُطبع بجانبه عمر الفئة.
+              يُقرأ العمر من حقل «العمر»: رقم فقط = سنوات، أو اكتب «6 أشهر» أو «10 أيام».
+            </p>
+            {f.ages.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <div className="hidden grid-cols-[1fr_1fr_1fr_1fr_1fr_auto] gap-2 text-[11px] text-muted sm:grid">
+                  <span>من عمر</span><span>إلى أقل من (فارغ = بلا حد)</span><span>الوحدة</span><span>أدنى</span><span>أعلى</span><span className="w-8" />
+                </div>
+                {f.ages.map((r, i) => (
+                  <div key={i} className="grid grid-cols-3 gap-2 sm:grid-cols-[1fr_1fr_1fr_1fr_1fr_auto]">
+                    <input value={r.from} onChange={(e) => setAge(i, { from: e.target.value })} type="number" step="any" min="0" placeholder="من" aria-label="من عمر" className={inp} />
+                    <input value={r.to} onChange={(e) => setAge(i, { to: e.target.value })} type="number" step="any" min="0" placeholder="إلى" aria-label="إلى أقل من" className={inp} />
+                    <select value={r.unit} onChange={(e) => setAge(i, { unit: e.target.value as AgeUnit })} aria-label="الوحدة" className={inp}>
+                      {(["y", "m", "d"] as AgeUnit[]).map((u) => <option key={u} value={u}>{AGE_UNIT_LABEL[u]}</option>)}
+                    </select>
+                    <input value={r.low} onChange={(e) => setAge(i, { low: e.target.value })} type="number" step="any" placeholder="أدنى" aria-label="أدنى" className={inp} />
+                    <input value={r.high} onChange={(e) => setAge(i, { high: e.target.value })} type="number" step="any" placeholder="أعلى" aria-label="أعلى" className={inp} />
+                    <button type="button" onClick={() => setF((s) => ({ ...s, ages: s.ages.filter((_, j) => j !== i) }))} title="حذف الفئة" className="grid size-9 place-items-center rounded-lg border border-line text-red-600 hover:bg-red-50"><Trash2 className="size-4" /></button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button type="button" onClick={() => setF((s) => ({ ...s, ages: [...s.ages, { from: "", to: "", unit: "y", low: "", high: "" }] }))}
+              className="mt-2 inline-flex items-center gap-1 rounded-lg border border-dashed border-line px-2.5 py-1 text-xs hover:bg-canvas">
+              <Plus className="size-3.5" /> فئة عمرية
+            </button>
+          </div>
+        )}
         {f.kind === "qual" && (
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:w-2/3">
             <label className="text-sm font-medium">المعدل الطبيعي (نص)<input value={f.text} onChange={set("text")} placeholder="Negative" className={`mt-1 ${inp}`} /></label>
@@ -227,6 +277,9 @@ export default function StationTestsPage() {
                     </span>
                   ) : (
                     <span dir="ltr">{rangeLabel(t.normal, "", t.unit)}</span>
+                  )}
+                  {(t.normal.kind === "numeric" || t.normal.kind === "sex") && (t.normal.ages?.length ?? 0) > 0 && (
+                    <span className="mt-0.5 block text-[11px] text-brand-dark">+ {t.normal.ages!.length} فئة عمرية</span>
                   )}
                 </td>
                 <td className="px-4 py-3">

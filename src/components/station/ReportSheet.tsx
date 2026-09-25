@@ -166,7 +166,7 @@ export function ReportSheet({
                 </tr>,
                 ...g.rows.map((r, idx) => {
                   const t = r.test;
-                  const f = t ? flagFor(r.value, t.normal, gender) : null;
+                  const f = t ? flagFor(r.value, t.normal, gender, patient.age) : null;
                   const abn = f === "H" || f === "L";
                   const p = prev[r.key];
                   return (
@@ -174,7 +174,7 @@ export function ReportSheet({
                       <td className="px-3 py-2 font-medium">{t?.name_en?.trim() || r.name}</td>
                       <td className={`px-3 py-2 tabular-nums ${abn ? "font-bold" : "font-semibold"}`} style={abn ? { color: f === "H" ? "#b91c1c" : "#1d4ed8" } : undefined}>{r.value || "—"}</td>
                       <td className="px-3 py-2 text-gray-600">{r.unit || "—"}</td>
-                      <td className="px-3 py-2 text-gray-600">{t ? rangeLabel(t.normal, gender, t.unit) : "—"}</td>
+                      <td className="px-3 py-2 text-gray-600">{t ? rangeLabel(t.normal, gender, t.unit, patient.age) : "—"}</td>
                       {printPrev && (
                         <td className="px-3 py-2 text-gray-600">
                           {p ? (
