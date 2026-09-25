@@ -153,6 +153,8 @@ export interface StationSettings {
   tubeLabel?: boolean;
   labelSize?: "50x25" | "60x30";
   labelCopies?: number;
+  /** Look of the printed results table (see ./tableStyle). Missing → the default look. */
+  reportTable?: Partial<import("./tableStyle").TableStyle>;
 }
 
 function read<T>(key: string, fallback: T): T {

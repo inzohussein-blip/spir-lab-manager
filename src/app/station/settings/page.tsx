@@ -7,6 +7,7 @@ import {
   type StationSettings, type StationDoctor,
 } from "@/lib/station/store";
 import { InstallButton } from "@/components/station/InstallButton";
+import { TableStyleCard } from "@/components/station/TableStyleCard";
 import { ThemeCard } from "@/components/local/LocalTheme";
 import { LABEL_SIZES, type LabelSize } from "@/components/station/TubeLabel";
 import { THEME_KEYS } from "@/lib/local/theme";
@@ -173,6 +174,9 @@ export default function StationSettingsPage() {
           />
         </div>
       </div>
+
+      {/* Printed results table */}
+      <TableStyleCard settings={s} onChange={(t) => setOption({ reportTable: t })} />
 
       {/* Entry-screen options */}
       <div className="mb-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">

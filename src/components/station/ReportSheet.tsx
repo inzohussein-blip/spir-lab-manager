@@ -2,6 +2,7 @@
 
 import type { CSSProperties } from "react";
 import { flagFor, rangeLabel, type Gender, type PrevResult, type StationSettings, type StationTest } from "@/lib/station/store";
+import { tableStyleOf, tableColors, DENSITY_PAD, GAP_PX, type TableStyle } from "@/lib/station/tableStyle";
 import { Barcode } from "@/components/station/Barcode";
 
 // Lab identity colours (from the printed letterhead): purple + gold.
@@ -66,7 +67,8 @@ export function ReportSheet({
   printable?: boolean;
 }) {
   const gender = patient.gender;
-  const cols = printPrev ? 6 : 5;
+  const ts = tableStyleOf(settings.reportTable);
+  const pad = DENSITY_PAD[ts.density];
 
   // Group rows by catalog category, keeping first-appearance order.
   const groups: { cat: string; rows: ReportRow[] }[] = [];
@@ -93,11 +95,11 @@ export function ReportSheet({
         #report-sheet .report-group { break-after: avoid; }
         #report-sheet .report-footer { position: fixed; left: 12mm; right: 12mm; bottom: 8mm; margin: 0; }
         #report-sheet .report-watermark { position: fixed; }
-        #report-sheet td, #report-sheet th { padding-top: 5px; padding-bottom: 5px; }
+        #report-sheet td, #report-sheet th { padding-top: ${pad.a4}px !important; padding-bottom: ${pad.a4}px !important; }
         ${paper === "A5" ? `
         #report-sheet { padding: 8mm 8mm 18mm !important; }
-        #report-sheet table { font-size: 10px; }
-        #report-sheet td, #report-sheet th { padding: 3px 4px; }
+        #report-sheet table { font-size: ${(ts.fontSize * 10 / 14).toFixed(1)}px !important; }
+        #report-sheet td, #report-sheet th { padding: ${pad.a5}px 4px !important; }
         #report-sheet .report-footer { left: 8mm; right: 8mm; bottom: 5mm; padding: 4px 8px; font-size: 9px; }
         ` : ""}
       }`}</style>}
@@ -140,66 +142,10 @@ export function ReportSheet({
         </div>
 
         {/* Results — printed in English, left to right (the entry screen stays Arabic). */}
-        <div dir="ltr" className="mt-5 flex items-center gap-2">
-          <span className="h-5 w-1.5 rounded" style={{ background: GOLD, ...exact }} />
-          <span className="text-sm font-bold" style={{ color: PURPLE }}>Test Results</span>
-        </div>
-        <div dir="ltr" className="mt-2 overflow-hidden rounded-lg border text-left" style={{ borderColor: GOLD }}>
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr className="text-left text-xs text-white" style={{ background: PURPLE, ...exact }}>
-                <th className="px-3 py-2.5 font-semibold">Test</th>
-                <th className="px-3 py-2.5 font-semibold">Result</th>
-                <th className="px-3 py-2.5 font-semibold">Unit</th>
-                <th className="px-3 py-2.5 font-semibold">Reference Range</th>
-                {printPrev && <th className="px-3 py-2.5 font-semibold">Previous</th>}
-                <th className="px-3 py-2.5 font-semibold">Flag</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 && (
-                <tr><td colSpan={cols} className="py-6 text-center text-gray-400">{emptyText}</td></tr>
-              )}
-              {groups.map((g) => [
-                <tr key={`g-${g.cat}`} className="report-group">
-                  <td colSpan={cols} className="px-3 pb-1 pt-2.5 text-xs font-bold" style={{ color: PURPLE, background: "#fbf6e4", borderTop: `1px solid ${GOLD}`, ...exact }}>
-                    {g.cat}
-                  </td>
-                </tr>,
-                ...g.rows.map((r, idx) => {
-                  const t = r.test;
-                  const f = t ? flagFor(r.value, t.normal, gender, patient.age) : null;
-                  const abn = f === "H" || f === "L";
-                  const p = prev[r.key];
-                  return (
-                    <tr key={r.key} className="align-top" style={{ background: idx % 2 ? "#f7f3fb" : "#ffffff", ...exact }}>
-                      <td className="px-3 py-2 font-medium">{t?.name_en?.trim() || r.name}</td>
-                      <td className={`px-3 py-2 tabular-nums ${abn ? "font-bold" : "font-semibold"}`} style={abn ? { color: f === "H" ? "#b91c1c" : "#1d4ed8" } : undefined}>{r.value || "—"}</td>
-                      <td className="px-3 py-2 text-gray-600">{r.unit || "—"}</td>
-                      <td className="px-3 py-2 text-gray-600">{t ? rangeLabel(t.normal, gender, t.unit, patient.age) : "—"}</td>
-                      {printPrev && (
-                        <td className="px-3 py-2 text-gray-600">
-                          {p ? (
-                            <>
-                              <span className="tabular-nums font-semibold text-gray-800">{p.value}</span>
-                              <span className="block text-[10px] tabular-nums text-gray-500">{ymd(p.at)}</span>
-                            </>
-                          ) : "—"}
-                        </td>
-                      )}
-                      <td className="px-3 py-2">
-                        {f === "H" ? <span className="inline-grid size-6 place-items-center rounded-full text-xs font-bold text-white" style={{ background: "#b91c1c", ...exact }}>H</span>
-                          : f === "L" ? <span className="inline-grid size-6 place-items-center rounded-full text-xs font-bold text-white" style={{ background: "#1d4ed8", ...exact }}>L</span>
-                          : f === "N" ? <span className="inline-grid size-6 place-items-center rounded-full text-xs font-bold" style={{ background: "#e7f6ef", color: "#127a4f", ...exact }}>N</span>
-                          : <span className="text-gray-400">—</span>}
-                      </td>
-                    </tr>
-                  );
-                }),
-              ])}
-            </tbody>
-          </table>
-        </div>
+        <ResultsTable
+          ts={ts} groups={groups} empty={rows.length === 0} emptyText={emptyText}
+          gender={gender} age={patient.age} prev={prev} printPrev={printPrev} paper={paper}
+        />
 
         {/* Bottom group — signature sits at the bottom of the last page */}
         <div className="report-keep mt-auto">
@@ -224,5 +170,88 @@ export function ReportSheet({
         </div>
       </div>
     </>
+  );
+}
+
+type Group = { cat: string; rows: ReportRow[] };
+
+/** The results table alone — used by the printed sheet and by the Settings preview. */
+export function ResultsTable({ ts, groups, empty = false, emptyText = "No tests selected", gender, age, prev = {}, printPrev = false }: {
+  ts: TableStyle; groups: Group[]; empty?: boolean; emptyText?: string; gender: Gender; age?: string;
+  prev?: Record<string, PrevResult>; printPrev?: boolean; paper?: "A4" | "A5";
+}) {
+  const c = tableColors(ts.intensity);
+  const cols = printPrev ? 6 : 5;
+  const py = DENSITY_PAD[ts.density].screen;
+  const small = (ts.fontSize * 12) / 14; // header & group rows (text-xs at the original size)
+  const cell = (extra: React.CSSProperties = {}): React.CSSProperties => ({
+    paddingTop: py, paddingBottom: py,
+    ...(ts.layout === "grid" ? { border: `1px solid ${c.line}` } : ts.layout === "lines" ? { borderBottom: `1px solid ${c.line}` } : {}),
+    ...extra,
+  });
+  const nameW = ts.nameWeight === "bold" ? 700 : ts.nameWeight === "medium" ? 500 : 400;
+  const inset = ts.width === "inset" ? { marginInline: 24 } : {};
+
+  return (
+    <div dir="ltr" style={{ marginTop: GAP_PX[ts.gap], ...inset }}>
+      <div className="flex items-center gap-2">
+        <span className="h-5 w-1.5 rounded" style={{ background: c.border, ...exact }} />
+        <span className="text-sm font-bold" style={{ color: c.groupText }}>Test Results</span>
+      </div>
+      <div className="mt-2 overflow-hidden rounded-lg border text-left" style={{ borderColor: c.border, ...exact }}>
+        <table className="w-full border-collapse" style={{ fontSize: ts.fontSize, lineHeight: 1.4286 }}>
+          <thead>
+            <tr className="text-left text-white" style={{ background: c.header, fontSize: small, lineHeight: 1.3333, ...exact }}>
+              {["Test", "Result", "Unit", "Reference Range", ...(printPrev ? ["Previous"] : []), "Flag"].map((h) => (
+                <th key={h} className="px-3 font-semibold" style={cell({ paddingTop: py + 2, paddingBottom: py + 2, ...(ts.layout === "grid" ? { border: `1px solid ${c.header}` } : { borderBottom: 0 }) })}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {empty && (
+              <tr><td colSpan={cols} className="py-6 text-center text-gray-400">{emptyText}</td></tr>
+            )}
+            {groups.map((g) => [
+              <tr key={`g-${g.cat}`} className="report-group">
+                <td colSpan={cols} className="px-3 font-bold" style={{ ...cell({ paddingTop: py + 2, paddingBottom: Math.max(2, py - 4) }), fontSize: small, lineHeight: 1.3333, color: c.groupText, background: c.groupBg, borderTop: `1px solid ${c.border}`, ...exact }}>
+                  {g.cat}
+                </td>
+              </tr>,
+              ...g.rows.map((r, idx) => {
+                const t = r.test;
+                const f = t ? flagFor(r.value, t.normal, gender, age) : null;
+                const abn = f === "H" || f === "L";
+                const p = prev[r.key];
+                const bg = ts.layout === "striped" && idx % 2 ? c.stripe : "#ffffff";
+                return (
+                  <tr key={r.key} className="align-top" style={{ background: bg, ...exact }}>
+                    <td className="px-3" style={cell({ fontWeight: nameW })}>{t?.name_en?.trim() || r.name}</td>
+                    <td className="px-3 tabular-nums" style={cell({ fontWeight: abn ? 700 : 600, ...(abn ? { color: f === "H" ? "#b91c1c" : "#1d4ed8" } : {}) })}>{r.value || "—"}</td>
+                    <td className="px-3" style={cell({ color: c.muted })}>{r.unit || "—"}</td>
+                    <td className="px-3" style={cell({ color: c.muted })}>{t ? rangeLabel(t.normal, gender, t.unit, age) : "—"}</td>
+                    {printPrev && (
+                      <td className="px-3" style={cell({ color: c.muted })}>
+                        {p ? (
+                          <>
+                            <span className="tabular-nums font-semibold text-gray-800">{p.value}</span>
+                            <span className="block text-[10px] tabular-nums text-gray-500">{ymd(p.at)}</span>
+                          </>
+                        ) : "—"}
+                      </td>
+                    )}
+                    <td className="px-3" style={cell()}>
+                      {f === "H" ? <span className="inline-grid size-6 place-items-center rounded-full text-xs font-bold text-white" style={{ background: "#b91c1c", ...exact }}>H</span>
+                        : f === "L" ? <span className="inline-grid size-6 place-items-center rounded-full text-xs font-bold text-white" style={{ background: "#1d4ed8", ...exact }}>L</span>
+                        : f === "N" ? <span className="inline-grid size-6 place-items-center rounded-full text-xs font-bold" style={{ background: "#e7f6ef", color: "#127a4f", ...exact }}>N</span>
+                        : <span className="text-gray-400">—</span>}
+                    </td>
+                  </tr>
+                );
+              }),
+            ])}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
