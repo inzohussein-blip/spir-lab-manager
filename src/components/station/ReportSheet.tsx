@@ -49,7 +49,7 @@ const CATEGORY_EN: Record<string, string> = {
  */
 export function ReportSheet({
   settings, paper = "A4", date, accession, patient, referrer, rows, prev = {}, printPrev = false,
-  emptyText = "No tests selected", className = "",
+  emptyText = "No tests selected", className = "", printable = true,
 }: {
   settings: StationSettings;
   paper?: "A4" | "A5";
@@ -62,6 +62,8 @@ export function ReportSheet({
   printPrev?: boolean;
   emptyText?: string;
   className?: string;
+  /** false while another sheet (e.g. tube labels) is being printed: stays on screen, not on paper. */
+  printable?: boolean;
 }) {
   const gender = patient.gender;
   const cols = printPrev ? 6 : 5;
@@ -78,7 +80,7 @@ export function ReportSheet({
 
   return (
     <>
-      <style>{`@media print {
+      {printable && <style>{`@media print {
         @page { size: ${paper}; margin: 0; }
         #report-sheet {
           min-height: ${paper === "A5" ? "208mm" : "295mm"};
@@ -98,9 +100,9 @@ export function ReportSheet({
         #report-sheet td, #report-sheet th { padding: 3px 4px; }
         #report-sheet .report-footer { left: 8mm; right: 8mm; bottom: 5mm; padding: 4px 8px; font-size: 9px; }
         ` : ""}
-      }`}</style>
+      }`}</style>}
 
-      <div id="report-sheet" className={`relative isolate mx-auto flex max-w-[210mm] flex-col bg-white p-8 text-black shadow-sm print:mt-0 print:shadow-none ${className}`}>
+      <div id="report-sheet" className={`relative isolate mx-auto flex max-w-[210mm] flex-col bg-white p-8 text-black shadow-sm print:mt-0 print:shadow-none ${printable ? "" : "print:hidden"} ${className}`}>
         {/* Faint centred logo watermark (fixed in print → centred on every page) */}
         {settings.logo && (
           <div aria-hidden className="report-watermark pointer-events-none absolute inset-0 -z-10 flex items-center justify-center">

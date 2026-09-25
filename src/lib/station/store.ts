@@ -149,6 +149,10 @@ export interface StationSettings {
   derivedEgfr?: boolean;
   /** Under autoDerived: LDL by Sampson when TG 400–800 — off by default. */
   derivedSampson?: boolean;
+  /** Tube label printing from the entry screen — off (and hidden) by default. */
+  tubeLabel?: boolean;
+  labelSize?: "50x25" | "60x30";
+  labelCopies?: number;
 }
 
 function read<T>(key: string, fallback: T): T {

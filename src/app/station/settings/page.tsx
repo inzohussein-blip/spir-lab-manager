@@ -8,6 +8,7 @@ import {
 } from "@/lib/station/store";
 import { InstallButton } from "@/components/station/InstallButton";
 import { ThemeCard } from "@/components/local/LocalTheme";
+import { LABEL_SIZES, type LabelSize } from "@/components/station/TubeLabel";
 import { THEME_KEYS } from "@/lib/local/theme";
 import { OfflineStatusLine } from "@/components/local/OfflineReady";
 
@@ -196,6 +197,28 @@ export default function StationSettingsPage() {
               label="حساب LDL بمعادلة Sampson عندما تكون TG بين 400 و800"
               desc="بدل ترك LDL فارغاً حين لا تصلح معادلة Friedewald. فوق 800 يبقى فارغاً ويُنصح بالقياس المباشر."
             />
+          </div>
+        )}
+        <div className="h-3" />
+        <Toggle
+          checked={s.tubeLabel === true}
+          onChange={(v) => setOption({ tubeLabel: v })}
+          label="طباعة ملصق الأنبوب"
+          desc="يُظهر زر «ملصق الأنبوب» في شاشة الإدخال: اسم المريض، رقم العينة كباركود، والتاريخ — للصقه على أنبوب العينة."
+        />
+        {s.tubeLabel === true && (
+          <div className="mt-3 grid gap-3 border-s-2 border-line ps-4 sm:grid-cols-2">
+            <label className="text-xs text-muted">حجم الملصق
+              <select value={s.labelSize ?? "50x25"} onChange={(e) => setOption({ labelSize: e.target.value as LabelSize })} className={`mt-1 ${inp}`}>
+                {(Object.keys(LABEL_SIZES) as LabelSize[]).map((k) => <option key={k} value={k}>{LABEL_SIZES[k].label}</option>)}
+              </select>
+            </label>
+            <label className="text-xs text-muted">عدد الملصقات لكل مريض
+              <select value={s.labelCopies ?? 1} onChange={(e) => setOption({ labelCopies: Number(e.target.value) })} className={`mt-1 ${inp}`}>
+                {[1, 2, 3, 4, 5, 6].map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </label>
+            <p className="text-[11px] text-muted sm:col-span-2">اختر طابعة الملصقات في نافذة الطباعة، واضبط الهوامش على «بلا» إن ظهرت.</p>
           </div>
         )}
         <div className="h-3" />

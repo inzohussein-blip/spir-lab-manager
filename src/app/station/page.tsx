@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search, Printer, Save, Check, Beaker, Layers, Pencil, UserRound, StickyNote, Plus, X, RotateCcw, ListChecks, ChevronDown, type LucideIcon } from "lucide-react";
+import { Search, Printer, Save, Check, Tag, Beaker, Layers, Pencil, UserRound, StickyNote, Plus, X, RotateCcw, ListChecks, ChevronDown, type LucideIcon } from "lucide-react";
 import {
   getTests, addVisit, updateVisit, getVisit, getSettings, getPanels, nextAccession, uid, rangeLabel, flagFor,
   getPatients, getPatient, upsertPatient, addPatientNote, deductStockForTests, getDoctors, addDoctor,
@@ -10,6 +10,7 @@ import {
   type StationTest, type Gender, type StationVisit, type StationSettings, type StationPanel, type StationPatient, type NoteEntry, type StationDoctor,
 } from "@/lib/station/store";
 import { ReportSheet } from "@/components/station/ReportSheet";
+import { TubeLabels } from "@/components/station/TubeLabel";
 import { computeDerived } from "@/lib/station/derived";
 import { useToast } from "@/components/station/Toast";
 
@@ -87,6 +88,8 @@ function StationEntryPage() {
   const [q, setQ] = useState("");
   const [openCats, setOpenCats] = useState<Set<string>>(new Set()); // collapsible groups
   const [paper, setPaper] = useState<"A4" | "A5">("A4");
+  // Tube-label print job (Settings → «طباعة ملصق الأنبوب»); the report is not printed meanwhile.
+  const [labelJob, setLabelJob] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [createdAt, setCreatedAt] = useState<number | null>(null);
@@ -362,6 +365,21 @@ function StationEntryPage() {
   // Local date (not UTC); an edited visit keeps its original date on reprint.
   const today = createdAt ? localYmd(createdAt) : nowMs ? localYmd(nowMs) : "";
 
+  /** Print the tube label(s). Needs a sample number, so the visit is saved first. */
+  function onLabel() {
+    if (!requireName()) return;
+    const acc = accession || nextAccession();
+    setAccession(acc);
+    if (!saveVisit(acc)) return;
+    setLabelJob(true);
+  }
+  useEffect(() => {
+    if (!labelJob) return;
+    const done = () => setLabelJob(false);
+    window.addEventListener("afterprint", done);
+    return () => window.removeEventListener("afterprint", done);
+  }, [labelJob]);
+
   return (
     <div>
       {toast.node}
@@ -408,6 +426,11 @@ function StationEntryPage() {
               {justSaved ? <Check className="size-4" strokeWidth={3} /> : <Save className="size-4" />}
               {justSaved ? "تم الحفظ" : "حفظ"}
             </button>
+            {settings.tubeLabel && (
+              <button onClick={onLabel} title="طباعة ملصق لأنبوب العينة" className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas">
+                <Tag className="size-4" /> ملصق الأنبوب
+              </button>
+            )}
             <button onClick={onPrint} title="طباعة (Ctrl+P)" className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3.5 py-2 text-sm font-semibold text-white hover:bg-brand-dark">
               <Printer className="size-4" /> طباعة {paper}
             </button>
@@ -710,7 +733,18 @@ function StationEntryPage() {
         rows={chosen.map((t) => ({ key: t.id, name: t.name_ar, value: results[t.id] ?? "", unit: t.unit, test: t }))}
         prev={prev}
         printPrev={printPrev}
+        printable={!labelJob}
       />
+      {labelJob && (
+        <TubeLabels
+          name={name.trim()}
+          accession={accession}
+          date={today}
+          size={settings.labelSize ?? "50x25"}
+          copies={settings.labelCopies ?? 1}
+          onReady={() => setTimeout(() => window.print(), 60)}
+        />
+      )}
     </div>
   );
 }
