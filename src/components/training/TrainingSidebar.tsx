@@ -56,7 +56,8 @@ export function TrainingSidebar() {
   const { lockOn, canEdit } = useEditLock();
   const [showUnlock, setShowUnlock] = useState(false);
   // Edit-only destinations are hidden in read-only mode.
-  const EDIT_ONLY = ["/training/edit", "/training/exam", "/training/media", "/training/trainees", "/training/settings"];
+  // Settings stays visible: its appearance card works in read-only mode (the rest asks for the PIN).
+  const EDIT_ONLY = ["/training/edit", "/training/exam", "/training/media", "/training/trainees"];
 
   useEffect(() => {
     setCounts({ tests: getTests().length, tubes: getTubes().length, tools: getTools().length });

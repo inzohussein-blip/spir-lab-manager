@@ -70,11 +70,7 @@ function SettingsInner() {
   }
 
   return (
-    <div className="max-w-2xl">
-      <h1 className="mb-5 flex items-center gap-2 text-2xl font-bold"><Settings className="size-6 text-brand" /> إعدادات محطة التدريب</h1>
-
-      <ThemeCard storageKey={THEME_KEYS.training} />
-
+    <div>
       {/* Letterhead */}
       <div className="mb-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
         <div className="mb-3 flex items-center gap-2 text-sm font-semibold"><FileText className="size-4" /> ترويسة البروسيجر المطبوع (SOP)</div>
@@ -135,10 +131,16 @@ function SettingsInner() {
 }
 
 export default function TrainingSettingsPage() {
+  // Appearance is a personal choice, so it stays available in read-only mode;
+  // everything else on this page needs the edit PIN.
   return (
-    <LockGate>
-      <SettingsInner />
-    </LockGate>
+    <div className="max-w-2xl">
+      <h1 className="mb-5 flex items-center gap-2 text-2xl font-bold"><Settings className="size-6 text-brand" /> إعدادات محطة التدريب</h1>
+      <ThemeCard storageKey={THEME_KEYS.training} />
+      <LockGate>
+        <SettingsInner />
+      </LockGate>
+    </div>
   );
 }
 
