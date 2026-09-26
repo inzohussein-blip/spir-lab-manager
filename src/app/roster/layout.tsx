@@ -12,7 +12,7 @@ export default function RosterLayout({ children }: { children: ReactNode }) {
   return (
     <div className="roster min-h-screen md:flex">
       <script dangerouslySetInnerHTML={{ __html: ACTIVATION_SCRIPT }} />
-      <ActivationGate />
+      <ActivationGate module="roster" />
       <script dangerouslySetInnerHTML={{ __html: themeScript(THEME_KEYS.roster) }} />
       <LocalThemeApplier storageKey={THEME_KEYS.roster} />
       <RosterSidebar />

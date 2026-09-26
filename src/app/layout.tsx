@@ -40,7 +40,8 @@ export default async function RootLayout({
     pathname.startsWith("/store") ||
     pathname.startsWith("/training") ||
     pathname.startsWith("/qc") ||
-    pathname.startsWith("/roster");
+    pathname.startsWith("/roster") ||
+    pathname.startsWith("/licenses");
   const user = isBare ? null : await getCurrentUser();
 
   return (

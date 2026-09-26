@@ -12,7 +12,7 @@ export default function TrainingLayout({ children }: { children: ReactNode }) {
   return (
     <div className="training min-h-screen md:flex">
       <script dangerouslySetInnerHTML={{ __html: ACTIVATION_SCRIPT }} />
-      <ActivationGate />
+      <ActivationGate module="training" />
       <script dangerouslySetInnerHTML={{ __html: themeScript(THEME_KEYS.training) }} />
       <LocalThemeApplier storageKey={THEME_KEYS.training} />
       <TrainingSidebar />

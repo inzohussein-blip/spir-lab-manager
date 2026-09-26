@@ -10,7 +10,7 @@ export default function StationLayout({ children }: { children: ReactNode }) {
   return (
     <div className="station min-h-screen md:flex">
       <script dangerouslySetInnerHTML={{ __html: ACTIVATION_SCRIPT }} />
-      <ActivationGate />
+      <ActivationGate module="station" />
       {/* Station appearance (Settings) — applied before paint, then kept in sync. */}
       <script dangerouslySetInnerHTML={{ __html: themeScript(THEME_KEYS.station) }} />
       <LocalThemeApplier storageKey={THEME_KEYS.station} />

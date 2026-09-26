@@ -12,7 +12,7 @@ export default function QcLayout({ children }: { children: ReactNode }) {
   return (
     <div className="qc min-h-screen md:flex">
       <script dangerouslySetInnerHTML={{ __html: ACTIVATION_SCRIPT }} />
-      <ActivationGate />
+      <ActivationGate module="qc" />
       <script dangerouslySetInnerHTML={{ __html: themeScript(THEME_KEYS.qc) }} />
       <LocalThemeApplier storageKey={THEME_KEYS.qc} />
       <QcSidebar />
