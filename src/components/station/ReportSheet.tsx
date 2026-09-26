@@ -311,10 +311,10 @@ export function ResultsTable({ ts, groups, empty = false, emptyText = "No tests 
   );
 }
 
-/** The printed QR code with its caption (title + hint), in a small gold-edged card. */
+/** The printed QR code (left) with its caption (title + hint, right), in a small gold-edged card. */
 export function LabQrCard({ q, logo }: { q: LabQrCode; logo?: string }) {
   return (
-    <div className="report-qr flex items-center gap-2 rounded-lg border px-2 py-1.5" style={{ borderColor: GOLD }}>
+    <div dir="ltr" className="report-qr flex items-center gap-2 rounded-lg border px-2 py-1.5" style={{ borderColor: GOLD }}>
       <QrCode text={q.content} logo={logo} className="block size-[22mm]" />
       <div dir="rtl" className="max-w-[34mm] text-right leading-snug">
         <div className="text-[11px] font-bold" style={{ color: PURPLE }}>{q.title}</div>

@@ -13,7 +13,7 @@ function loadImage(src: string): Promise<HTMLImageElement | null> {
 }
 
 /**
- * Client-side QR code — holds Arabic text, links or a contact card, read by any phone camera.
+ * Client-side QR code — holds Arabic text and links, read by any phone camera.
  * Drawn as a sharp PNG (an SVG of thin strokes prints faded at small sizes). With `logo`, the lab
  * logo sits in the middle on a white tile covering ~4% of the code, well within the "Q" error
  * correction (~25% may be covered) the code then uses. Renders nothing until ready.
