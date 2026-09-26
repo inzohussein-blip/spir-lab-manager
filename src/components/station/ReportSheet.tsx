@@ -150,6 +150,9 @@ export function ReportSheet({
         #report-sheet .form-table td, #report-sheet .form-table th { padding-top: 2px !important; padding-bottom: 2px !important; }
         #report-sheet .report-footer { position: fixed; left: 12mm; right: 12mm; bottom: 8mm; margin: 0; }
         #report-sheet .report-watermark { position: fixed; }
+        #report-sheet .report-sign { margin-top: 5mm; }
+        #report-sheet .report-qr { padding: 2px 5px !important; }
+        #report-sheet .report-qr img { width: 19mm !important; height: 19mm !important; }
         #report-sheet td, #report-sheet th { padding-top: ${pad.a4}px !important; padding-bottom: ${pad.a4}px !important; }
         ${paper === "A5" ? `
         #report-sheet { padding: 8mm 8mm 18mm !important; }
@@ -163,12 +166,11 @@ export function ReportSheet({
         #report-sheet .cs-ast-title { display: none; }
         #report-sheet .report-pbc > span { width: 36mm !important; height: 8mm !important; }
         #report-sheet .report-pbc > div { font-size: 9.5px !important; }
-        #report-sheet .report-qr img { width: 20mm !important; height: 20mm !important; }
-        #report-sheet .report-qr { padding: 3px 5px !important; }
+        #report-sheet .report-qr img { width: 16mm !important; height: 16mm !important; }
         #report-sheet .form-top { margin-top: 2.5mm; }
         #report-sheet .form-title { font-size: 15px; }
         #report-sheet .form-sec-title { padding-top: 2px; padding-bottom: 2px; font-size: 12px; }
-        #report-sheet .report-sign { margin-top: 3mm; }
+        #report-sheet .report-sign { margin-top: 2mm; }
         #report-sheet .report-sign .mb-6 { margin-bottom: 4mm; }
         #report-sheet .form-sec:last-child { margin-bottom: 0; }
         #report-sheet table.form-table { font-size: ${(ts.fontSize * 9 / 14).toFixed(1)}px !important; line-height: 1.2 !important; }
