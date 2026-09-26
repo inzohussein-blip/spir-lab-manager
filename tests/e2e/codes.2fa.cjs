@@ -55,7 +55,7 @@ const HDR = { 'x-forwarded-for': '10.20.30.40' };
   await p.fill('input[aria-label="رمز التحقق"]', used); await p.click('button:has-text("دخول")');
   await p.waitForSelector('h1:has-text("إدارة الرموز")', { timeout: 10000 });
   ok(true, 'password + fresh code opens the page');
-  const log = await p.locator('text=سجل الدخول لهذه الصفحة').locator('xpath=..').innerText();
+  const log = await p.locator('div.rounded-2xl:has-text("سجل الدخول لهذه الصفحة")').innerText();
   ok((log.match(/محاولة فاشلة/g) || []).length >= 2, 'failed code attempts appear in the sign-in log');
 
   // Turn off (needs a code that was not used yet).

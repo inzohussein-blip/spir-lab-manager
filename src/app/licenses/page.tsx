@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   KeyRound, LogOut, Plus, Copy, Check, Ban, Play, MonitorSmartphone, RefreshCw, Trash2, Pencil, ShieldAlert,
-  FlaskConical, Download, ChevronDown, MessageSquare, History, Wallet, MessageSquareText, Database, Upload, ShieldCheck, Smartphone,
+  FlaskConical, Download, ChevronDown, MessageSquare, History, Wallet, MessageSquareText, Database, Upload, ShieldCheck, Smartphone, Phone,
 } from "lucide-react";
 import { LICENSE_MODULES, DEFAULT_MODULES, moduleLabel, type LicenseModule } from "@/lib/license/modules";
 
@@ -64,14 +64,41 @@ function kindOf(r: Row, now: number): Exclude<Filter, "all" | "unpaid" | "trial"
   if (r.expires_at != null && r.expires_at <= now) return "expired";
   return (r.expires_at ?? now) - now <= 14 * DAY ? "soon" : "active";
 }
+/** State of a code: its pill, the stripe on the card's edge and the colour of its time bar. */
 function status(r: Row, now: number) {
   const k = kindOf(r, now);
-  if (k === "stopped") return { t: "موقوف", c: "bg-red-50 text-red-700" };
-  if (k === "unused") return { t: "غير مستخدم", c: "bg-gray-100 text-gray-600" };
-  if (k === "expired") return { t: "منتهٍ", c: "bg-red-50 text-red-700" };
-  const left = Math.ceil(((r.expires_at ?? now) - now) / DAY);
-  return { t: `فعّال — باقٍ ${left} يوم`, c: k === "soon" ? "bg-amber-50 text-amber-700" : "bg-teal-50 text-brand-dark" };
+  if (k === "stopped") return { t: "موقوف", c: "bg-red-50 text-red-700", stripe: "border-s-red-500", bar: "bg-red-400" };
+  if (k === "unused") return { t: "غير مستخدم", c: "bg-slate-100 text-slate-600", stripe: "border-s-slate-300", bar: "bg-slate-300" };
+  if (k === "expired") return { t: "منتهٍ", c: "bg-red-50 text-red-700", stripe: "border-s-red-500", bar: "bg-red-400" };
+  if (k === "soon") return { t: "فعّال — ينتهي قريباً", c: "bg-amber-50 text-amber-700", stripe: "border-s-amber-500", bar: "bg-amber-500" };
+  return { t: "فعّال", c: "bg-teal-50 text-teal-800", stripe: "border-s-teal-500", bar: "bg-teal-500" };
 }
+/** Each station in the colour it has on the welcome page. */
+const MOD_TONE: Record<LicenseModule, string> = {
+  station: "border-teal-300 bg-teal-50 text-teal-800",
+  purchasing: "border-amber-300 bg-amber-50 text-amber-800",
+  training: "border-indigo-300 bg-indigo-50 text-indigo-700",
+  qc: "border-rose-300 bg-rose-50 text-rose-700",
+  roster: "border-sky-300 bg-sky-50 text-sky-700",
+  admin: "border-violet-300 bg-violet-50 text-violet-700",
+};
+/** Filter tiles: a dot in their colour, filled with it when chosen. */
+const TILE_TONE: Record<Filter, { dot: string; on: string }> = {
+  all: { dot: "bg-slate-400", on: "bg-slate-700 text-white border-slate-700" },
+  active: { dot: "bg-teal-500", on: "bg-teal-600 text-white border-teal-600" },
+  soon: { dot: "bg-amber-500", on: "bg-amber-500 text-white border-amber-500" },
+  expired: { dot: "bg-red-500", on: "bg-red-600 text-white border-red-600" },
+  unused: { dot: "bg-slate-300", on: "bg-slate-500 text-white border-slate-500" },
+  stopped: { dot: "bg-red-400", on: "bg-red-500 text-white border-red-500" },
+  unpaid: { dot: "bg-orange-500", on: "bg-orange-500 text-white border-orange-500" },
+  trial: { dot: "bg-violet-500", on: "bg-violet-600 text-white border-violet-600" },
+  outdated: { dot: "bg-yellow-500", on: "bg-yellow-500 text-white border-yellow-500" },
+};
+const fmtShort = (ms: number | null) => {
+  if (!ms) return "—";
+  const d = new Date(ms);
+  return `${d.toLocaleDateString("en-CA")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+};
 
 function activationMessage(r: Row, code: string, origin: string) {
   return [
@@ -255,49 +282,48 @@ export default function LicensesPage() {
 
   return shell(
     <>
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold"><KeyRound className="size-6" /> إدارة الرموز</h1>
-          <p className="mt-1 text-sm text-muted">رمز لكل مختبر، يعمل على جهاز واحد، وتبدأ مدته من يوم التفعيل.</p>
-        </div>
-        <button onClick={async () => { await post({ op: "logout" }); load(); }} className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-surface">
-          <LogOut className="size-4" /> خروج
-        </button>
-      </div>
-
-      {/* Where the codes are stored + a save test */}
-      {data.storage && (
-        <div className={`mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4 py-3 text-sm ${data.storage.ok ? "border-teal-200 bg-teal-50/60" : "border-red-300 bg-red-50"}`}>
-          <Database className={`size-5 shrink-0 ${data.storage.ok ? "text-brand-dark" : "text-red-600"}`} />
-          <div className="min-w-0 flex-1">
-            <div className="font-semibold">التخزين: {SOURCE[data.storage.source]}</div>
-            <div className="text-xs text-muted">
-              {data.storage.ok ? `متصلة ✓ — محفوظ فيها ${data.storage.codes ?? 0} رمز.` : `غير متصلة — ${data.storage.error ?? ""}`}
-              {test && (test.ok ? ` · اختبار الحفظ نجح (كتابة وقراءة وحذف في ${test.roundTripMs} ملّي ثانية).` : ` · اختبار الحفظ فشل: ${test.error ?? ""}`)}
-            </div>
-            {data.version && <div className="text-xs text-muted" data-testid="site-version">إصدار الموقع الحالي: <b dir="ltr">{data.version}</b> — تتحدّث الأجهزة إليه عند أول اتصال.</div>}
-            {data.storage.ok && data.storage.keySealed !== undefined && (
-              <div data-testid="key-sealed" className={`text-xs ${data.storage.keySealed ? "text-muted" : "text-amber-700"}`}>
-                {data.storage.keySealed
-                  ? "مفتاح توقيع الرموز: مشفّر بـ AUTH_SECRET ✓ — نسخة من القاعدة وحدها لا تكفي لتزوير رمز."
-                  : "مفتاح توقيع الرموز: غير مشفّر — أضف AUTH_SECRET في Vercel ثم أعد النشر."}
-              </div>
-            )}
+      <header className="mb-5 overflow-hidden rounded-2xl text-white shadow-[var(--shadow-card)]" style={{ background: "linear-gradient(135deg, #134e4a 0%, #0f2f3a 100%)" }}>
+        <div className="flex flex-wrap items-start justify-between gap-3 px-5 pt-5">
+          <div>
+            <h1 className="flex items-center gap-2 text-2xl font-bold"><KeyRound className="size-6 text-teal-300" /> إدارة الرموز</h1>
+            <p className="mt-1 text-sm text-white/70">رمز لكل مختبر، يعمل على جهاز واحد، وتبدأ مدته من يوم التفعيل.</p>
           </div>
-          <button onClick={async () => { setTesting(true); const d = await post({ op: "selftest" }); setTest(d.storage ?? { source: data.storage!.source, ok: false, error: "no reply" }); setTesting(false); }}
-            disabled={testing} className="rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-semibold hover:bg-canvas disabled:opacity-60">
-            {testing ? "جارٍ الاختبار…" : "اختبار الحفظ"}
+          <button onClick={async () => { await post({ op: "logout" }); load(); }} className="inline-flex items-center gap-1.5 rounded-lg border border-white/25 px-3 py-2 text-sm text-white hover:bg-white/10">
+            <LogOut className="size-4" /> خروج
           </button>
         </div>
-      )}
+        {/* Where the codes are stored, the signing key, the site version — small status indicators */}
+        {data.storage && (
+          <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-white/10 bg-black/15 px-5 py-3 text-xs text-white/80">
+            <span className="inline-flex items-center gap-1.5">
+              <span className={`size-2 rounded-full ${data.storage.ok ? "bg-emerald-400 shadow-[0_0_0_3px_rgba(52,211,153,.25)]" : "bg-red-400 shadow-[0_0_0_3px_rgba(248,113,113,.3)]"}`} />
+              <Database className="size-3.5" /> {SOURCE[data.storage.source]} — {data.storage.ok ? <>متصلة · <b className="font-mono tabular-nums text-white">{data.storage.codes ?? 0}</b> رمز</> : <>غير متصلة {data.storage.error ?? ""}</>}
+            </span>
+            {data.storage.ok && data.storage.keySealed !== undefined && (
+              <span data-testid="key-sealed" className={`inline-flex items-center gap-1.5 ${data.storage.keySealed ? "" : "text-amber-300"}`}>
+                <span className={`size-2 rounded-full ${data.storage.keySealed ? "bg-emerald-400" : "bg-amber-400"}`} />
+                {data.storage.keySealed ? "مفتاح التوقيع مشفّر بـ AUTH_SECRET ✓" : "مفتاح التوقيع غير مشفّر — أضف AUTH_SECRET في Vercel ثم أعد النشر"}
+              </span>
+            )}
+            {data.version && <span data-testid="site-version" className="inline-flex items-center gap-1.5">الإصدار <b className="font-mono tabular-nums text-white" dir="ltr">{data.version}</b></span>}
+            <button onClick={async () => { setTesting(true); const d = await post({ op: "selftest" }); setTest(d.storage ?? { source: data.storage!.source, ok: false, error: "no reply" }); setTesting(false); }}
+              disabled={testing} className="ms-auto rounded-md border border-white/25 px-2.5 py-1 font-semibold text-white hover:bg-white/10 disabled:opacity-60">
+              {testing ? "جارٍ الاختبار…" : "اختبار الحفظ"}
+            </button>
+            {test && <span className={`basis-full ${test.ok ? "text-emerald-300" : "text-red-300"}`}>{test.ok ? `اختبار الحفظ نجح — كتابة وقراءة وحذف في ${test.roundTripMs} ملّي ثانية.` : `اختبار الحفظ فشل: ${test.error ?? ""}`}</span>}
+          </div>
+        )}
+      </header>
 
       {/* Summary tiles = filters */}
-      <div className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+      <div className="mb-2 grid grid-cols-3 gap-2">
         {TILES.map((t) => (
           <button key={t.k} onClick={() => setFilter(t.k)} aria-pressed={filter === t.k}
-            className={`rounded-xl border bg-surface px-3 py-2 text-right shadow-[var(--shadow-card)] ${filter === t.k ? "border-brand ring-1 ring-brand" : "border-line hover:border-brand/50"}`}>
-            <div className={`text-xl font-extrabold tabular-nums ${t.tone ?? ""}`}>{counts[t.k]}</div>
-            <div className="text-xs text-muted">{t.l}</div>
+            className={`rounded-xl border px-2.5 py-2 text-right shadow-[var(--shadow-card)] transition-colors sm:px-3.5 sm:py-2.5 ${filter === t.k ? TILE_TONE[t.k].on : "border-line bg-surface hover:border-slate-300"}`}>
+            <div className={`font-mono text-2xl font-extrabold leading-tight tabular-nums ${filter === t.k ? "" : t.tone ?? ""}`}>{counts[t.k]}</div>
+            <div className={`mt-0.5 flex items-center gap-1.5 text-xs ${filter === t.k ? "text-white/85" : "text-muted"}`}>
+              <span className={`size-2 shrink-0 rounded-full ${filter === t.k ? "bg-white/80" : TILE_TONE[t.k].dot}`} />{t.l}
+            </div>
           </button>
         ))}
       </div>
@@ -375,16 +401,15 @@ export default function LicensesPage() {
           const isOpen = open.has(r.id);
           const evs = eventsOf.get(r.id) ?? [];
           return (
-            <div key={r.id} className="rounded-2xl border border-line bg-surface p-4 shadow-[var(--shadow-card)]" data-lab={r.lab_name}>
+            <div key={r.id} className={`rounded-2xl border border-s-4 border-line bg-surface p-4 shadow-[var(--shadow-card)] ${st.stripe}`} data-lab={r.lab_name}>
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-base font-bold">{r.lab_name}</span>
+                    <span className="text-lg font-bold">{r.lab_name}</span>
                     <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${st.c}`}>{st.t}</span>
                     {r.is_trial && <span className="rounded-full bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-700">تجريبي</span>}
                     {r.price.trim() && <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${r.paid ? "bg-teal-50 text-brand-dark" : "bg-amber-50 text-amber-700"}`}>{r.paid ? "مدفوع" : "غير مدفوع"} · <span className="tabular-nums">{r.price}</span></span>}
                     {r.message && <span title={r.message} className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-xs text-sky-700"><MessageSquare className="size-3" /> رسالة</span>}
-                    <span className="font-mono text-xs text-muted" dir="ltr">…{r.code_hint}</span>
                   </div>
                   {r.note && <div className="mt-0.5 text-xs text-muted">{r.note}</div>}
                 </div>
@@ -394,26 +419,28 @@ export default function LicensesPage() {
                     <option value="" disabled>+ تمديد</option>
                     {PERIODS.map((p) => <option key={p.d} value={p.d}>+ {p.l}</option>)}
                   </select>
-                  {r.status === "active"
-                    ? <button onClick={() => change(r, { action: "stop" }, `إيقاف رمز «${r.lab_name}»؟ تُقفل محطاته عند أول اتصال بالإنترنت.`)} className={`${small} text-red-600 hover:bg-red-50`}><Ban className="size-3.5" /> إيقاف</button>
-                    : <button onClick={() => change(r, { action: "resume" })} className={`${small} text-brand-dark hover:bg-teal-50`}><Play className="size-3.5" /> إعادة تفعيل</button>}
-                  {r.device_id && <button onClick={() => change(r, { action: "reset_device" }, "فك ربط الجهاز؟ يستطيع المختبر بعدها إدخال نفس الرمز على جهاز جديد، والمدة تستمر كما هي.")} className={small}><MonitorSmartphone className="size-3.5" /> نقل لجهاز جديد</button>}
-                  <button onClick={() => change(r, { action: "new_code" }, "إنشاء رمز جديد لهذا المختبر؟ الرمز القديم لا يعمل بعدها لتفعيل جهاز، والجهاز الحالي يستمر.")} className={small}><KeyRound className="size-3.5" /> رمز جديد</button>
                   <button onClick={() => copyText(statusMessage(r, now), () => flash(r.id))} title="نسخ رسالة الحالة (المدة والمحطات) لإرسالها للمختبر" className={small}>
                     {copied === r.id ? <Check className="size-3.5" /> : <Copy className="size-3.5" />} رسالة الحالة
                   </button>
-                  <button onClick={() => { const lab = window.prompt("اسم المختبر:", r.lab_name); if (lab == null) return; const note = window.prompt("ملاحظة:", r.note) ?? r.note; change(r, { action: "rename", lab, note }); }} title="تعديل الاسم والملاحظة" aria-label="تعديل الاسم" className="grid size-7 place-items-center rounded-lg border border-line hover:bg-canvas"><Pencil className="size-3.5" /></button>
-                  <button onClick={() => change(r, { action: "delete" }, `حذف رمز «${r.lab_name}» نهائياً؟ تُقفل محطاته عند أول اتصال بالإنترنت.`)} title="حذف" aria-label="حذف" className="grid size-7 place-items-center rounded-lg border border-line text-red-600 hover:bg-red-50"><Trash2 className="size-3.5" /></button>
+                  {/* Less frequent actions: one size of square icon buttons, named by their tooltip */}
+                  {r.device_id && <IconBtn label="نقل لجهاز جديد" onClick={() => change(r, { action: "reset_device" }, "فك ربط الجهاز؟ يستطيع المختبر بعدها إدخال نفس الرمز على جهاز جديد، والمدة تستمر كما هي.")}><MonitorSmartphone className="size-4" /></IconBtn>}
+                  <IconBtn label="رمز جديد" onClick={() => change(r, { action: "new_code" }, "إنشاء رمز جديد لهذا المختبر؟ الرمز القديم لا يعمل بعدها لتفعيل جهاز، والجهاز الحالي يستمر.")}><KeyRound className="size-4" /></IconBtn>
+                  <IconBtn label="تعديل الاسم" onClick={() => { const lab = window.prompt("اسم المختبر:", r.lab_name); if (lab == null) return; const note = window.prompt("ملاحظة:", r.note) ?? r.note; change(r, { action: "rename", lab, note }); }}><Pencil className="size-4" /></IconBtn>
+                  {r.status === "active"
+                    ? <IconBtn label="إيقاف" danger onClick={() => change(r, { action: "stop" }, `إيقاف رمز «${r.lab_name}»؟ تُقفل محطاته عند أول اتصال بالإنترنت.`)}><Ban className="size-4" /></IconBtn>
+                    : <IconBtn label="إعادة تفعيل" onClick={() => change(r, { action: "resume" })}><Play className="size-4" /></IconBtn>}
+                  <IconBtn label="حذف" danger onClick={() => change(r, { action: "delete" }, `حذف رمز «${r.lab_name}» نهائياً؟ تُقفل محطاته عند أول اتصال بالإنترنت.`)}><Trash2 className="size-4" /></IconBtn>
                 </div>
               </div>
-              <div className="mt-3 grid gap-2 text-xs sm:grid-cols-5">
-                <Info k="المدة" v={r.activated_at ? `${fmt(r.activated_at)} ← ${fmt(r.expires_at)}` : `${r.duration_days} يوم (تبدأ عند التفعيل)`} />
+              <TimeLeft r={r} now={now} bar={st.bar} />
+              <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 border-t border-line pt-3 text-xs sm:grid-cols-5">
                 <Info k="الجهاز" v={deviceOf(r) || "لم يُربط بعد"} />
-                <Info k="آخر اتصال" v={fmtTime(r.last_seen_at)} />
+                <Info k="آخر اتصال" v={fmtShort(r.last_seen_at)} mono />
                 <VersionInfo r={r} current={data.version} />
-                <Info k="أُنشئ" v={fmt(r.created_at)} />
+                <Info k="الرمز" v={`…${r.code_hint}`} mono />
+                <Info k="أُنشئ" v={fmt(r.created_at)} mono />
               </div>
-              <div className="mt-2 text-xs text-muted">المحطات — التغيير يصل للجهاز عند اتصاله بالإنترنت:</div>
+              <div className="mt-3 text-xs text-muted">المحطات — التغيير يصل للجهاز عند اتصاله بالإنترنت:</div>
               <ModuleChips value={r.modules} onChange={(m) => change(r, { action: "modules", modules: m })} />
 
               <button onClick={() => setOpen((s) => { const n = new Set(s); if (n.has(r.id)) n.delete(r.id); else n.add(r.id); return n; })}
@@ -427,12 +454,8 @@ export default function LicensesPage() {
       </div>
 
       {/* Backup of the codes */}
-      <div className="mt-6 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
-        <div className="flex items-center gap-2 text-sm font-semibold"><Database className="size-4" /> نسخة احتياطية للرموز</div>
-        <p className="mb-3 mt-1 text-xs text-muted">
-          ملف يحفظ كل الرموز (مشفّرة كما هي في القاعدة — لا تظهر فيه الرموز نفسها) وسجلها وسطر التواصل. الاسترجاع يضيف ويحدّث ولا يحذف شيئاً.
-          احفظ الملف في مكان آمن ولا تشاركه.
-        </p>
+      <Panel tone="sky" icon={<Database className="size-5" />} title="نسخة احتياطية للرموز"
+        desc="ملف يحفظ كل الرموز (مشفّرة كما هي في القاعدة — لا تظهر فيه الرموز نفسها) وسجلها وسطر التواصل. الاسترجاع يضيف ويحدّث ولا يحذف شيئاً. احفظ الملف في مكان آمن ولا تشاركه.">
         <div className="flex flex-wrap items-center gap-2">
           <button onClick={async () => {
             const d = await post({ op: "backup" });
@@ -461,14 +484,13 @@ export default function LicensesPage() {
           </label>
           {backupMsg && <span className="text-xs text-brand-dark">{backupMsg}</span>}
         </div>
-      </div>
+      </Panel>
 
       <TwoFactorCard tf={data.twoFactor} reload={load} />
 
       {/* Owner sign-in log */}
-      <div className="mt-6 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
-        <div className="flex items-center gap-2 text-sm font-semibold"><ShieldCheck className="size-4" /> سجل الدخول لهذه الصفحة</div>
-        <p className="mb-2 mt-1 text-xs text-muted">آخر محاولات الدخول الناجحة والفاشلة. بعد 8 محاولات خاطئة من نفس العنوان يُمنع الدخول 10 دقائق.</p>
+      <Panel tone="teal" icon={<ShieldCheck className="size-5" />} title="سجل الدخول لهذه الصفحة"
+        desc="آخر محاولات الدخول الناجحة والفاشلة. بعد 8 محاولات خاطئة من نفس العنوان يُمنع الدخول 10 دقائق.">
         {(data.signIns ?? []).length === 0 ? <p className="text-xs text-muted">لا شيء بعد.</p> : (
           <ul className="max-h-64 overflow-y-auto rounded-lg border border-line text-xs">
             {data.signIns!.map((x, i) => (
@@ -476,22 +498,21 @@ export default function LicensesPage() {
                 <span className={`font-semibold ${x.ok ? "text-brand-dark" : "text-red-700"}`}>{x.ok ? "✓ دخول ناجح" : "✗ محاولة فاشلة"}</span>
                 <span className="text-muted" dir="ltr">{x.ip}</span>
                 <span className="text-muted">{agentLabel(x.agent)}</span>
-                <span className="tabular-nums text-muted">{fmtTime(x.at)}</span>
+                <span className="font-mono tabular-nums text-muted" dir="ltr">{fmtShort(x.at)}</span>
               </li>
             ))}
           </ul>
         )}
-      </div>
+      </Panel>
 
       {/* Contact line */}
-      <div className="mt-6 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
-        <div className="text-sm font-semibold">سطر التواصل</div>
-        <p className="mb-2 text-xs text-muted">يظهر في نافذة التفعيل وشاشة القفل. إذا تُرك فارغاً يظهر رقمك: {OWNER_PHONE}.</p>
+      <Panel tone="amber" icon={<Phone className="size-5" />} title="سطر التواصل"
+        desc={<>يظهر في نافذة التفعيل وشاشة القفل. إذا تُرك فارغاً يظهر رقمك: <span className="font-mono" dir="ltr">{OWNER_PHONE}</span>.</>}>
         <div className="flex gap-2">
           <input value={contact} onChange={(e) => setContact(e.target.value)} className={inp} placeholder="للتفعيل أو التجديد تواصل مع: …" aria-label="سطر التواصل" />
           <button onClick={async () => { await post({ op: "contact", contact }); load(); flash("contact"); }} className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark">{copied === "contact" ? "حُفظ" : "حفظ"}</button>
         </div>
-      </div>
+      </Panel>
     </>,
   );
 }
@@ -556,17 +577,54 @@ function isOutdated(r: Row, current?: string): boolean {
 }
 function VersionInfo({ r, current }: { r: Row; current?: string }) {
   const v = r.app_version;
-  const tone = !r.device_id ? "" : !v || (current && v !== current) ? "bg-amber-50 text-amber-800" : "text-brand-dark";
+  const tone = !r.device_id ? "" : !v || (current && v !== current) ? "text-amber-700" : "text-teal-700";
   const text = !r.device_id ? "—" : !v ? "⚠️ قديمة (قبل هذا التحديث)" : current && v !== current ? `⚠️ ${v} — أقدم` : `✓ ${v}`;
   return (
-    <div className={`rounded-lg bg-canvas px-2.5 py-1.5 ${tone}`} data-testid="app-version" title={current ? `أحدث إصدار: ${current}` : undefined}>
-      <div className="text-[10px] text-muted">الإصدار</div><div className="font-medium" dir="auto">{text}</div>
+    <div data-testid="app-version" title={current ? `أحدث إصدار: ${current}` : undefined}>
+      <div className="text-[10px] text-muted">الإصدار</div><div className={`text-right font-mono font-medium tabular-nums ${tone}`} dir="ltr">{text}</div>
     </div>
   );
 }
 
-function Info({ k, v }: { k: string; v: string }) {
-  return <div className="rounded-lg bg-canvas px-2.5 py-1.5"><div className="text-[10px] text-muted">{k}</div><div className="font-medium">{v}</div></div>;
+function Info({ k, v, mono }: { k: string; v: string; mono?: boolean }) {
+  return (
+    <div className="min-w-0">
+      <div className="text-[10px] text-muted">{k}</div>
+      <div className={`truncate font-medium ${mono ? "text-right font-mono tabular-nums" : ""}`} dir={mono ? "ltr" : undefined} title={v}>{v}</div>
+    </div>
+  );
+}
+
+/** How much of the period is left, as words, dates and a bar. */
+function TimeLeft({ r, now, bar }: { r: Row; now: number; bar: string }) {
+  if (!r.activated_at || !r.expires_at) {
+    return <div className="mt-3 text-xs text-muted" data-testid="time-left">المدة <b className="font-mono tabular-nums text-ink">{r.duration_days}</b> يوم — تبدأ عند التفعيل</div>;
+  }
+  const total = Math.max(1, r.expires_at - r.activated_at);
+  const left = r.expires_at - now;
+  const days = Math.ceil(left / DAY);
+  const pct = Math.max(0, Math.min(100, (left / total) * 100));
+  return (
+    <div className="mt-3" data-testid="time-left">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 text-xs text-muted">
+        <span>{days > 0 ? <>باقٍ <b className="font-mono text-sm tabular-nums text-ink">{days}</b> يوماً</> : <>انتهت المدة</>}</span>
+        <span className="font-mono tabular-nums" dir="ltr">{fmt(r.activated_at)} → {fmt(r.expires_at)}</span>
+      </div>
+      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-200/70" role="progressbar" aria-label="المدة المتبقية" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100}>
+        <span className={`block h-full rounded-full ${bar}`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+/** A square icon button (one size for every less-used action), named by its tooltip. */
+function IconBtn({ label, onClick, danger, children }: { label: string; onClick: () => void; danger?: boolean; children: React.ReactNode }) {
+  return (
+    <button onClick={onClick} title={label} aria-label={label}
+      className={`grid size-8 place-items-center rounded-lg border border-line bg-surface transition-colors ${danger ? "text-red-600 hover:border-red-200 hover:bg-red-50" : "text-slate-600 hover:bg-canvas hover:text-ink"}`}>
+      {children}
+    </button>
+  );
 }
 
 function ModuleChips({ value, onChange }: { value: LicenseModule[]; onChange: (m: LicenseModule[]) => void }) {
@@ -577,11 +635,35 @@ function ModuleChips({ value, onChange }: { value: LicenseModule[]; onChange: (m
         return (
           <button key={m.id} type="button" aria-pressed={on}
             onClick={() => onChange(on ? value.filter((x) => x !== m.id) : [...value, m.id])}
-            className={`rounded-full border px-2.5 py-1 text-xs ${on ? (m.id === "admin" ? "border-violet-500 bg-violet-50 font-semibold text-violet-700" : "border-brand bg-brand-light font-semibold text-brand-dark") : "border-line text-muted line-through hover:bg-canvas"}`}>
+            className={`rounded-full border px-2.5 py-1 text-xs ${on ? `${MOD_TONE[m.id]} font-semibold` : "border-line text-muted line-through hover:bg-canvas"}`}>
             {on ? "✓ " : ""}{m.label}
           </button>
         );
       })}
+    </div>
+  );
+}
+
+/** A settings card: a large coloured icon, a clear title and what the card is for. */
+const PANEL_TONE = {
+  sky: "bg-sky-100 text-sky-700",
+  violet: "bg-violet-100 text-violet-700",
+  teal: "bg-teal-100 text-teal-700",
+  amber: "bg-amber-100 text-amber-700",
+} as const;
+function Panel({ tone, icon, title, desc, testid, children }: {
+  tone: keyof typeof PANEL_TONE; icon: React.ReactNode; title: string; desc: React.ReactNode; testid?: string; children: React.ReactNode;
+}) {
+  return (
+    <div className="mt-6 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]" data-testid={testid}>
+      <div className="mb-4 flex items-start gap-3">
+        <span className={`grid size-11 shrink-0 place-items-center rounded-xl ${PANEL_TONE[tone]}`}>{icon}</span>
+        <div className="min-w-0">
+          <h2 className="text-base font-bold">{title}</h2>
+          <p className="mt-0.5 text-xs leading-relaxed text-muted">{desc}</p>
+        </div>
+      </div>
+      {children}
     </div>
   );
 }
@@ -610,9 +692,8 @@ function TwoFactorCard({ tf, reload }: { tf?: TwoFactor; reload: () => void }) {
     if (d.ok) setSetup({ secret: d.secret, qr: d.qr }); else setMsg("يحتاج المتغير AUTH_SECRET في Vercel.");
   }
   return (
-    <div className="mt-6 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]" data-testid="two-factor">
-      <div className="flex items-center gap-2 text-sm font-semibold"><Smartphone className="size-4" /> التحقق بخطوتين</div>
-      <p className="mb-3 mt-1 text-xs text-muted">مع كلمة المرور يُطلب رمز من 6 أرقام يتغيّر كل 30 ثانية في تطبيق على هاتفك (Google Authenticator أو Microsoft Authenticator). لو تسرّبت كلمة المرور لا يدخل أحد بدون هاتفك.</p>
+    <Panel tone="violet" icon={<Smartphone className="size-5" />} title="التحقق بخطوتين" testid="two-factor"
+      desc="مع كلمة المرور يُطلب رمز من 6 أرقام يتغيّر كل 30 ثانية في تطبيق على هاتفك (Google Authenticator أو Microsoft Authenticator). لو تسرّبت كلمة المرور لا يدخل أحد بدون هاتفك.">
       {tf.forcedOff && (
         <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">التحقق بخطوتين موقوف الآن من Vercel (المتغير <b dir="ltr">LICENSE_2FA_OFF</b>). فعّله من جديد بهاتفك، ثم احذف المتغير وأعد النشر.</p>
       )}
@@ -656,6 +737,6 @@ function TwoFactorCard({ tf, reload }: { tf?: TwoFactor; reload: () => void }) {
         <p className="text-xs text-amber-700">يحتاج المتغير AUTH_SECRET في Vercel أولاً.</p>
       )}
       {msg && <p className="mt-2 text-xs text-brand-dark">{msg}</p>}
-    </div>
+    </Panel>
   );
 }

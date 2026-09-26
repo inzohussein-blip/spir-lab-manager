@@ -30,7 +30,7 @@ const DAY = 86400000;
   const codeB = await create('مختبر النور', 365, true);
   const codeC = await create('مختبر يوم واحد', -1, false);
   ok(/^[2-9A-Z]{4}-[2-9A-Z]{4}-[2-9A-Z]{4}$/.test(codeA), `code format ${codeA}`);
-  const owner = async (lab, btn) => { await o.reload(); await o.waitForTimeout(700); const card = o.locator('div.rounded-2xl', { has: o.locator(`span.text-base:text-is("${lab}")`) }); return card; };
+  const owner = async (lab, btn) => { await o.reload(); await o.waitForTimeout(700); const card = o.locator(`div[data-lab="${lab}"]`); return card; };
   // ── device A: new device must activate ──
   const { p: a } = await newDev();
   await a.goto(B + '/welcome'); await a.waitForTimeout(1500);
@@ -61,11 +61,11 @@ const DAY = 86400000;
   ok(await a.locator('text=غير مفعّلة في رمزك').count() >= 2, 'Welcome greys out QC card too');
   // ── stop / resume ──
   card = await owner('مختبر الأمل');
-  await card.locator('button:has-text("إيقاف")').click(); await o.waitForTimeout(600);
+  await card.locator('button[aria-label="إيقاف"]').click(); await o.waitForTimeout(600);
   await forceRefresh(a); await a.goto(B + '/station'); await a.waitForTimeout(1800);
   ok(await a.locator('div[role=dialog]:has-text("المحطات مقفلة")').count() === 1 && await a.locator('text=موقوف').count() >= 1, 'stopped code locks the device');
   card = await owner('مختبر الأمل');
-  await card.locator('button:has-text("إعادة تفعيل")').click(); await o.waitForTimeout(600);
+  await card.locator('button[aria-label="إعادة تفعيل"]').click(); await o.waitForTimeout(600);
   await a.click('button:has-text("تحقق الآن")'); await a.waitForTimeout(1800);
   ok(await a.locator('div[role=dialog]').count() === 0, 'resume + «تحقق الآن» unlocks');
   // ── device C: 1-day code, then time passes ──
@@ -118,7 +118,7 @@ const DAY = 86400000;
   ok(new URL(d.url()).pathname === '/welcome', 'removing admin from the code closes the panel');
   // ── move A to device B ──
   card = await owner('مختبر الأمل');
-  await card.locator('button:has-text("نقل لجهاز جديد")').click(); await o.waitForTimeout(600);
+  await card.locator('button[aria-label="نقل لجهاز جديد"]').click(); await o.waitForTimeout(600);
   await bdev.goto(B + '/welcome'); await bdev.waitForTimeout(1500);
   await bdev.fill('input[aria-label="رمز المختبر"]', codeA); await bdev.click('button:has-text("تفعيل")'); await bdev.waitForTimeout(1500);
   ok(await bdev.locator('div[role=dialog]').count() === 0, 'after «نقل لجهاز جديد» the code activates device B');
