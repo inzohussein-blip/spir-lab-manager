@@ -5,7 +5,7 @@ import { flagFor, rangeLabel, type Gender, type PrevResult, type StationSettings
 import { tableStyleOf, tableColors, DENSITY_PAD, GAP_PX, type TableStyle } from "@/lib/station/tableStyle";
 import { Barcode } from "@/components/station/Barcode";
 import { FormReport } from "@/components/station/FormReport";
-import { isFormCode, decodeForm, type FormCode } from "@/lib/station/templates";
+import { isFormCode, decodeForm, formOptionsOf, type FormCode } from "@/lib/station/templates";
 
 // Lab identity colours (from the printed letterhead): purple + gold.
 const PURPLE = "#5a2a82";
@@ -149,6 +149,9 @@ export function ReportSheet({
         #report-sheet .cs-box > div { padding-top: 1px; padding-bottom: 1px; }
         #report-sheet .cs-ast { margin-top: 3mm; }
         #report-sheet .cs-ast-title { display: none; }
+        #report-sheet .form-top { margin-top: 2.5mm; }
+        #report-sheet .form-title { font-size: 15px; }
+        #report-sheet .form-sec-title { padding-top: 2px; padding-bottom: 2px; font-size: 12px; }
         #report-sheet .report-sign { margin-top: 3mm; }
         #report-sheet .report-sign .mb-6 { margin-bottom: 4mm; }
         #report-sheet .form-sec:last-child { margin-bottom: 0; }
@@ -181,7 +184,7 @@ export function ReportSheet({
           return (
             <div key={r.key} className={first ? "" : "report-page mt-10 border-t-2 border-dashed border-gray-300 pt-8 print:mt-0 print:border-0 print:pt-0"}>
               {!first && header}
-              <FormReport code={r.test!.code as FormCode} values={decodeForm(r.value)} ts={ts} />
+              <FormReport code={r.test!.code as FormCode} values={decodeForm(r.value)} ts={ts} opts={formOptionsOf(settings)} />
             </div>
           );
         })}

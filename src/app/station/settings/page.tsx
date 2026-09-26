@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Settings, Check, Image as ImageIcon, Download, Upload, Trash2, Stethoscope, Plus, Pencil, X, Smartphone, History, ListCollapse } from "lucide-react";
+import { Settings, Check, Image as ImageIcon, Download, Upload, Trash2, Stethoscope, Plus, Pencil, X, Smartphone, History, ListCollapse, ClipboardList } from "lucide-react";
 import {
   getSettings, saveSettings, exportBackup, importBackup, getDoctors, saveDoctors, markBackupNow, daysSinceBackup, getVisits, storageUsage, requestPersistentStorage, uid,
   type StationSettings, type StationDoctor,
@@ -232,6 +232,43 @@ export default function StationSettingsPage() {
           label="طيّ مجموعات الفحوصات"
           desc="تُطوى كل مجموعة تحت عنوانها وتُفتح بالضغط عليه، والبحث يفتحها تلقائياً."
         />
+      </div>
+
+      {/* Report forms (urine, stool, semen, culture) */}
+      <div className="mb-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
+        <div className="mb-3 flex items-center gap-2 text-sm font-semibold"><ClipboardList className="size-4" /> استمارات التقارير (البول، الخروج، السائل المنوي، الزرع)</div>
+        <div className="flex flex-col gap-3">
+          <Toggle
+            checked={s.formBoldAbnormal !== false}
+            onChange={(v) => setOption({ formBoldAbnormal: v })}
+            label="تمييز النتيجة غير الطبيعية بخط عريض"
+            desc="في الاستمارة المطبوعة تُطبع النتيجة المخالفة للقيمة الطبيعية أو للمعدل المطبوع بجانبها بخط عريض، بلا ألوان."
+          />
+          <Toggle
+            checked={s.formHideEmpty === true}
+            onChange={(v) => setOption({ formHideEmpty: v })}
+            label="إخفاء الحقول الفارغة عند الطباعة"
+            desc="الحقل الذي لم يُملأ لا يُطبع صفه، وكذلك العنوان الفرعي أو القسم الذي لم يُملأ منه شيء."
+          />
+          <Toggle
+            checked={s.sfaDiagnosis !== false}
+            onChange={(v) => setOption({ sfaDiagnosis: v })}
+            label="الخلاصة التلقائية للسائل المنوي (Conclusion)"
+            desc="تُحسب من القيم حسب المعدلات المطبوعة: Normozoospermia، Oligo/Astheno/Teratozoospermia، Azoospermia، مع Hypospermia وNecrozoospermia. تُطبع أسفل التقرير ويمكن استبدالها."
+          />
+          <Toggle
+            checked={s.sfaAutoCalc !== false}
+            onChange={(v) => setOption({ sfaAutoCalc: v })}
+            label="الحساب التلقائي في السائل المنوي"
+            desc="عند إدخال PR وNP يُحسب Total Motility وImmotile، وعند إدخال Normal تُحسب Abnormal (والعكس)، ومن التركيز والحجم يُحسب Total Sperm Count."
+          />
+          <Toggle
+            checked={s.csTestedOnly === true}
+            onChange={(v) => setOption({ csTestedOnly: v })}
+            label="الزرع: طباعة المضادات المفحوصة فقط"
+            desc="عند الإيقاف (الافتراضي) تُطبع قائمة المضادات كاملة كما في الورقة، والمضاد غير المفحوص يبقى فارغاً."
+          />
+        </div>
       </div>
 
       {/* Referring doctors */}

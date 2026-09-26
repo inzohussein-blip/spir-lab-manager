@@ -22,6 +22,10 @@ export interface TField {
   opts?: Opt[];
   /** Value used by «ملء القيم الطبيعية». */
   normal?: string;
+  /** Other answers that also count as normal (for «bold abnormal» on the printed report). */
+  ok?: string[];
+  /** Descriptive field — never marked abnormal. */
+  noFlag?: boolean;
   indent?: boolean;
 }
 export type TRow = TField | { sub: string };
@@ -45,7 +49,7 @@ export const GUE: Template = {
     {
       title: "1. Physical & Chemical Examination (Macroscopic)", col: "Reference Range",
       rows: [
-        { k: "color", label: "Color", ref: "Yellow / Straw", normal: "Yellow",
+        { k: "color", label: "Color", ref: "Yellow / Straw", normal: "Yellow", ok: ["Pale Yellow", "Straw"],
           opts: [o("Yellow", "أصفر طبيعي"), o("Pale Yellow", "أصفر باهت"), o("Dark Yellow", "أصفر داكن"), o("Amber", "كهرماني"), o("Orange", "برتقالي"), o("Red / Bloody", "دموي"), o("Greenish / Brownish", "مخضر / بني")] },
         { k: "appearance", label: "Appearance", ref: "Clear", normal: "Clear",
           opts: [o("Clear", "رائق"), o("Slightly Cloudy / Semi-Turbid", "شبه عكر"), o("Cloudy / Turbid", "عكر")] },
@@ -63,9 +67,9 @@ export const GUE: Template = {
     {
       title: "2. Microscopic Examination", col: "Unit / Field",
       rows: [
-        { k: "pus", label: "Pus Cells (WBCs)", unit: "/ H.P.F", normal: "0 - 1", opts: HPF_U },
-        { k: "rbc", label: "R.B.Cs (Red Blood Cells)", unit: "/ H.P.F", normal: "0 - 1", opts: HPF_U },
-        { k: "epi", label: "Epithelial Cells", unit: "/ H.P.F", normal: "Few", opts: AMOUNT },
+        { k: "pus", label: "Pus Cells (WBCs)", unit: "/ H.P.F", normal: "0 - 1", ok: ["1 - 2", "2 - 3", "2 - 4", "3 - 5"], opts: HPF_U },
+        { k: "rbc", label: "R.B.Cs (Red Blood Cells)", unit: "/ H.P.F", normal: "0 - 1", ok: ["1 - 2", "2 - 3"], opts: HPF_U },
+        { k: "epi", label: "Epithelial Cells", unit: "/ H.P.F", normal: "Few", ok: ["Nil", "+"], opts: AMOUNT },
         { k: "casts", label: "Casts (Hyaline / Granular / Others)", unit: "/ L.P.F", normal: "Nil",
           opts: [o("Nil"), o("Hyaline Casts (Few)"), o("Hyaline Casts (Many)"), o("Granular Casts (Few)"), o("Granular Casts (Many)"), o("WBC Casts"), o("RBC Casts")] },
         { sub: "CRYSTALS & AMORPHOUS DEPOSITS" },
@@ -96,11 +100,11 @@ export const GSE: Template = {
     {
       title: "1. Physical & Chemical Examination (Macroscopic)", col: "Reference Range",
       rows: [
-        { k: "color", label: "Color", ref: "Brown", normal: "Brown",
+        { k: "color", label: "Color", ref: "Brown", normal: "Brown", ok: ["Dark Brown", "Light Brown"],
           opts: [o("Brown", "بني طبيعي"), o("Dark Brown", "بني داكن"), o("Light Brown", "بني فاتح"), o("Yellowish", "مصفر"), o("Greenish", "مخضر"), o("Black / Tarry (Melena)", "أسود / قطراني"), o("Reddish / Bloody", "مدمى / أحمر"), o("Clay-colored / Pale", "شاحب / طيني")] },
-        { k: "consistency", label: "Consistency", ref: "Formed / Soft", normal: "Formed",
+        { k: "consistency", label: "Consistency", ref: "Formed / Soft", normal: "Formed", ok: ["Semi-Formed", "Soft"],
           opts: [o("Formed", "متماسك / طبيعي"), o("Semi-Formed", "شبه متماسك"), o("Soft", "لين"), o("Loose", "مفكك"), o("Watery / Diarrheal", "مائي / إسهال"), o("Hard", "صلب")] },
-        { k: "ph", label: "Reaction (pH)", ref: "Neutral / Slightly Acidic", normal: "Neutral (7.0)",
+        { k: "ph", label: "Reaction (pH)", ref: "Neutral / Slightly Acidic", normal: "Neutral (7.0)", ok: ["Slightly Acidic", "Slightly Alkaline"],
           opts: plain("Acidic", "Slightly Acidic", "Neutral (7.0)", "Slightly Alkaline", "Alkaline") },
         { k: "blood", label: "Blood (Macroscopic)", ref: "Nil", normal: "Nil", opts: AMOUNT },
         { k: "mucus", label: "Mucus", ref: "Nil", normal: "Nil", opts: AMOUNT },
@@ -110,7 +114,7 @@ export const GSE: Template = {
     {
       title: "2. Microscopic Examination", col: "Unit / Field",
       rows: [
-        { k: "pus", label: "Pus Cells (WBCs)", unit: "/ H.P.F", normal: "0 - 1", opts: HPF_S },
+        { k: "pus", label: "Pus Cells (WBCs)", unit: "/ H.P.F", normal: "0 - 1", ok: ["Nil", "1 - 2"], opts: HPF_S },
         { k: "rbc", label: "R.B.Cs (Red Blood Cells)", unit: "/ H.P.F", normal: "Nil", opts: HPF_S },
         { sub: "PARASITES & OVA" },
         { k: "ova", label: "Ova (Eggs)", unit: "/ H.P.F", normal: "Nil", opts: HELMINTHS },
@@ -119,7 +123,7 @@ export const GSE: Template = {
         { k: "tropho", label: "Trophozoite (Active Stage)", unit: "/ H.P.F", normal: "Nil", opts: PARASITES },
         { sub: "FUNGI & DIGESTION FINDINGS" },
         { k: "yeast", label: "Monilia / Yeast Cells", unit: "/ H.P.F", normal: "Nil", opts: AMOUNT },
-        { k: "food", label: "Undigested Food Particles", unit: "/ H.P.F", normal: "Few", opts: AMOUNT },
+        { k: "food", label: "Undigested Food Particles", unit: "/ H.P.F", normal: "Few", ok: ["Nil", "+"], opts: AMOUNT },
         { k: "fat", label: "Fat Globules / Starch Granules", unit: "/ H.P.F", normal: "Nil", opts: AMOUNT },
         { k: "others", label: "Others / Remarks", unit: "/ H.P.F", normal: "Nil", opts: plain("Nil") },
       ],
@@ -136,13 +140,13 @@ export const SFA: Template = {
     {
       title: "Macroscopical Examination", col: "Normal Values",
       rows: [
-        { k: "abstinence", label: "Abstinence Period", ref: "3 – 5 days", normal: "3 days", opts: plain("1 day", "2 days", "3 days", "4 days", "5 days", "6 days", "7 days", "> 7 days") },
+        { k: "abstinence", label: "Abstinence Period", ref: "3 – 5 days", normal: "3 days", noFlag: true, opts: plain("1 day", "2 days", "3 days", "4 days", "5 days", "6 days", "7 days", "> 7 days") },
         { k: "volume", label: "Volume", ref: "≥ 1.5 ml", normal: "3.0 ml", opts: ["0.5", "1.0", "1.5", "2.0", "2.5", "3.0", "3.5", "4.0", "4.5", "5.0", "5.5", "6.0"].map((v) => ({ v: `${v} ml` })) },
         { k: "viscosity", label: "Viscosity", ref: "Drops ≤ 2 cm thread", normal: "Normal",
           opts: [o("Normal", "طبيعي"), o("Viscid / High Viscosity", "عالي اللزوجة"), o("Liquid / Low Viscosity", "سائل / منخفض اللزوجة")] },
-        { k: "liquefaction", label: "Liquefaction Time", ref: "Within 30 – 60 minutes", normal: "Within 30 - 60 Minutes",
+        { k: "liquefaction", label: "Liquefaction Time", ref: "Within 30 – 60 minutes", normal: "Within 30 - 60 Minutes", ok: ["Within 15 - 30 Minutes"],
           opts: [o("Within 15 - 30 Minutes", "طبيعي"), o("Within 30 - 60 Minutes", "طبيعي"), o("Delayed (> 60 Minutes)", "متأخر")] },
-        { k: "appearance", label: "Appearance", ref: "Homogenous / Opalescent grey", normal: "Homogenous / Opalescent grey",
+        { k: "appearance", label: "Appearance", ref: "Homogenous / Opalescent grey", normal: "Homogenous / Opalescent grey", ok: ["Grey-White / Normal"],
           opts: [o("Homogenous / Opalescent grey", "طبيعي"), o("Grey-White / Normal", "رمادي أبيض"), o("Milky White", "أبيض حليبي"), o("Yellowish", "مصفر"), o("Brownish / Reddish (Hematospermia)", "بني / مدمى")] },
         { k: "ph", label: "Acidity (pH)", ref: "Alkaline (≥ 7.2)", normal: "7.8", opts: plain("7.0", "7.2", "7.4", "7.6", "7.8", "8.0", "8.2", "8.5") },
       ],
@@ -155,19 +159,19 @@ export const SFA: Template = {
         { k: "total", label: "Total Sperm Count", ref: "≥ 39 millions/ejaculate", normal: "180 millions/ejaculate" },
         { sub: "Sperm Motility Percent:" },
         { k: "pr", label: "Progressive Motile (Active)", ref: "Progressive motile sperms ≥ 40% ; within 60 minutes.", indent: true, normal: "50%", opts: PERCENT },
-        { k: "np", label: "Non-Progressive Motile (Sluggish)", indent: true, normal: "10%", opts: PERCENT },
-        { k: "im", label: "Immotile", indent: true, normal: "40%", opts: PERCENT },
+        { k: "np", label: "Non-Progressive Motile (Sluggish)", indent: true, normal: "10%", noFlag: true, opts: PERCENT },
+        { k: "im", label: "Immotile", indent: true, normal: "40%", noFlag: true, opts: PERCENT },
         { k: "tm", label: "Total Motility (PR + NP)", ref: "≥ 40%", indent: true, normal: "60%", opts: PERCENT },
         { sub: "Sperm Morphology Percent:" },
         { k: "normalf", label: "Normal", ref: "> 30%", indent: true, normal: "40%", opts: PERCENT },
         { k: "abnormalf", label: "Abnormal", ref: "< 70%", indent: true, normal: "60%", opts: PERCENT },
-        { k: "defects", label: "Abnormal Forms Type", indent: true, normal: "Mixed (Head / Neck / Tail)",
+        { k: "defects", label: "Abnormal Forms Type", indent: true, normal: "Mixed (Head / Neck / Tail)", noFlag: true,
           opts: [o("Head Defects", "تشوهات الرأس"), o("Neck / Midpiece Defects", "تشوهات العنق"), o("Tail Defects", "تشوهات الذيل"), o("Mixed (Head / Neck / Tail)", "مختلطة")] },
         { k: "vitality", label: "Vitality (Live Sperms)", ref: "≥ 58%", normal: "70%", opts: PERCENT },
         { k: "aggregation", label: "Sperm Aggregation", ref: "-ve", normal: "-ve", opts: plain("-ve", "+", "++", "+++") },
         { k: "agglutination", label: "Sperm Agglutination", ref: "< 10 Sperm/agglutinate", normal: "Nil",
           opts: AMOUNT },
-        { k: "wbc", label: "Leucocytes (Pus cells)", ref: "< 1 / HPF", normal: "0 - 1", opts: HPF_SF },
+        { k: "wbc", label: "Leucocytes (Pus cells)", ref: "< 1 / HPF", normal: "0 - 1", ok: ["1 - 2"], opts: HPF_SF },
         { k: "rbc", label: "R.B.Cs", ref: "Nil", normal: "Nil", opts: [o("Nil"), ...HPF_SF] },
         { k: "othercells", label: "Others Cells (Spermatogenic)", ref: "Nil", normal: "Nil",
           opts: AMOUNT },
@@ -307,10 +311,11 @@ export function formProgress(code: FormCode, values: FormValues): { filled: numb
 /** One-line text version (CSV export). */
 export function formSummary(code: FormCode, values: FormValues): string {
   if (code === "CS") {
-    const ab = Object.entries(values).filter(([k]) => k.startsWith("ab:")).map(([k, v]) => `${k.slice(3)}=${astValue(v)}`);
-    return [values.specimen, values.growth, values.organism, values.colony, ab.join(", ")].filter(Boolean).join(" | ");
+    const ab = (p: string) => Object.entries(values).filter(([k, v]) => k.startsWith(p) && v).map(([k, v]) => `${k.slice(p.length)}=${astValue(v)}`).join(", ");
+    return [values.specimen, values.growth, values.organism, values.colony, ab("ab:"), values.organism2, values.colony2, ab("ab2:"), values.notes].filter(Boolean).join(" | ");
   }
-  return fieldsOf(templateOf(code)).filter((f) => values[f.k]).map((f) => `${f.label}: ${printValue(values[f.k])}`).join("; ");
+  return [...fieldsOf(templateOf(code)).filter((f) => values[f.k]).map((f) => `${f.label}: ${printValue(values[f.k])}`), values.notes && `Remarks: ${values.notes}`]
+    .filter(Boolean).join("; ");
 }
 
 /** Motility total (PR + NP) and total count (concentration × volume), when both parts are numbers. */
@@ -330,4 +335,70 @@ export function valueText(value: string | undefined, code?: string, short = fals
   const v = decodeForm(value);
   if (short) { const p = formProgress(code, v); return `استمارة (${p.filled}/${p.total})`; }
   return formSummary(code, v);
+}
+
+// ── Options from the station settings (each can be switched off / on) ────────
+export interface FormOptions { diagnosis: boolean; autoCalc: boolean; hideEmpty: boolean; testedOnly: boolean; boldAbnormal: boolean }
+export function formOptionsOf(st: {
+  sfaDiagnosis?: boolean; sfaAutoCalc?: boolean; formHideEmpty?: boolean; csTestedOnly?: boolean; formBoldAbnormal?: boolean;
+}): FormOptions {
+  return {
+    diagnosis: st.sfaDiagnosis !== false, autoCalc: st.sfaAutoCalc !== false,
+    hideEmpty: st.formHideEmpty === true, testedOnly: st.csTestedOnly === true, boldAbnormal: st.formBoldAbnormal !== false,
+  };
+}
+
+const firstNum = (s?: string) => { const m = /(\d+(?:\.\d+)?)/.exec(s ?? ""); return m ? Number(m[1]) : null; };
+const numOf = (s?: string) => { const m = /^\s*[<>]?\s*(\d+(?:\.\d+)?)/.exec(s ?? ""); return m ? Number(m[1]) : null; };
+
+/** Is a printed answer outside normal? Numbers are checked against the printed reference (≥ x, > x, < x, a – b), words against the normal answer. */
+export function isAbnormal(f: TField, raw?: string): boolean {
+  const v = printValue(raw).trim();
+  if (!v || f.noFlag) return false;
+  const norm = (x: string) => x.trim().toLowerCase();
+  if ((f.normal && norm(v) === norm(f.normal)) || f.ok?.some((x) => norm(x) === norm(v))) return false;
+  const ref = f.ref ?? "";
+  const n = (/^\s*[<>]/.test(v) ? numOf(v) : firstNum(v));
+  const one = (v.match(/\d+(?:\.\d+)?/g) ?? []).length === 1;
+  if (n != null && one) {
+    let m: RegExpExecArray | null;
+    if ((m = /(≥|>=|>|≤|<=|<)\s*(\d+(?:\.\d+)?)/.exec(ref))) {
+      const t = Number(m[2]);
+      return m[1] === "≥" || m[1] === ">=" ? n < t : m[1] === ">" ? n <= t : m[1] === "≤" || m[1] === "<=" ? n > t : n >= t;
+    }
+    if ((m = /(\d+(?:\.\d+)?)\s*[–-]\s*(\d+(?:\.\d+)?)/.exec(ref))) return n < Number(m[1]) || n > Number(m[2]);
+  }
+  return !!f.normal;
+}
+
+/** WHO-style conclusion for a semen analysis, from the printed references. Empty when there is not enough to judge. */
+export function sfaDiagnosis(v: FormValues): string {
+  const conc = v.conc ?? "";
+  if (/^nil|azoo/i.test(conc) || numOf(conc) === 0) return "Azoospermia";
+  const c = numOf(conc), vol = numOf(v.volume), total = numOf(v.total);
+  const pr = numOf(v.pr), tm = numOf(v.tm), nf = numOf(v.normalf), af = numOf(v.abnormalf), vit = numOf(v.vitality);
+  if (c == null) return "";
+  const oligo = c < 15 || /^</.test(conc) || (total != null && total < 39);
+  const astheno = (pr != null && pr < 40) || (tm != null && tm < 40);
+  const terato = nf != null ? nf <= 30 : af != null ? af >= 70 : false;
+  const parts = [oligo && "oligo", astheno && "astheno", terato && "terato"].filter(Boolean) as string[];
+  const main = parts.length ? parts.join("") + "zoospermia" : "Normozoospermia";
+  const out = [main.charAt(0).toUpperCase() + main.slice(1)];
+  if (vol != null && vol < 1.5) out.push("Hypospermia");
+  if (vit != null && vit < 58) out.push("Necrozoospermia");
+  return out.join(", ");
+}
+
+/** Values that follow from the one just typed (semen auto-calculation). */
+export function sfaAuto(v: FormValues, changed: string): FormValues {
+  const out: FormValues = {};
+  const pct = (x: number) => `${Math.max(0, Math.min(100, Math.round(x)))}%`;
+  if (changed === "pr" || changed === "np") {
+    const pr = numOf(v.pr), np = numOf(v.np);
+    if (pr != null && np != null) { out.tm = pct(pr + np); out.im = pct(100 - pr - np); }
+  }
+  if (changed === "normalf") { const n = numOf(v.normalf); if (n != null) out.abnormalf = pct(100 - n); }
+  if (changed === "abnormalf") { const n = numOf(v.abnormalf); if (n != null) out.normalf = pct(100 - n); }
+  if (changed === "conc" || changed === "volume") { const t = sfaComputed(v).total; if (t) out.total = t; }
+  return out;
 }

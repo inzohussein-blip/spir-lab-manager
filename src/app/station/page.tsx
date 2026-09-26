@@ -12,7 +12,7 @@ import {
 import { ReportSheet } from "@/components/station/ReportSheet";
 import { TubeLabels } from "@/components/station/TubeLabel";
 import { FormDialog, fillNormals } from "@/components/station/ReportForms";
-import { isFormCode, decodeForm, encodeForm, formProgress, type FormCode } from "@/lib/station/templates";
+import { isFormCode, decodeForm, encodeForm, formProgress, formOptionsOf, type FormCode } from "@/lib/station/templates";
 import { computeDerived } from "@/lib/station/derived";
 import { useToast } from "@/components/station/Toast";
 
@@ -784,6 +784,7 @@ function StationEntryPage() {
             values={decodeForm(results[t.id])}
             onChange={(v) => setResults((r) => ({ ...r, [t.id]: encodeForm(v) }))}
             onClose={() => setFormFor(null)}
+            opts={formOptionsOf(settings)}
           />
         );
       })()}

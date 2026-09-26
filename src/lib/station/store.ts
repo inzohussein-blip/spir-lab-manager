@@ -155,6 +155,13 @@ export interface StationSettings {
   tubeLabel?: boolean;
   labelSize?: "50x25" | "60x30";
   labelCopies?: number;
+  /** Report forms (see ./templates formOptionsOf): semen conclusion (on), semen auto-calculation (on),
+   *  hide empty rows (off), culture: print tested antibiotics only (off), bold abnormal answers (on). */
+  sfaDiagnosis?: boolean;
+  sfaAutoCalc?: boolean;
+  formHideEmpty?: boolean;
+  csTestedOnly?: boolean;
+  formBoldAbnormal?: boolean;
   /** Look of the printed results table (see ./tableStyle). Missing → the default look. */
   reportTable?: Partial<import("./tableStyle").TableStyle>;
 }
