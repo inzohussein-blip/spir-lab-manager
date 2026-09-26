@@ -1,6 +1,6 @@
 // Runs the browser tests against a running server:  node tests/e2e/run.cjs plain | codes
 //   plain — lab codes switched off (stations, forms, pages)
-//   codes — server started with LICENSE_ADMIN_PASSWORD and a fresh database (lab codes)
+//   codes — server started with LICENSE_ADMIN_PASSWORD, AUTH_SECRET and a fresh database (lab codes)
 const { spawnSync } = require('node:child_process');
 const path = require('node:path');
 const SUITES = {

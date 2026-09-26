@@ -10,6 +10,9 @@ const fs = require('node:fs');
   await o.waitForSelector('h1:has-text("إدارة الرموز")', { timeout: 15000 });
   const clip = () => o.evaluate(() => navigator.clipboard.readText());
   const card = (lab) => o.locator(`div[data-lab="${lab}"]`);
+  // signing key sealed with AUTH_SECRET (the codes run always sets it)
+  await o.waitForSelector('[data-testid="key-sealed"]', { timeout: 15000 });
+  ok((await o.locator('[data-testid="key-sealed"]').innerText()).includes('مشفّر بـ AUTH_SECRET'), 'signing key shown as sealed with AUTH_SECRET');
   // 5. trial
   await o.fill('label:has-text("اسم المختبر") input', 'مختبر التجربة');
   await o.click('button:has-text("رمز تجريبي 7 أيام")'); await o.waitForTimeout(800);

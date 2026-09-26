@@ -16,7 +16,7 @@ interface Row {
   price: string; paid: boolean; paid_at: number | null; message: string; device_name: string; is_trial: boolean;
 }
 interface Ev { license_id: string; at: number; kind: string; detail: string }
-interface Storage { source: "license-db" | "app-db" | "embedded"; ok: boolean; codes?: number; roundTripMs?: number; error?: string }
+interface Storage { source: "license-db" | "app-db" | "embedded"; ok: boolean; codes?: number; roundTripMs?: number; error?: string; keySealed?: boolean }
 interface SignIn { at: number; ok: boolean; ip: string; agent: string }
 type Data = { enabled: boolean; owner: boolean; needsDb?: boolean; storage?: Storage; licenses?: Row[]; events?: Ev[]; signIns?: SignIn[]; contact?: string; now?: number };
 const agentLabel = (ua: string) => {
@@ -258,6 +258,13 @@ export default function LicensesPage() {
               {data.storage.ok ? `متصلة ✓ — محفوظ فيها ${data.storage.codes ?? 0} رمز.` : `غير متصلة — ${data.storage.error ?? ""}`}
               {test && (test.ok ? ` · اختبار الحفظ نجح (كتابة وقراءة وحذف في ${test.roundTripMs} ملّي ثانية).` : ` · اختبار الحفظ فشل: ${test.error ?? ""}`)}
             </div>
+            {data.storage.ok && data.storage.keySealed !== undefined && (
+              <div data-testid="key-sealed" className={`text-xs ${data.storage.keySealed ? "text-muted" : "text-amber-700"}`}>
+                {data.storage.keySealed
+                  ? "مفتاح توقيع الرموز: مشفّر بـ AUTH_SECRET ✓ — نسخة من القاعدة وحدها لا تكفي لتزوير رمز."
+                  : "مفتاح توقيع الرموز: غير مشفّر — أضف AUTH_SECRET في Vercel ثم أعد النشر."}
+              </div>
+            )}
           </div>
           <button onClick={async () => { setTesting(true); const d = await post({ op: "selftest" }); setTest(d.storage ?? { source: data.storage!.source, ok: false, error: "no reply" }); setTesting(false); }}
             disabled={testing} className="rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-semibold hover:bg-canvas disabled:opacity-60">

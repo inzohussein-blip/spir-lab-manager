@@ -1,5 +1,5 @@
 import "server-only";
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "node:crypto";
 import { SignJWT, exportJWK, generateKeyPair, importJWK, type JWK, type KeyLike } from "jose";
 import { query as appQuery } from "@/lib/db";
 import { cleanModules, type LicenseModule, type LicensePayload } from "./modules";
@@ -11,8 +11,8 @@ export { licenseDbUrl, durableStorage, passwordSet, licensingEnabled, licenseSto
  * number of days counted from that activation, with the stations (and the full admin panel)
  * it may open. The code itself is stored only as a hash.
  *
- * A device gets a license signed with an ES256 key kept in the database; the stations verify it
- * offline and refresh it from the server when online (extension, station changes, stop).
+ * A device gets a license signed with an ES256 key kept in the database, sealed with AUTH_SECRET;
+ * the stations verify it offline and refresh it from the server when online (extension, station changes, stop).
  * Switched on by setting LICENSE_ADMIN_PASSWORD (the owner's password for /licenses).
  */
 
@@ -117,23 +117,66 @@ export async function getContact(): Promise<string> {
 }
 export async function setContact(v: string) { await setConfig("contact", v.trim().slice(0, 300)); }
 
-// ── Signing key (generated once, kept server-side in the database) ────────────
+// ── Signing key (generated once, kept in the database encrypted with AUTH_SECRET) ─────
+// A copy of the database alone cannot sign licenses: the private key is sealed with AES-256-GCM
+// under a key derived from AUTH_SECRET, which lives only in the server's environment.
+// A key found stored in the clear (older versions), or one that no longer opens (AUTH_SECRET
+// changed), is replaced by a new one; devices keep their current license offline and receive
+// the new public key with their next online check.
+type SealedKey = { v: 1; pub: JWK; iv: string; tag: string; data: string };
+type PlainKey = { priv: JWK; pub: JWK };
+const sealSecret = () => (process.env.AUTH_SECRET ?? "").trim();
+const sealKey = (secret: string) => createHash("sha256").update(`lic-signing-key:${secret}`).digest();
+function seal(priv: JWK, pub: JWK, secret: string): SealedKey {
+  const iv = randomBytes(12);
+  const c = createCipheriv("aes-256-gcm", sealKey(secret), iv);
+  c.setAAD(Buffer.from(JSON.stringify(pub)));
+  const data = Buffer.concat([c.update(JSON.stringify(priv), "utf8"), c.final()]);
+  return { v: 1, pub, iv: iv.toString("base64"), tag: c.getAuthTag().toString("base64"), data: data.toString("base64") };
+}
+function unseal(s: SealedKey, secret: string): JWK | null {
+  try {
+    const d = createDecipheriv("aes-256-gcm", sealKey(secret), Buffer.from(s.iv, "base64"));
+    d.setAAD(Buffer.from(JSON.stringify(s.pub)));
+    d.setAuthTag(Buffer.from(s.tag, "base64"));
+    return JSON.parse(Buffer.concat([d.update(Buffer.from(s.data, "base64")), d.final()]).toString("utf8")) as JWK;
+  } catch { return null; }
+}
+/** Read the stored key: the private key when usable, and whether it is sealed. */
+function openStored(raw: string, secret: string): { priv: JWK | null; pub: JWK; sealed: boolean } | null {
+  try {
+    const v = JSON.parse(raw) as SealedKey | PlainKey;
+    if ("data" in v) return { priv: secret ? unseal(v, secret) : null, pub: v.pub, sealed: true };
+    // A key stored in the clear is only kept while there is nothing to seal it with.
+    return { priv: secret ? null : v.priv, pub: v.pub, sealed: false };
+  } catch { return null; }
+}
 let keys: Promise<{ priv: KeyLike | Uint8Array; pub: JWK }> | null = null;
 function signingKeys() {
   keys ??= (async () => {
+    const secret = sealSecret();
     const saved = await getConfig("signing_key");
-    if (saved) {
-      const { priv, pub } = JSON.parse(saved) as { priv: JWK; pub: JWK };
-      return { priv: await importJWK(priv, "ES256"), pub };
-    }
+    const cur = saved ? openStored(saved, secret) : null;
+    if (cur?.priv) return { priv: await importJWK(cur.priv, "ES256"), pub: cur.pub };
     const kp = await generateKeyPair("ES256", { extractable: true });
     const priv = await exportJWK(kp.privateKey), pub = await exportJWK(kp.publicKey);
-    await query(`insert into license_config (key, value) values ('signing_key', $1) on conflict (key) do nothing`, [JSON.stringify({ priv, pub })]);
-    // Another instance may have won the race — always use what is stored.
-    const stored = JSON.parse((await getConfig("signing_key"))!) as { priv: JWK; pub: JWK };
+    const value = JSON.stringify(secret ? seal(priv, pub, secret) : { priv, pub });
+    // Replace only what was read, so parallel server instances settle on one key.
+    if (saved == null) await query(`insert into license_config (key, value) values ('signing_key', $1) on conflict (key) do nothing`, [value]);
+    else await query(`update license_config set value = $1 where key = 'signing_key' and value = $2`, [value, saved]);
+    const stored = openStored((await getConfig("signing_key"))!, secret);
+    if (!stored?.priv) throw new Error("signing key unavailable");
     return { priv: await importJWK(stored.priv, "ES256"), pub: stored.pub };
   })().catch((e) => { keys = null; throw e; });
   return keys;
+}
+/** For the owner's page: is the stored signing key sealed with AUTH_SECRET? */
+export async function signingKeySealed(): Promise<boolean> {
+  try {
+    await signingKeys();
+    const raw = await getConfig("signing_key");
+    return !!raw && !!openStored(raw, sealSecret())?.sealed;
+  } catch { return false; }
 }
 export async function publicKey(): Promise<JWK> { return (await signingKeys()!).pub; }
 

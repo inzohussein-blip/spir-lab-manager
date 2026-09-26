@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import {
   licensingEnabled, passwordSet, durableStorage, storageStatus, attemptsBlocked, noteAttempt, clearAttempts,
-  logOwnerSignIn, ownerSignIns, exportCodes, importCodes, listLicenses, listEvents, createLicense, updateLicense, getContact, setContact, type LicenseAction,
+  logOwnerSignIn, ownerSignIns, signingKeySealed, exportCodes, importCodes, listLicenses, listEvents, createLicense, updateLicense, getContact, setContact, type LicenseAction,
 } from "@/lib/license/server";
 import { passwordMatches, startOwnerSession, endOwnerSession, isOwner, ipOf } from "@/lib/license/owner";
 
@@ -14,7 +14,7 @@ export async function GET() {
   if (!(await isOwner())) return json({ enabled: true, owner: false });
   const storage = await storageStatus();
   if (!storage.ok) return json({ enabled: true, owner: true, storage, licenses: [], events: [], contact: "", now: Date.now() });
-  return json({ enabled: true, owner: true, storage, licenses: await listLicenses(), events: await listEvents(), signIns: await ownerSignIns(), contact: await getContact(), now: Date.now() });
+  return json({ enabled: true, owner: true, storage: { ...storage, keySealed: await signingKeySealed() }, licenses: await listLicenses(), events: await listEvents(), signIns: await ownerSignIns(), contact: await getContact(), now: Date.now() });
 }
 
 export async function POST(req: NextRequest) {
