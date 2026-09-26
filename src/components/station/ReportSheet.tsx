@@ -4,6 +4,7 @@ import type { CSSProperties } from "react";
 import { flagFor, rangeLabel, type Gender, type PrevResult, type StationSettings, type StationTest } from "@/lib/station/store";
 import { tableStyleOf, tableColors, DENSITY_PAD, GAP_PX, type TableStyle } from "@/lib/station/tableStyle";
 import { Barcode } from "@/components/station/Barcode";
+import { QrCode } from "@/components/station/QrCode";
 import { FormReport } from "@/components/station/FormReport";
 import { isFormCode, decodeForm, formOptionsOf, type FormCode } from "@/lib/station/templates";
 
@@ -89,6 +90,10 @@ export function ReportSheet({
     else groups.push({ cat, rows: [r] });
   }
 
+  // Lab details for the QR code at the bottom (Settings → «رمز معلومات المختبر», on by default).
+  const labQr = settings.labQr === false ? "" : (settings.labQrText?.trim() ||
+    [settings.labName, settings.labSubtitle, settings.footer].map((x) => x?.trim()).filter(Boolean).join("\n"));
+
   const header = (
     <>
         {/* Letterhead — purple/gold identity */}
@@ -105,18 +110,26 @@ export function ReportSheet({
           </div>
           <div className="text-left text-xs text-gray-600">
             <div>التاريخ: {date}</div>
-            {accession && <div className="font-mono font-bold" style={{ color: PURPLE }}>{accession}</div>}
           </div>
         </div>
         {/* Gold rule with a purple center accent */}
         <div className="h-1 w-full rounded" style={{ background: `linear-gradient(90deg, ${GOLD} 0%, ${PURPLE} 50%, ${GOLD} 100%)`, ...exact }} />
 
-        <div className="report-keep mt-4 grid grid-cols-2 gap-x-6 gap-y-1.5 rounded-lg border-2 p-3 text-sm sm:grid-cols-3" style={{ borderColor: GOLD }}>
+        {/* Patient box — with the patient's sample barcode at its top right */}
+        <div className="report-keep mt-4 flex items-stretch gap-3">
+        {accession && (
+          <div className="report-pbc flex shrink-0 flex-col items-center justify-center rounded-lg border-2 px-3 py-1.5" style={{ borderColor: GOLD }}>
+            <Barcode text={accession} className="block h-9 w-40 [&>svg]:h-full [&>svg]:w-full" />
+            <div className="mt-0.5 font-mono text-[11px] font-bold" style={{ color: PURPLE }} dir="ltr">{accession}</div>
+          </div>
+        )}
+        <div className={`grid flex-1 grid-cols-2 gap-x-6 gap-y-1.5 rounded-lg border-2 p-3 text-sm ${accession ? "" : "sm:grid-cols-3"}`} style={{ borderColor: GOLD }}>
           <div><span style={{ color: PURPLE }} className="font-semibold">المريض:</span> <b>{patient.name || "—"}</b></div>
           <div><span style={{ color: PURPLE }} className="font-semibold">الجنس:</span> {gender === "male" ? "ذكر" : gender === "female" ? "أنثى" : "—"}</div>
           <div><span style={{ color: PURPLE }} className="font-semibold">العمر:</span> {patient.age || "—"}</div>
           <div><span style={{ color: PURPLE }} className="font-semibold">الهاتف:</span> {patient.phone || "—"}</div>
           {referrer && <div><span style={{ color: PURPLE }} className="font-semibold">الطبيب المُحيل:</span> {referrer}</div>}
+        </div>
         </div>
     </>
   );
@@ -149,6 +162,10 @@ export function ReportSheet({
         #report-sheet .cs-box > div { padding-top: 1px; padding-bottom: 1px; }
         #report-sheet .cs-ast { margin-top: 3mm; }
         #report-sheet .cs-ast-title { display: none; }
+        #report-sheet .report-pbc { padding: 2px 6px !important; }
+        #report-sheet .report-pbc > span { width: 30mm !important; height: 8mm !important; }
+        #report-sheet .report-pbc > div { font-size: 9px !important; }
+        #report-sheet .report-qr > img { width: 15mm !important; height: 15mm !important; }
         #report-sheet .form-top { margin-top: 2.5mm; }
         #report-sheet .form-title { font-size: 15px; }
         #report-sheet .form-sec-title { padding-top: 2px; padding-bottom: 2px; font-size: 12px; }
@@ -196,10 +213,13 @@ export function ReportSheet({
               <div className="mb-6">اعتمد النتائج:</div>
               <div className="w-48 border-t pt-1 text-center text-gray-500" style={{ borderColor: GOLD }}>التوقيع / الختم</div>
             </div>
-            {accession && (
-              <div className="text-center">
-                <Barcode text={accession} className="block h-8 w-40" />
-                <div className="font-mono text-[10px] text-gray-500">{accession}</div>
+            {labQr && (
+              <div className="report-qr flex items-center gap-2">
+                <div className="text-left text-[10px] leading-snug text-gray-500">
+                  <div className="font-bold" style={{ color: PURPLE }}>معلومات المختبر</div>
+                  <div>امسح الرمز بالهاتف</div>
+                </div>
+                <QrCode text={labQr} className="block size-16" />
               </div>
             )}
           </div>

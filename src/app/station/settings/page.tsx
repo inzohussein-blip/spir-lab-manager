@@ -128,6 +128,25 @@ export default function StationSettingsPage() {
             <input value={s.footer ?? ""} onChange={(e) => setS({ ...s, footer: e.target.value })} placeholder="العنوان - الهاتف" className={`mt-1 ${inp}`} />
           </label>
 
+          <Toggle
+            checked={s.labQr !== false}
+            onChange={(v) => setOption({ labQr: v })}
+            label="رمز معلومات المختبر (QR) أسفل التقرير"
+            desc="مربع صغير بجانب التوقيع يقرؤه أي هاتف بالكاميرا فيعرض معلومات المختبر. باركود المراجع يُطبع أعلى اليمين بجانب بيانات المريض."
+          />
+          {s.labQr !== false && (
+            <label className="text-sm font-medium">نص رمز المختبر (اختياري)
+              <textarea
+                value={s.labQrText ?? ""}
+                onChange={(e) => setS({ ...s, labQrText: e.target.value })}
+                rows={3}
+                placeholder={[s.labName, s.labSubtitle, s.footer].map((x) => x?.trim()).filter(Boolean).join("\n") || "اسم المختبر، العنوان، الهاتف، رابط الموقع…"}
+                className={`mt-1 ${inp}`}
+              />
+              <span className="block text-xs font-normal text-muted">إذا تُرك فارغاً يحمل الرمز اسم المختبر والعنوان الفرعي وسطر التذييل. يمكنك كتابة رقم أو رابط موقع المختبر على الخريطة. اضغط «حفظ» بعد التعديل.</span>
+            </label>
+          )}
+
           <div className="text-sm font-medium">شعار المختبر</div>
           <div className="flex items-center gap-3">
             {s.logo ? (

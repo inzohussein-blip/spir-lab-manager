@@ -160,6 +160,10 @@ export interface StationSettings {
   /** Report forms (see ./templates formOptionsOf): semen conclusion (on), semen auto-calculation (on),
    *  hide empty rows (off), culture: print tested antibiotics only (off), bold abnormal answers (on). */
   sfaDiagnosis?: boolean;
+  /** QR code with the lab's details at the bottom of the report — on by default. */
+  labQr?: boolean;
+  /** Its text; empty → lab name, subtitle and footer line. */
+  labQrText?: string;
   /** Delivery status on saved visits — off by default. */
   deliveryStatus?: boolean;
   /** Year / month / day selector next to the age field — off by default. */
