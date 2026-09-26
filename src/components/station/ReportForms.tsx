@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, X, Wand2, Eraser, Check } from "lucide-react";
 import {
-  templateOf, cultureOf, formTitle, isSub, fieldsOf, sfaComputed, isGrowth, CS_GROWTH, AST_SCALE, astValue,
+  templateOf, cultureOf, formTitle, isSub, fieldsOf, sfaComputed, CS_GROWTH, AST_SCALE, astValue,
   type Opt, type FormCode, type FormValues,
 } from "@/lib/station/templates";
 
@@ -133,58 +133,70 @@ export function FormDialog({ code, testName, values, onChange, onClose }: {
 }
 
 function CultureForm({ values, set }: { values: FormValues; set: (k: string, v: string) => void }) {
-  const growth = isGrowth(values.growth);
   const lists = cultureOf();
   const organisms: Opt[] = lists.organisms.flatMap((g) => g.items.map((v) => ({ v, ar: g.group })));
-  const field = (label: string, node: React.ReactNode) => (
-    <div dir="ltr" className="text-left"><div className="mb-1 text-xs font-semibold">{label}</div>{node}</div>
+  const noGrowth = /^no growth/i.test(values.growth ?? "");
+  const tested = Object.entries(values).filter(([k, v]) => k.startsWith("ab:") && v).length;
+  const title = (t: string, extra?: React.ReactNode) => (
+    <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-brand-light px-3 py-1.5" dir="ltr">
+      <span className="text-sm font-bold text-brand-dark">{t}</span>{extra}
+    </div>
+  );
+  const field = (label: string, hint: string, node: React.ReactNode) => (
+    <div dir="ltr" className="text-left">
+      <div className="mb-1 flex items-baseline justify-between gap-2 text-xs"><span className="font-semibold">{label}</span><span dir="rtl" className="text-[11px] text-muted">{hint}</span></div>
+      {node}
+    </div>
   );
   return (
-    <div className="flex flex-col gap-4">
-      <div dir="ltr" className="grid gap-4 md:grid-cols-2">
-        {field("Specimen (نوع العينة)", <Combo value={values.specimen ?? ""} onChange={(v) => set("specimen", v)} opts={lists.specimens} ariaLabel="Specimen" />)}
-        {field("Culture Result (نتيجة النمو)", <Combo value={values.growth ?? ""} onChange={(v) => set("growth", v)} opts={CS_GROWTH} ariaLabel="Culture" />)}
-        {growth && field("Isolated Organism (البكتيريا المعزولة)", <Combo value={values.organism ?? ""} onChange={(v) => set("organism", v)} opts={organisms} ariaLabel="Organism" />)}
-        {growth && field("Colony Count (عدد المستعمرات — اختياري)", <Combo value={values.colony ?? ""} onChange={(v) => set("colony", v)} opts={lists.colony} ariaLabel="Colony" />)}
-      </div>
+    <div className="flex flex-col gap-5">
+      <section>
+        {title("1. Specimen & Culture")}
+        <div dir="ltr" className="grid gap-x-4 gap-y-3 md:grid-cols-2">
+          {field("Specimen", "نوع العينة", <Combo value={values.specimen ?? ""} onChange={(v) => set("specimen", v)} opts={lists.specimens} ariaLabel="Specimen" />)}
+          {field("Culture Result", "نتيجة النمو", <Combo value={values.growth ?? ""} onChange={(v) => set("growth", v)} opts={CS_GROWTH} ariaLabel="Culture" />)}
+          {field("Isolated Organism", "يُطبع: Growth of …", <Combo value={values.organism ?? ""} onChange={(v) => set("organism", v)} opts={organisms} ariaLabel="Organism" />)}
+          {field("Colony Count", "اختياري", <Combo value={values.colony ?? ""} onChange={(v) => set("colony", v)} opts={lists.colony} ariaLabel="Colony" />)}
+        </div>
+      </section>
 
-      {growth && (
-        <div>
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <div className="text-sm font-bold">فحص الحساسية للمضادات (AST)</div>
-            <div className="text-[11px] text-muted">
-              {AST_SCALE.map((x) => `${x.v} = ${x.ar}`).join(" · ")} — اضغط مرة أخرى للإلغاء. غير المحدد يُطبع فارغاً.
+      <section className={noGrowth ? "opacity-60" : ""}>
+        {title("2. Antibiotic Sensitivity Test (AST)",
+          <span className="text-[11px] font-semibold">
+            <span className="text-green-700">H.S = High sensitive</span> · <span className="text-amber-700">M.S = Moderate sensitive</span> · <span className="text-red-700">R = Resistant</span>
+            <span className="ms-2 text-muted">({tested} / {lists.antibiotics.reduce((n, g) => n + g.items.length, 0)})</span>
+          </span>)}
+        <p className="mb-2 text-[11px] text-muted">
+          {noGrowth ? "النتيجة «No growth» — لا يُطبع جدول الحساسية." : "اضغط الدرجة لكل مضاد جُرِّب، واضغطها مرة أخرى للإلغاء. غير المحدد يُطبع فارغاً كما في الورقة."}
+        </p>
+        {lists.antibiotics.map((g, gi) => (
+          <div key={gi} className="mb-3 rounded-xl border border-line px-3 py-2" dir="ltr">
+            {lists.antibiotics.length > 1 && <div className="mb-1.5 text-left text-[11px] font-bold uppercase tracking-wide text-muted">{g.group}</div>}
+            <div className="gap-x-8 md:columns-2">
+              {g.items.map((ab) => {
+                const cur = astValue(values[`ab:${ab}`]);
+                return (
+                  <div key={ab} className="flex break-inside-avoid items-center justify-between gap-2 border-b border-line/60 py-1 text-sm">
+                    <span className={`text-left ${cur ? "font-semibold" : ""}`}>{ab}</span>
+                    <div className="flex gap-1">
+                      {AST_SCALE.map(({ v }) => (
+                        <button key={v} type="button" onClick={() => set(`ab:${ab}`, cur === v ? "" : v)} aria-label={`${ab} ${v}`} aria-pressed={cur === v}
+                          className={`h-7 w-10 rounded-md border text-xs font-bold ${cur === v
+                            ? v === "H.S" ? "border-green-600 bg-green-600 text-white" : v === "M.S" ? "border-amber-500 bg-amber-500 text-white" : "border-red-600 bg-red-600 text-white"
+                            : "border-line text-muted hover:bg-canvas"}`}>
+                          {v}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
-          {lists.antibiotics.map((g, gi) => (
-            <div key={gi} className="mb-3 rounded-xl border border-line p-3" dir="ltr">
-              {lists.antibiotics.length > 1 && <div className="mb-1.5 text-left text-[11px] font-bold uppercase tracking-wide text-muted">{g.group}</div>}
-              <div className="gap-x-8 md:columns-2">
-                {g.items.map((ab) => {
-                  const cur = astValue(values[`ab:${ab}`]);
-                  return (
-                    <div key={ab} className="flex break-inside-avoid items-center justify-between gap-2 border-b border-line/60 py-1 text-sm">
-                      <span className="text-left">{ab}</span>
-                      <div className="flex gap-1">
-                        {AST_SCALE.map(({ v }) => (
-                          <button key={v} type="button" onClick={() => set(`ab:${ab}`, cur === v ? "" : v)} aria-label={`${ab} ${v}`} aria-pressed={cur === v}
-                            className={`h-7 w-10 rounded-md border text-xs font-bold ${cur === v
-                              ? v === "H.S" ? "border-green-600 bg-green-600 text-white" : v === "M.S" ? "border-amber-500 bg-amber-500 text-white" : "border-red-600 bg-red-600 text-white"
-                              : "border-line text-muted hover:bg-canvas"}`}>
-                            {v}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+        ))}
+      </section>
 
-      {field("Remarks (ملاحظات — اختياري)", <Combo value={values.notes ?? ""} onChange={(v) => set("notes", v)} ariaLabel="Remarks" />)}
+      {field("Remarks", "ملاحظات — اختياري", <Combo value={values.notes ?? ""} onChange={(v) => set("notes", v)} ariaLabel="Remarks" />)}
     </div>
   );
 }

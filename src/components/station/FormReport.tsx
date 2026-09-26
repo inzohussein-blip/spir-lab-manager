@@ -2,7 +2,7 @@
 
 import type { CSSProperties } from "react";
 import {
-  templateOf, cultureOf, formTitle, printValue, isSub, isGrowth, astValue, AST_SCALE,
+  templateOf, cultureOf, formTitle, printValue, isSub, cultureGrowth, astValue, AST_SCALE,
   type FormCode, type FormValues,
 } from "@/lib/station/templates";
 import { tableColors, DENSITY_PAD, type TableStyle } from "@/lib/station/tableStyle";
@@ -58,7 +58,7 @@ export function FormReport({ code, values, ts }: { code: FormCode; values: FormV
 const AST_COLOR: Record<string, string> = { "H.S": "#15803d", "M.S": "#b45309", R: "#dc2626" };
 
 function Culture({ values, c, fontSize, py }: { values: FormValues; c: ReturnType<typeof tableColors>; fontSize: number; py: number }) {
-  const growth = isGrowth(values.growth);
+  const growth = cultureGrowth(values);
   const noGrowth = (values.growth ?? "").toLowerCase().startsWith("no growth");
   // The whole antibiotic list in the lab's order (as on the paper report), then any saved ones no longer listed.
   const listed = cultureOf().antibiotics.flatMap((g) => g.items);
@@ -87,7 +87,7 @@ function Culture({ values, c, fontSize, py }: { values: FormValues; c: ReturnTyp
         {growth && values.colony && <Line k="Colony Count:" v={values.colony} />}
       </div>
 
-      {growth && tested && (
+      {!noGrowth && tested && (
         <div className="form-sec cs-ast mt-4 overflow-hidden rounded-lg border" style={{ borderColor: c.border, ...exact }}>
           <div className="cs-ast-title px-3 py-1.5 text-sm font-bold" style={{ background: c.groupBg, color: c.groupText, ...exact }}>Antibiotic Sensitivity Test (AST)</div>
           <table className="form-table w-full border-collapse" style={{ fontSize: fontSize * 0.86, lineHeight: 1.25 }}>

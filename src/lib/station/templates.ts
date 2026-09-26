@@ -214,6 +214,9 @@ export const AST_SCALE = [
 ] as const;
 export const astValue = (v?: string) => (v === "S" ? "H.S" : v === "I" ? "M.S" : v ?? "");
 export const isGrowth = (g?: string) => (g ?? "").toLowerCase().startsWith("significant");
+/** Growth to report: "significant growth" chosen, or an organism entered on a culture that is not "no growth" / flora / contaminated. */
+export const cultureGrowth = (v: FormValues) =>
+  isGrowth(v.growth) || (!!v.organism?.trim() && !/^(no growth|non-pathogenic|contaminated)/i.test(v.growth ?? ""));
 
 // ── Registry + value encoding ────────────────────────────────────────────────
 export const TEMPLATES: Record<string, Template> = { GUE, GSE, SFA };
@@ -248,9 +251,13 @@ export function templateOf(code: TplCode): Template {
   const t = customs()[code];
   return t && Array.isArray(t.sections) ? t : TEMPLATES[code];
 }
+/** The first built-in antibiotic list (before the lab's paper list); a saved copy of it is upgraded. */
+const OLD_AST = "Amoxicillin/Clavulanate,Ampicillin/Sulbactam,Piperacillin/Tazobactam,Ceftriaxone,Cefotaxime,Ceftazidime,Cefepime,Cefixime,Ciprofloxacin,Levofloxacin,Ofloxacin,Meropenem,Imipenem,Amikacin,Gentamicin,Vancomycin,Nitrofurantoin,Trimethoprim/Sulfamethoxazole,Linezolid";
 export function cultureOf(): CultureLists {
   const c = customs().CS;
-  return c && Array.isArray(c.antibiotics) ? { ...CS_DEFAULT, ...c } : CS_DEFAULT;
+  if (!c || !Array.isArray(c.antibiotics)) return CS_DEFAULT;
+  const oldList = c.antibiotics.flatMap((g) => g.items).join(",") === OLD_AST;
+  return { ...CS_DEFAULT, ...c, ...(oldList ? { antibiotics: CS_DEFAULT.antibiotics } : {}) };
 }
 export const isCustomForm = (code: FormCode) => !!customs()[code];
 /** Save an edited form, or null to go back to the built-in one. */
@@ -290,7 +297,7 @@ export const fieldsOf = (t: Template): TField[] => t.sections.flatMap((s) => s.r
 /** Number of filled answers / total, for the entry-screen badge. */
 export function formProgress(code: FormCode, values: FormValues): { filled: number; total: number } {
   if (code === "CS") {
-    const need = isGrowth(values.growth) ? ["specimen", "growth", "organism"] : ["specimen", "growth"];
+    const need = ["specimen", cultureGrowth(values) ? "organism" : "growth"];
     return { filled: need.filter((k) => (values[k] ?? "").trim()).length, total: need.length };
   }
   const f = fieldsOf(templateOf(code));
