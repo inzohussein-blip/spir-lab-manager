@@ -19,7 +19,7 @@ interface Ev { license_id: string; at: number; kind: string; detail: string }
 interface Storage { source: "license-db" | "app-db" | "embedded"; ok: boolean; codes?: number; roundTripMs?: number; error?: string }
 type Data = { enabled: boolean; owner: boolean; needsDb?: boolean; storage?: Storage; licenses?: Row[]; events?: Ev[]; contact?: string; now?: number };
 const SOURCE: Record<Storage["source"], string> = {
-  "license-db": "قاعدة الرموز المنفصلة (Neon — LICENSE_URL)",
+  "license-db": "قاعدة الرموز المنفصلة (Neon)",
   "app-db": "قاعدة بيانات الموقع (DATABASE_URL)",
   embedded: "القاعدة المدمجة المؤقتة (للتجربة المحلية فقط)",
 };
