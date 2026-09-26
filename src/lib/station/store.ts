@@ -164,6 +164,8 @@ export interface StationSettings {
   labQr?: boolean;
   /** Its text; empty → lab name, subtitle and footer line. */
   labQrText?: string;
+  /** The lab's website / map link — when set, the QR code opens it directly. */
+  labUrl?: string;
   /** Delivery status on saved visits — off by default. */
   deliveryStatus?: boolean;
   /** Year / month / day selector next to the age field — off by default. */
@@ -819,4 +821,12 @@ export function joinAge(n: string, unit: AgeUnitPick): string {
   const k = Number(t.replace(",", "."));
   const few = k >= 3 && k <= 10;
   return unit === "m" ? `${t} ${few ? "أشهر" : "شهر"}` : `${t} ${few ? "أيام" : "يوم"}`;
+}
+
+/** A link typed by the lab, made openable ("lab.com" → "https://lab.com"). Empty when it isn't a link. */
+export function normalizeUrl(raw?: string): string {
+  const t = (raw ?? "").trim();
+  if (!t || /\s/.test(t)) return "";
+  const u = /^[a-z][a-z0-9+.-]*:\/\//i.test(t) ? t : `https://${t}`;
+  try { const x = new URL(u); return x.hostname.includes(".") ? x.toString() : ""; } catch { return ""; }
 }

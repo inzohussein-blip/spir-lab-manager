@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Settings, Check, Image as ImageIcon, Download, Upload, Trash2, Stethoscope, Plus, Pencil, X, Smartphone, History, ListCollapse, ClipboardList } from "lucide-react";
 import {
-  getSettings, saveSettings, exportBackup, importBackup, getDoctors, saveDoctors, markBackupNow, daysSinceBackup, getVisits, storageUsage, requestPersistentStorage, uid,
+  getSettings, saveSettings, normalizeUrl, exportBackup, importBackup, getDoctors, saveDoctors, markBackupNow, daysSinceBackup, getVisits, storageUsage, requestPersistentStorage, uid,
   type StationSettings, type StationDoctor,
 } from "@/lib/station/store";
 import { InstallButton } from "@/components/station/InstallButton";
@@ -132,9 +132,26 @@ export default function StationSettingsPage() {
             checked={s.labQr !== false}
             onChange={(v) => setOption({ labQr: v })}
             label="رمز معلومات المختبر (QR) أسفل التقرير"
-            desc="مربع صغير بجانب التوقيع يقرؤه أي هاتف بالكاميرا فيعرض معلومات المختبر. باركود المراجع يُطبع أعلى اليمين بجانب بيانات المريض."
+            desc="مربع صغير بجانب التوقيع يقرؤه أي هاتف بالكاميرا فيفتح موقع المختبر أو يعرض معلوماته."
           />
           {s.labQr !== false && (
+            <label className="text-sm font-medium">رابط موقع المختبر (اختياري)
+              <input
+                value={s.labUrl ?? ""}
+                onChange={(e) => setS({ ...s, labUrl: e.target.value })}
+                dir="ltr"
+                inputMode="url"
+                placeholder="https://… أو رابط الموقع على خرائط Google"
+                className={`mt-1 text-left ${inp}`}
+              />
+              <span className={`block text-xs font-normal ${s.labUrl?.trim() && !normalizeUrl(s.labUrl) ? "text-red-600" : "text-muted"}`}>
+                {s.labUrl?.trim() && !normalizeUrl(s.labUrl)
+                  ? "الرابط غير صحيح — اكتبه كاملاً بلا مسافات، مثل lab.com أو https://maps.app.goo.gl/…"
+                  : "عند إدخال رابط يفتح رمز المختبر الموقع مباشرة عند مسحه بالهاتف (بدل نص المعلومات). اضغط «حفظ» بعد التعديل."}
+              </span>
+            </label>
+          )}
+          {s.labQr !== false && !normalizeUrl(s.labUrl) && (
             <label className="text-sm font-medium">نص رمز المختبر (اختياري)
               <textarea
                 value={s.labQrText ?? ""}
@@ -143,7 +160,7 @@ export default function StationSettingsPage() {
                 placeholder={[s.labName, s.labSubtitle, s.footer].map((x) => x?.trim()).filter(Boolean).join("\n") || "اسم المختبر، العنوان، الهاتف، رابط الموقع…"}
                 className={`mt-1 ${inp}`}
               />
-              <span className="block text-xs font-normal text-muted">إذا تُرك فارغاً يحمل الرمز اسم المختبر والعنوان الفرعي وسطر التذييل. يمكنك كتابة رقم أو رابط موقع المختبر على الخريطة. اضغط «حفظ» بعد التعديل.</span>
+              <span className="block text-xs font-normal text-muted">إذا تُرك فارغاً يحمل الرمز اسم المختبر والعنوان الفرعي وسطر التذييل. اضغط «حفظ» بعد التعديل.</span>
             </label>
           )}
 

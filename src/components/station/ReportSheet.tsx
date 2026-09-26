@@ -1,7 +1,7 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import { flagFor, rangeLabel, type Gender, type PrevResult, type StationSettings, type StationTest } from "@/lib/station/store";
+import { flagFor, rangeLabel, normalizeUrl, type Gender, type PrevResult, type StationSettings, type StationTest } from "@/lib/station/store";
 import { tableStyleOf, tableColors, DENSITY_PAD, GAP_PX, type TableStyle } from "@/lib/station/tableStyle";
 import { Barcode } from "@/components/station/Barcode";
 import { QrCode } from "@/components/station/QrCode";
@@ -90,8 +90,10 @@ export function ReportSheet({
     else groups.push({ cat, rows: [r] });
   }
 
-  // Lab details for the QR code at the bottom (Settings → «رمز معلومات المختبر», on by default).
-  const labQr = settings.labQr === false ? "" : (settings.labQrText?.trim() ||
+  // QR code at the bottom (Settings → «رمز معلومات المختبر», on by default): opens the lab's website
+  // when a link is set, otherwise carries the lab's details as text.
+  const labUrl = normalizeUrl(settings.labUrl);
+  const labQr = settings.labQr === false ? "" : (labUrl || settings.labQrText?.trim() ||
     [settings.labName, settings.labSubtitle, settings.footer].map((x) => x?.trim()).filter(Boolean).join("\n"));
 
   const header = (
@@ -216,7 +218,7 @@ export function ReportSheet({
             {labQr && (
               <div className="report-qr flex items-center gap-2">
                 <div className="text-left text-[10px] leading-snug text-gray-500">
-                  <div className="font-bold" style={{ color: PURPLE }}>معلومات المختبر</div>
+                  <div className="font-bold" style={{ color: PURPLE }}>{labUrl ? "موقع المختبر" : "معلومات المختبر"}</div>
                   <div>امسح الرمز بالهاتف</div>
                 </div>
                 <QrCode text={labQr} className="block size-16" />
