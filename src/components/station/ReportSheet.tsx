@@ -110,28 +110,26 @@ export function ReportSheet({
               {settings.labSubtitle && <p className="text-sm font-medium" style={{ color: GOLD_DARK }}>{settings.labSubtitle}</p>}
             </div>
           </div>
-          <div className="text-left text-xs text-gray-600">
+          {/* Date, then the patient's sample barcode and number under it */}
+          <div className="flex flex-col items-end text-xs text-gray-600">
             <div>التاريخ: {date}</div>
+            {accession && (
+              <div className="report-pbc mt-1 flex flex-col items-end">
+                <Barcode text={accession} className="block h-9 w-44 [&>svg]:h-full [&>svg]:w-full" />
+                <div className="font-mono text-[11px] font-bold" style={{ color: PURPLE }} dir="ltr">{accession}</div>
+              </div>
+            )}
           </div>
         </div>
         {/* Gold rule with a purple center accent */}
         <div className="h-1 w-full rounded" style={{ background: `linear-gradient(90deg, ${GOLD} 0%, ${PURPLE} 50%, ${GOLD} 100%)`, ...exact }} />
 
-        {/* Patient box — with the patient's sample barcode at its top right */}
-        <div className="report-keep mt-4 flex items-stretch gap-3">
-        {accession && (
-          <div className="report-pbc flex shrink-0 flex-col items-center justify-center rounded-lg border-2 px-3 py-1.5" style={{ borderColor: GOLD }}>
-            <Barcode text={accession} className="block h-9 w-40 [&>svg]:h-full [&>svg]:w-full" />
-            <div className="mt-0.5 font-mono text-[11px] font-bold" style={{ color: PURPLE }} dir="ltr">{accession}</div>
-          </div>
-        )}
-        <div className={`grid flex-1 grid-cols-2 gap-x-6 gap-y-1.5 rounded-lg border-2 p-3 text-sm ${accession ? "" : "sm:grid-cols-3"}`} style={{ borderColor: GOLD }}>
+        <div className="report-keep mt-4 grid grid-cols-2 gap-x-6 gap-y-1.5 rounded-lg border-2 p-3 text-sm sm:grid-cols-3" style={{ borderColor: GOLD }}>
           <div><span style={{ color: PURPLE }} className="font-semibold">المريض:</span> <b>{patient.name || "—"}</b></div>
           <div><span style={{ color: PURPLE }} className="font-semibold">الجنس:</span> {gender === "male" ? "ذكر" : gender === "female" ? "أنثى" : "—"}</div>
           <div><span style={{ color: PURPLE }} className="font-semibold">العمر:</span> {patient.age || "—"}</div>
           <div><span style={{ color: PURPLE }} className="font-semibold">الهاتف:</span> {patient.phone || "—"}</div>
           {referrer && <div><span style={{ color: PURPLE }} className="font-semibold">الطبيب المُحيل:</span> {referrer}</div>}
-        </div>
         </div>
     </>
   );
@@ -164,9 +162,8 @@ export function ReportSheet({
         #report-sheet .cs-box > div { padding-top: 1px; padding-bottom: 1px; }
         #report-sheet .cs-ast { margin-top: 3mm; }
         #report-sheet .cs-ast-title { display: none; }
-        #report-sheet .report-pbc { padding: 2px 6px !important; }
-        #report-sheet .report-pbc > span { width: 30mm !important; height: 8mm !important; }
-        #report-sheet .report-pbc > div { font-size: 9px !important; }
+        #report-sheet .report-pbc > span { width: 36mm !important; height: 8mm !important; }
+        #report-sheet .report-pbc > div { font-size: 9.5px !important; }
         #report-sheet .report-qr > img { width: 15mm !important; height: 15mm !important; }
         #report-sheet .form-top { margin-top: 2.5mm; }
         #report-sheet .form-title { font-size: 15px; }
