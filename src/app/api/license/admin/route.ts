@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import {
-  licensingEnabled, passwordSet, durableStorage, listLicenses, listEvents, createLicense, updateLicense, getContact, setContact, type LicenseAction,
+  licensingEnabled, passwordSet, durableStorage, storageStatus, listLicenses, listEvents, createLicense, updateLicense, getContact, setContact, type LicenseAction,
 } from "@/lib/license/server";
 import { passwordMatches, startOwnerSession, endOwnerSession, isOwner, tooManyTries, noteFail, clearFails, ipOf } from "@/lib/license/owner";
 
@@ -11,7 +11,9 @@ const json = (b: unknown, status = 200) => NextResponse.json(b, { status, header
 export async function GET() {
   if (!licensingEnabled()) return json({ enabled: false, owner: false, needsDb: passwordSet() && !durableStorage() });
   if (!(await isOwner())) return json({ enabled: true, owner: false });
-  return json({ enabled: true, owner: true, licenses: await listLicenses(), events: await listEvents(), contact: await getContact(), now: Date.now() });
+  const storage = await storageStatus();
+  if (!storage.ok) return json({ enabled: true, owner: true, storage, licenses: [], events: [], contact: "", now: Date.now() });
+  return json({ enabled: true, owner: true, storage, licenses: await listLicenses(), events: await listEvents(), contact: await getContact(), now: Date.now() });
 }
 
 export async function POST(req: NextRequest) {
@@ -45,6 +47,7 @@ export async function POST(req: NextRequest) {
     const r = await updateLicense(String(b.id ?? ""), b.change as LicenseAction);
     return json({ ok: true, ...r });
   }
+  if (b.op === "selftest") return json({ ok: true, storage: await storageStatus(true) });
   if (b.op === "contact") { await setContact(String(b.contact ?? "")); return json({ ok: true }); }
   return json({ ok: false, error: "bad_request" }, 400);
 }

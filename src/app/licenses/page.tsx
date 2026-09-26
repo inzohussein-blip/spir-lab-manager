@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   KeyRound, LogOut, Plus, Copy, Check, Ban, Play, MonitorSmartphone, RefreshCw, Trash2, Pencil, ShieldAlert,
-  FlaskConical, Download, ChevronDown, MessageSquare, History, Wallet, MessageSquareText,
+  FlaskConical, Download, ChevronDown, MessageSquare, History, Wallet, MessageSquareText, Database,
 } from "lucide-react";
 import { LICENSE_MODULES, DEFAULT_MODULES, moduleLabel, type LicenseModule } from "@/lib/license/modules";
 
@@ -16,7 +16,13 @@ interface Row {
   price: string; paid: boolean; paid_at: number | null; message: string; device_name: string; is_trial: boolean;
 }
 interface Ev { license_id: string; at: number; kind: string; detail: string }
-type Data = { enabled: boolean; owner: boolean; needsDb?: boolean; licenses?: Row[]; events?: Ev[]; contact?: string; now?: number };
+interface Storage { source: "license-db" | "app-db" | "embedded"; ok: boolean; codes?: number; roundTripMs?: number; error?: string }
+type Data = { enabled: boolean; owner: boolean; needsDb?: boolean; storage?: Storage; licenses?: Row[]; events?: Ev[]; contact?: string; now?: number };
+const SOURCE: Record<Storage["source"], string> = {
+  "license-db": "قاعدة الرموز المنفصلة (Neon — LICENSE_URL)",
+  "app-db": "قاعدة بيانات الموقع (DATABASE_URL)",
+  embedded: "القاعدة المدمجة المؤقتة (للتجربة المحلية فقط)",
+};
 
 const inp = "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
 const small = "inline-flex items-center gap-1 rounded-lg border border-line px-2 py-1 text-xs hover:bg-canvas";
@@ -115,6 +121,8 @@ export default function LicensesPage() {
   const [filter, setFilter] = useState<Filter>("all");
   const [sort, setSort] = useState<Sort>("expiry");
   const [open, setOpen] = useState<Set<string>>(new Set());
+  const [test, setTest] = useState<Storage | null>(null);
+  const [testing, setTesting] = useState(false);
 
   const load = useCallback(async () => {
     const r = await fetch("/api/license/admin", { cache: "no-store" });
@@ -232,6 +240,24 @@ export default function LicensesPage() {
           <LogOut className="size-4" /> خروج
         </button>
       </div>
+
+      {/* Where the codes are stored + a save test */}
+      {data.storage && (
+        <div className={`mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4 py-3 text-sm ${data.storage.ok ? "border-teal-200 bg-teal-50/60" : "border-red-300 bg-red-50"}`}>
+          <Database className={`size-5 shrink-0 ${data.storage.ok ? "text-brand-dark" : "text-red-600"}`} />
+          <div className="min-w-0 flex-1">
+            <div className="font-semibold">التخزين: {SOURCE[data.storage.source]}</div>
+            <div className="text-xs text-muted">
+              {data.storage.ok ? `متصلة ✓ — محفوظ فيها ${data.storage.codes ?? 0} رمز.` : `غير متصلة — ${data.storage.error ?? ""}`}
+              {test && (test.ok ? ` · اختبار الحفظ نجح (كتابة وقراءة وحذف في ${test.roundTripMs} ملّي ثانية).` : ` · اختبار الحفظ فشل: ${test.error ?? ""}`)}
+            </div>
+          </div>
+          <button onClick={async () => { setTesting(true); const d = await post({ op: "selftest" }); setTest(d.storage ?? { source: data.storage!.source, ok: false, error: "no reply" }); setTesting(false); }}
+            disabled={testing} className="rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-semibold hover:bg-canvas disabled:opacity-60">
+            {testing ? "جارٍ الاختبار…" : "اختبار الحفظ"}
+          </button>
+        </div>
+      )}
 
       {/* Summary tiles = filters */}
       <div className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-4">

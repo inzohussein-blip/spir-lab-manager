@@ -4,7 +4,7 @@ import { SignJWT, exportJWK, generateKeyPair, importJWK, type JWK, type KeyLike 
 import { query as appQuery } from "@/lib/db";
 import { cleanModules, type LicenseModule, type LicensePayload } from "./modules";
 import { licenseDbUrl } from "./env";
-export { licenseDbUrl, durableStorage, passwordSet, licensingEnabled } from "./env";
+export { licenseDbUrl, durableStorage, passwordSet, licensingEnabled, licenseStorage } from "./env";
 
 /**
  * Lab codes («منظومة الرموز»): one code per lab, bound to one device on first use, valid for a
@@ -319,4 +319,22 @@ export async function check(lid: string, device: string): Promise<DeviceResult> 
   if (row.status === "stopped") return { ok: false, error: "stopped", row };
   if (row.expires_at != null && row.expires_at <= Date.now()) return { ok: false, error: "expired", row };
   return issue(row, device);
+}
+
+/** Owner's storage check: where the codes live, whether the database answers, and a write / read-back test. */
+export async function storageStatus(write = false): Promise<{ source: string; ok: boolean; codes?: number; roundTripMs?: number; error?: string }> {
+  const { licenseStorage } = await import("./env");
+  const source = licenseStorage();
+  try {
+    await ensureTables();
+    const n = Number((await queryOne<{ n: string | number }>(`select count(*) as n from station_licenses`))?.n ?? 0);
+    if (!write) return { source, ok: true, codes: n };
+    const t0 = Date.now(), stamp = String(t0);
+    await setConfig("selftest", stamp);
+    const back = await getConfig("selftest");
+    await query(`delete from license_config where key = 'selftest'`);
+    return back === stamp ? { source, ok: true, codes: n, roundTripMs: Date.now() - t0 } : { source, ok: false, codes: n, error: "readback" };
+  } catch (e) {
+    return { source, ok: false, error: e instanceof Error ? e.message.slice(0, 160) : "error" };
+  }
 }
