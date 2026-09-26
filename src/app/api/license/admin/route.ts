@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import {
-  licensingEnabled, listLicenses, createLicense, updateLicense, getContact, setContact, type LicenseAction,
+  licensingEnabled, listLicenses, listEvents, createLicense, updateLicense, getContact, setContact, type LicenseAction,
 } from "@/lib/license/server";
 import { passwordMatches, startOwnerSession, endOwnerSession, isOwner, tooManyTries, noteFail, clearFails, ipOf } from "@/lib/license/owner";
 
@@ -11,7 +11,7 @@ const json = (b: unknown, status = 200) => NextResponse.json(b, { status, header
 export async function GET() {
   if (!licensingEnabled()) return json({ enabled: false, owner: false });
   if (!(await isOwner())) return json({ enabled: true, owner: false });
-  return json({ enabled: true, owner: true, licenses: await listLicenses(), contact: await getContact(), now: Date.now() });
+  return json({ enabled: true, owner: true, licenses: await listLicenses(), events: await listEvents(), contact: await getContact(), now: Date.now() });
 }
 
 export async function POST(req: NextRequest) {
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
     const lab = String(b.lab ?? "").trim();
     const days = Number(b.days);
     if (!lab || !Number.isFinite(days) || days < 1) return json({ ok: false, error: "bad_request" }, 400);
-    const { row, code } = await createLicense({ lab, days, modules: b.modules, note: String(b.note ?? "") });
+    const { row, code } = await createLicense({ lab, days, modules: b.modules, note: String(b.note ?? ""), trial: b.trial === true });
     return json({ ok: true, row, code });
   }
   if (b.op === "update") {

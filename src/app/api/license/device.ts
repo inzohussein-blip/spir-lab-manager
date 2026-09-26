@@ -7,7 +7,7 @@ import { ADMIN_LICENSE_COOKIE } from "@/lib/license/modules";
 /** Device reply: the signed license, and the admin-panel cookie when the code includes it. */
 export async function deviceReply(r: DeviceResult, status = 200) {
   const body = r.ok
-    ? { ok: true, token: r.token, pub: r.pub, now: Date.now() }
+    ? { ok: true, token: r.token, pub: r.pub, now: Date.now(), message: r.row.message || "" }
     : { ok: false, error: r.error, lab: r.row?.lab_name, until: r.row?.expires_at ?? null, now: Date.now() };
   const res = NextResponse.json(body, { status: r.ok ? status : r.error === "not_found" ? 404 : 403, headers: { "cache-control": "no-store" } });
   if (r.ok && r.row.modules.includes("admin")) {

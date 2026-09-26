@@ -23,6 +23,8 @@ interface Stored {
   token: string;
   pub: JsonWebKey;
   checkedAt: number;
+  /** Note from the provider, shown on the stations until dismissed. */
+  message?: string;
   /** Set when the server said the code no longer works (stopped / deleted / moved / expired). */
   blocked?: { error: string; at: number };
 }
@@ -123,8 +125,8 @@ export async function evaluate(module?: LicenseModule): Promise<LicenseState> {
   return { kind: "need" };
 }
 
-function store(d: { token: string; pub: JsonWebKey; now?: number }) {
-  write(LIC_KEY, JSON.stringify({ token: d.token, pub: d.pub, checkedAt: Date.now() } satisfies Stored));
+function store(d: { token: string; pub: JsonWebKey; now?: number; message?: string }) {
+  write(LIC_KEY, JSON.stringify({ token: d.token, pub: d.pub, checkedAt: Date.now(), message: d.message || "" } satisfies Stored));
   write(ACT_KEY, "activated");
   if (d.now) write(SEEN_KEY, String(d.now)); // the server's clock resets a wrongly set one
 }
@@ -161,4 +163,9 @@ export async function refreshLicense(force = false): Promise<void> {
     if (d.ok) store(d);
     else write(LIC_KEY, JSON.stringify({ ...s, checkedAt: Date.now(), blocked: { error: d.error, at: Date.now() } } satisfies Stored));
   } catch { /* offline — try again next time */ }
+}
+
+/** The provider's current note for this lab (empty when none). */
+export function providerMessage(): string {
+  return readJson<Stored>(LIC_KEY)?.message?.trim() ?? "";
 }

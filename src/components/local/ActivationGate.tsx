@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { KeyRound, Lock, WifiOff, Clock, ArrowRight, RefreshCw, X } from "lucide-react";
+import { KeyRound, Lock, WifiOff, Clock, ArrowRight, RefreshCw, X, MessageSquare } from "lucide-react";
 import {
-  evaluate, fetchEnabled, refreshLicense, activateCode, cachedContact, WARN_DAYS, type LicenseState,
+  evaluate, fetchEnabled, refreshLicense, activateCode, cachedContact, providerMessage, WARN_DAYS, type LicenseState,
 } from "@/lib/license/client";
 import { moduleLabel, type LicenseModule } from "@/lib/license/modules";
 
@@ -18,6 +18,7 @@ import { moduleLabel, type LicenseModule } from "@/lib/license/modules";
 const DAY = 86_400_000;
 const fmt = (ms?: number) => (ms ? new Date(ms).toLocaleDateString("en-CA") : "");
 const HIDE_KEY = "local.license.noticeHidden";
+const MSG_SEEN_KEY = "local.license.messageSeen";
 
 // One server round per page load, shared by every gate / card on the page.
 let boot: Promise<void> | null = null;
@@ -96,6 +97,14 @@ export function ActivationGate({ module }: { module?: LicenseModule }) {
   const [openForm, setOpenForm] = useState(false);
   const [hidden, setHidden] = useState(true);
   const [checking, setChecking] = useState(false);
+  const [msg, setMsg] = useState("");
+  // The provider's note: shown until dismissed; a new note shows again.
+  useEffect(() => {
+    if (state?.kind !== "ok") return;
+    const m = providerMessage();
+    try { setMsg(m && localStorage.getItem(MSG_SEEN_KEY) !== m ? m : ""); } catch { setMsg(m); }
+  }, [state]);
+  const dismissMsg = () => { try { localStorage.setItem(MSG_SEEN_KEY, msg); } catch { /* ignore */ } setMsg(""); };
   useEffect(() => { try { setHidden(localStorage.getItem(HIDE_KEY) === new Date().toLocaleDateString("en-CA")); } catch { setHidden(false); } }, []);
   const hideToday = () => { try { localStorage.setItem(HIDE_KEY, new Date().toLocaleDateString("en-CA")); } catch { /* ignore */ } setHidden(true); };
   const done = () => { setOpenForm(false); recheck(); };
@@ -151,6 +160,15 @@ export function ActivationGate({ module }: { module?: LicenseModule }) {
     : "";
   return (
     <>
+      {msg && !openForm && (
+        <div className="no-print pointer-events-none fixed inset-x-0 bottom-14 z-[80] flex justify-center p-3">
+          <div className="pointer-events-auto flex max-w-2xl items-start gap-2 rounded-xl border border-sky-300 bg-sky-50 px-3 py-2 text-xs text-sky-900 shadow-[var(--shadow-pop)]">
+            <MessageSquare className="mt-0.5 size-4 shrink-0" />
+            <span className="flex-1"><b>رسالة من المزوّد:</b> {msg}</span>
+            <button onClick={dismissMsg} className="rounded-md bg-sky-600 px-2 py-1 font-semibold text-white hover:bg-sky-700">تم</button>
+          </div>
+        </div>
+      )}
       {notice && !hidden && !openForm && (
         <div className="no-print pointer-events-none fixed inset-x-0 bottom-0 z-[80] flex justify-center p-3">
           <div className="pointer-events-auto flex max-w-2xl flex-wrap items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 shadow-[var(--shadow-pop)]">
