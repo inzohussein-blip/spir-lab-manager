@@ -30,7 +30,7 @@ export async function middleware(req: NextRequest) {
   if ((process.env.LICENSE_ADMIN_PASSWORD ?? "").trim() && !(await adminCookieValid(req.cookies.get(ADMIN_LICENSE_COOKIE)?.value))) {
     const url = req.nextUrl.clone();
     url.pathname = "/welcome";
-    url.search = "?admin=locked";
+    url.search = "";
     return NextResponse.redirect(url);
   }
 

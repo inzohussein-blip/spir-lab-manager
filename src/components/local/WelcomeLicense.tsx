@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { Suspense, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Lock, ArrowLeft, LayoutDashboard } from "lucide-react";
 import { useLicense } from "@/components/local/ActivationGate";
 import type { LicenseModule } from "@/lib/license/modules";
@@ -57,18 +56,4 @@ export function AdminPanelCard() {
       </button>
     </div>
   );
-}
-
-function Notice() {
-  const q = useSearchParams();
-  if (q.get("admin") !== "locked") return null;
-  return (
-    <div className="mb-6 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-center text-sm text-amber-800">
-      لوحة الإدارة الكاملة غير مفعّلة على هذا الجهاز — تحتاج رمز مختبر يشملها (وإن كان يشملها، افتح هذه الصفحة مع اتصال بالإنترنت ليتحدّث الجهاز).
-    </div>
-  );
-}
-/** Shown when the middleware sent a device without the admin panel back here. */
-export function AdminLockedNotice() {
-  return <Suspense fallback={null}><Notice /></Suspense>;
 }

@@ -1,8 +1,8 @@
 import { OfflineReady } from "@/components/local/OfflineReady";
 import { ActivationGate } from "@/components/local/ActivationGate";
 import { ACTIVATION_SCRIPT } from "@/lib/local/activation";
-import { Beaker, ShoppingCart, GraduationCap, ShieldCheck, Users, ArrowLeft } from "lucide-react";
-import { LicensedLink, AdminPanelCard, AdminLockedNotice } from "@/components/local/WelcomeLicense";
+import { Beaker, ShoppingCart, GraduationCap, ShieldCheck, Users, ArrowLeft, Phone } from "lucide-react";
+import { LicensedLink, AdminPanelCard } from "@/components/local/WelcomeLicense";
 
 export const metadata = { title: "مختبر التحليلات المرضية — اختيار النسخة" };
 
@@ -20,8 +20,6 @@ export default function WelcomePage() {
           <h1 className="mt-3 text-3xl font-extrabold" style={{ color: "#5a2a82" }}>مختبر التحليلات المرضية</h1>
           <p className="mt-4 max-w-xl text-sm text-muted">اختر النسخة التي تريد الدخول إليها. النسخة الكاملة قيد التطوير حالياً، والنسخ المجانية تعمل محلياً بدون إنترنت.</p>
         </div>
-
-        <AdminLockedNotice />
 
         {/* Cards */}
         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
@@ -94,6 +92,13 @@ export default function WelcomePage() {
           </LicensedLink>
         </div>
 
+        {/* Contact */}
+        <div className="mt-10 flex flex-col items-center gap-2 border-t border-line pt-6 text-center">
+          <div className="text-sm font-semibold">للاشتراك والتفعيل والدعم الفني</div>
+          <a href="tel:07803993585" className="inline-flex items-center gap-2 rounded-full border border-line bg-surface px-4 py-2 text-base font-bold tabular-nums shadow-[var(--shadow-card)] hover:border-brand" dir="ltr">
+            <Phone className="size-4 text-brand-dark" /> 07803993585
+          </a>
+        </div>
       </div>
     </div>
   );
