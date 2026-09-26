@@ -1,8 +1,10 @@
 import "server-only";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { SignJWT, exportJWK, generateKeyPair, importJWK, type JWK, type KeyLike } from "jose";
-import { query, queryOne } from "@/lib/db";
+import { query as appQuery } from "@/lib/db";
 import { cleanModules, type LicenseModule, type LicensePayload } from "./modules";
+import { licenseDbUrl } from "./env";
+export { licenseDbUrl, durableStorage, passwordSet, licensingEnabled } from "./env";
 
 /**
  * Lab codes («منظومة الرموز»): one code per lab, bound to one device on first use, valid for a
@@ -14,7 +16,24 @@ import { cleanModules, type LicenseModule, type LicensePayload } from "./modules
  * Switched on by setting LICENSE_ADMIN_PASSWORD (the owner's password for /licenses).
  */
 
-export const licensingEnabled = () => !!(process.env.LICENSE_ADMIN_PASSWORD ?? "").trim();
+type Pool = { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> };
+const g = globalThis as unknown as { __licensePool?: Promise<Pool> };
+function licensePool(url: string): Promise<Pool> {
+  g.__licensePool ??= import("pg").then(({ Pool }) => new Pool({
+    connectionString: url,
+    max: Number(process.env.LICENSE_PGPOOL_MAX || 3),
+    ssl: process.env.PGSSL === "disable" ? false : { rejectUnauthorized: true },
+  }) as unknown as Pool);
+  return g.__licensePool;
+}
+async function query<T = unknown>(sql: string, params?: unknown[]): Promise<T[]> {
+  const url = licenseDbUrl();
+  if (!url) return appQuery<T>(sql, params);
+  return (await (await licensePool(url)).query(sql, params)).rows as T[];
+}
+async function queryOne<T = unknown>(sql: string, params?: unknown[]): Promise<T | null> {
+  return (await query<T>(sql, params))[0] ?? null;
+}
 const DAY = 86_400_000;
 
 export interface LicenseRow {

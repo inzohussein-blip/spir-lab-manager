@@ -16,7 +16,7 @@ interface Row {
   price: string; paid: boolean; paid_at: number | null; message: string; device_name: string; is_trial: boolean;
 }
 interface Ev { license_id: string; at: number; kind: string; detail: string }
-type Data = { enabled: boolean; owner: boolean; licenses?: Row[]; events?: Ev[]; contact?: string; now?: number };
+type Data = { enabled: boolean; owner: boolean; needsDb?: boolean; licenses?: Row[]; events?: Ev[]; contact?: string; now?: number };
 
 const inp = "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
 const small = "inline-flex items-center gap-1 rounded-lg border border-line px-2 py-1 text-xs hover:bg-canvas";
@@ -195,7 +195,11 @@ export default function LicensesPage() {
     <div className="mx-auto mt-16 max-w-md rounded-2xl border border-line bg-surface p-6 text-center shadow-[var(--shadow-card)]">
       <ShieldAlert className="mx-auto size-8 text-amber-600" />
       <div className="mt-2 text-lg font-bold">منظومة الرموز غير مفعّلة</div>
-      <p className="mt-2 text-sm text-muted">لتفعيلها أضف المتغير <b dir="ltr">LICENSE_ADMIN_PASSWORD</b> (كلمة مرور هذه الصفحة) في إعدادات Vercel ثم أعد النشر.</p>
+      {data.needsDb ? (
+        <p className="mt-2 text-sm text-muted">كلمة المرور مضبوطة، لكن لا توجد قاعدة بيانات دائمة لحفظ الرموز. في Vercel افتح Storage ← Create Database ← Neon واربطها بالمشروع بالبادئة <b dir="ltr">LICENSE</b>، ثم أعد النشر. (بقيت المنظومة مطفأة حتى لا تُقفل أجهزة المختبرات.)</p>
+      ) : (
+        <p className="mt-2 text-sm text-muted">لتفعيلها أضف المتغير <b dir="ltr">LICENSE_ADMIN_PASSWORD</b> (كلمة مرور هذه الصفحة) في إعدادات Vercel ثم أعد النشر.</p>
+      )}
     </div>,
   );
 

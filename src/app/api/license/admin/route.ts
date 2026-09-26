@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import {
-  licensingEnabled, listLicenses, listEvents, createLicense, updateLicense, getContact, setContact, type LicenseAction,
+  licensingEnabled, passwordSet, durableStorage, listLicenses, listEvents, createLicense, updateLicense, getContact, setContact, type LicenseAction,
 } from "@/lib/license/server";
 import { passwordMatches, startOwnerSession, endOwnerSession, isOwner, tooManyTries, noteFail, clearFails, ipOf } from "@/lib/license/owner";
 
@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 const json = (b: unknown, status = 200) => NextResponse.json(b, { status, headers: { "cache-control": "no-store" } });
 
 export async function GET() {
-  if (!licensingEnabled()) return json({ enabled: false, owner: false });
+  if (!licensingEnabled()) return json({ enabled: false, owner: false, needsDb: passwordSet() && !durableStorage() });
   if (!(await isOwner())) return json({ enabled: true, owner: false });
   return json({ enabled: true, owner: true, licenses: await listLicenses(), events: await listEvents(), contact: await getContact(), now: Date.now() });
 }

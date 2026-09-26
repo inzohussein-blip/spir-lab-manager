@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { adminCookieValid } from "@/lib/license/adminCookie";
 import { ADMIN_LICENSE_COOKIE } from "@/lib/license/modules";
+import { licensingEnabled } from "@/lib/license/env";
 
 /**
  * Sets x-pathname (so the server layout can detect the current route) and does
@@ -27,7 +28,7 @@ export async function middleware(req: NextRequest) {
 
   // Lab codes switched on: the full admin panel (login included) opens only on a device whose
   // lab code includes it — the cookie comes with the device license (see /api/license).
-  if ((process.env.LICENSE_ADMIN_PASSWORD ?? "").trim() && !(await adminCookieValid(req.cookies.get(ADMIN_LICENSE_COOKIE)?.value))) {
+  if (licensingEnabled() && !(await adminCookieValid(req.cookies.get(ADMIN_LICENSE_COOKIE)?.value))) {
     const url = req.nextUrl.clone();
     url.pathname = "/welcome";
     url.search = "";
