@@ -91,6 +91,8 @@ export function kvReady(): Promise<boolean> {
       for (const k of found) localStorage.removeItem(k);
       d.onversionchange = () => d.close();
       db = d; mem = m;
+      // A save still on its way to disk (it takes milliseconds): ask before the page closes.
+      window.addEventListener("beforeunload", (e) => { if (pending.size) e.preventDefault(); });
       if (typeof BroadcastChannel !== "undefined") {
         chan = new BroadcastChannel("lab-kv");
         chan.onmessage = (e: MessageEvent<{ k: string; v: string | null }>) => {
@@ -108,15 +110,23 @@ export function kvReady(): Promise<boolean> {
 
 /** A write that IndexedDB refused (disk full…): shown by LocalDataGate. */
 export const KV_ERROR_EVENT = "lab-kv-error";
+const pending = new Set<Promise<void>>();
 function persist(k: string, v: string | null) {
   try {
     const tx = db!.transaction(STORE, "readwrite");
     if (v == null) tx.objectStore(STORE).delete(k); else tx.objectStore(STORE).put(v, k);
-    done(tx).catch(() => window.dispatchEvent(new Event(KV_ERROR_EVENT)));
+    const p = done(tx).catch(() => { window.dispatchEvent(new Event(KV_ERROR_EVENT)); });
+    pending.add(p);
+    p.finally(() => pending.delete(p));
   } catch {
     window.dispatchEvent(new Event(KV_ERROR_EVENT));
   }
   chan?.postMessage({ k, v });
+}
+
+/** Resolves once every write so far is on disk — call before reloading the page (e.g. after a restore). */
+export async function kvFlush(): Promise<void> {
+  while (pending.size) await Promise.all([...pending]);
 }
 
 export function kvGet(k: string): string | null {

@@ -1,5 +1,6 @@
 "use client";
 
+import { kvFlush } from "@/lib/local/kv";
 import { useEffect, useRef, useState } from "react";
 import { Settings, Check, Image as ImageIcon, Download, Upload, Trash2, Stethoscope, Plus, Pencil, X, Smartphone, History, ListCollapse, ClipboardList, QrCode as QrCodeIcon } from "lucide-react";
 import { labQrCode, QR_TITLE_DEFAULT, QR_HINT_DEFAULT } from "@/lib/station/labQr";
@@ -102,7 +103,7 @@ export default function StationSettingsPage() {
       try {
         const ok = importBackup(JSON.parse(String(reader.result)));
         setMsg(ok ? "تم الاستيراد بنجاح — سيُعاد التحميل." : "لم يكتمل الاستيراد: الملف غير صالح أو أن مساحة التخزين في المتصفح لا تكفي.");
-        if (ok) setTimeout(() => location.reload(), 900);
+        if (ok) void kvFlush().then(() => setTimeout(() => location.reload(), 900));
       } catch {
         setMsg("تعذّرت قراءة الملف.");
       }

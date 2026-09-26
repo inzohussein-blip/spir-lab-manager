@@ -1,5 +1,6 @@
 "use client";
 
+import { kvFlush } from "@/lib/local/kv";
 import { ThemeCard } from "@/components/local/LocalTheme";
 import { THEME_KEYS } from "@/lib/local/theme";
 import { useRef, useState } from "react";
@@ -27,7 +28,7 @@ export default function StoreSettingsPage() {
       try {
         const ok = importBackup(JSON.parse(String(reader.result)));
         setMsg(ok ? "تم الاستيراد — سيُعاد التحميل." : "ملف غير صالح.");
-        if (ok) setTimeout(() => location.reload(), 900);
+        if (ok) void kvFlush().then(() => setTimeout(() => location.reload(), 900));
       } catch { setMsg("تعذّرت قراءة الملف."); }
     };
     reader.readAsText(file);

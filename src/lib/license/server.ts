@@ -17,11 +17,23 @@ export { licenseDbUrl, durableStorage, passwordSet, licensingEnabled, licenseSto
  * Switched on by setting LICENSE_ADMIN_PASSWORD (the owner's password for /licenses).
  */
 
+// TLS is set below (always verified); the URL's own sslmode (Neon adds "require") would only
+// change meaning in pg v9, so it is dropped here.
+function withoutSslMode(url: string): string {
+  try {
+    const u = new URL(url);
+    u.searchParams.delete("sslmode");
+    u.searchParams.delete("uselibpqcompat");
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
 type Pool = { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> };
 const g = globalThis as unknown as { __licensePool?: Promise<Pool> };
 function licensePool(url: string): Promise<Pool> {
   g.__licensePool ??= import("pg").then(({ Pool }) => new Pool({
-    connectionString: url,
+    connectionString: withoutSslMode(url),
     max: Number(process.env.LICENSE_PGPOOL_MAX || 3),
     ssl: process.env.PGSSL === "disable" ? false : { rejectUnauthorized: true },
   }) as unknown as Pool);
@@ -214,7 +226,7 @@ export async function twoFactorRequired(): Promise<boolean> {
   return !twoFactorForcedOff() && (await readTotp("owner_totp")) != null;
 }
 /** A code is accepted once: a step already used (or older) is refused. */
-async function useCode(secret: string, code: string): Promise<boolean> {
+async function consumeCode(secret: string, code: string): Promise<boolean> {
   const step = totpMatch(secret, code);
   if (step == null) return false;
   const last = Number((await getConfig("owner_totp_last")) ?? 0);
@@ -224,7 +236,7 @@ async function useCode(secret: string, code: string): Promise<boolean> {
 }
 export async function checkOwnerCode(code: string): Promise<boolean> {
   const secret = await readTotp("owner_totp");
-  return !!secret && (await useCode(secret, code));
+  return !!secret && (await consumeCode(secret, code));
 }
 /** Start setting up: a new secret, kept aside until a first code from the phone confirms it. */
 export async function startTwoFactorSetup(): Promise<{ secret: string; uri: string } | null> {
@@ -236,7 +248,7 @@ export async function startTwoFactorSetup(): Promise<{ secret: string; uri: stri
 }
 export async function confirmTwoFactor(code: string): Promise<boolean> {
   const secret = await readTotp("owner_totp_pending");
-  if (!secret || !(await useCode(secret, code))) return false;
+  if (!secret || !(await consumeCode(secret, code))) return false;
   await setConfig("owner_totp", (await getConfig("owner_totp_pending"))!);
   await query(`delete from license_config where key = 'owner_totp_pending'`);
   return true;
