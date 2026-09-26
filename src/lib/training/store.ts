@@ -3,11 +3,12 @@
 /**
  * Local store for the standalone Training & Information station — a knowledge
  * base of lab tests (procedures, samples, tubes, tools, interpretation,
- * correlations). Text lives in localStorage under "training.*"; images live in
+ * correlations). Text lives in the browser store (lib/local/kv) under "training.*"; images live in
  * IndexedDB (see ./media). Fully separate: nothing here reads or writes the
  * Lab Station, Purchasing, or the admin panel.
  */
 
+import { kvGet, kvSet, kvBytes } from "@/lib/local/kv";
 import { clearOldDefault } from "@/lib/local/util";
 import { exportImages, importImages, exportImagesByIds, importImageIfMissing, type MediaExport } from "./media";
 
@@ -128,7 +129,7 @@ export function addMonths(months: number, from = new Date()): string {
 
 function read<T>(key: string, fallback: T): T {
   try {
-    const raw = localStorage.getItem(key);
+    const raw = kvGet(key);
     return raw ? (JSON.parse(raw) as T) : fallback;
   } catch {
     return fallback;
@@ -136,8 +137,7 @@ function read<T>(key: string, fallback: T): T {
 }
 function write<T>(key: string, value: T): boolean {
   try {
-    localStorage.setItem(key, JSON.stringify(value));
-    return true;
+    return kvSet(key, JSON.stringify(value));
   } catch {
     return false;
   }
@@ -351,17 +351,8 @@ export function getSettings(): TrainingSettings {
 }
 export function saveSettings(s: TrainingSettings): void { write(K_SETTINGS, s); }
 
-/** Text storage used in localStorage (bytes, approx.). */
-export function textUsage(): number {
-  let bytes = 0;
-  try {
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (k && k.startsWith("training.")) bytes += (k.length + (localStorage.getItem(k) ?? "").length) * 2;
-    }
-  } catch { /* ignore */ }
-  return bytes;
-}
+/** Text storage (bytes, approx.). */
+export function textUsage(): number { return kvBytes("training."); }
 
 // ── Backup (text + images in one file) ───────────────────────────────────────
 export interface TrainingBackup {

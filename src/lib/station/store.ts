@@ -2,11 +2,12 @@
 
 /**
  * Local, offline-first store for the standalone Lab Station. Everything lives in
- * this browser's localStorage — no database, no network. Designed for a single
+ * this browser's storage (IndexedDB via lib/local/kv) — no database, no network. Designed for a single
  * machine (the lab-room computer). Each read/write is guarded so a private
  * window or blocked storage never throws.
  */
 
+import { kvGet, kvSet, kvBytes, kvLarge, storageQuota } from "@/lib/local/kv";
 import { clearOldDefault } from "@/lib/local/util";
 
 export type Gender = "male" | "female" | "";
@@ -188,7 +189,7 @@ export interface StationSettings {
 
 function read<T>(key: string, fallback: T): T {
   try {
-    const raw = localStorage.getItem(key);
+    const raw = kvGet(key);
     return raw ? (JSON.parse(raw) as T) : fallback;
   } catch {
     return fallback;
@@ -197,8 +198,7 @@ function read<T>(key: string, fallback: T): T {
 /** Returns false when the browser refused the write (storage full or blocked). */
 function write<T>(key: string, value: T): boolean {
   try {
-    localStorage.setItem(key, JSON.stringify(value));
-    return true;
+    return kvSet(key, JSON.stringify(value));
   } catch {
     return false;
   }
@@ -372,20 +372,15 @@ export function resultDelta(current: string, previous: string): number | null {
   return Math.round((a - b) * 100) / 100;
 }
 
-/** Approximate size (bytes) this station uses in localStorage, and a rough
- *  percentage of the typical ~5MB per-origin browser budget. */
-export function storageUsage(): { bytes: number; pct: number; visits: number } {
-  let bytes = 0;
-  try {
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (!k || !k.startsWith("station.")) continue;
-      const v = localStorage.getItem(k) ?? "";
-      bytes += (k.length + v.length) * 2; // UTF-16 ≈ 2 bytes/char
-    }
-  } catch { /* ignore */ }
-  const BUDGET = 5 * 1024 * 1024;
-  return { bytes, pct: Math.min(100, Math.round((bytes / BUDGET) * 100)), visits: getVisits().length };
+export interface StorageUsage { bytes: number; pct: number; visits: number; used: number; quota: number; large: boolean }
+/** Space this station uses, and how full the browser's allowance for this site is (percent).
+ *  In IndexedDB the allowance is the browser's quota; still on localStorage it is ~5 MB. */
+export async function storageUsage(): Promise<StorageUsage> {
+  const bytes = kvBytes("station.");
+  const visits = getVisits().length;
+  const q = kvLarge() ? await storageQuota() : null;
+  const used = q ? q.usage : kvBytes(""), quota = q ? q.quota : 5 * 1024 * 1024;
+  return { bytes, visits, used, quota, large: kvLarge(), pct: Math.min(100, Math.round((used / quota) * 1000) / 10) };
 }
 
 /** Ask the browser to keep this origin's storage permanently, so it is never

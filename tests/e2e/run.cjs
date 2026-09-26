@@ -4,7 +4,7 @@
 const { spawnSync } = require('node:child_process');
 const path = require('node:path');
 const SUITES = {
-  plain: ['station.entry.cjs', 'station.options.cjs', 'station.forms.cjs', 'pages.crawl.cjs'],
+  plain: ['station.entry.cjs', 'station.storage.cjs', 'station.options.cjs', 'station.forms.cjs', 'pages.crawl.cjs'],
   codes: ['codes.core.cjs', 'codes.manager.cjs'],
 };
 const mode = process.argv[2] || 'plain';

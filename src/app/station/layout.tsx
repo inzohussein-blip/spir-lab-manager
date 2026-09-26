@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { OfflineReady } from "@/components/local/OfflineReady";
 import { ActivationGate } from "@/components/local/ActivationGate";
+import { LocalDataGate } from "@/components/local/LocalDataGate";
 import { ACTIVATION_SCRIPT } from "@/lib/local/activation";
 import { StationSidebar } from "@/components/station/StationSidebar";
 import { LocalThemeApplier } from "@/components/local/LocalTheme";
@@ -14,8 +15,10 @@ export default function StationLayout({ children }: { children: ReactNode }) {
       {/* Station appearance (Settings) — applied before paint, then kept in sync. */}
       <script dangerouslySetInnerHTML={{ __html: themeScript(THEME_KEYS.station) }} />
       <LocalThemeApplier storageKey={THEME_KEYS.station} />
-      <StationSidebar />
-      <main className="min-w-0 flex-1 p-4 md:p-7 print:p-0">{children}</main>
+      <LocalDataGate>
+        <StationSidebar />
+        <main className="min-w-0 flex-1 p-4 md:p-7 print:p-0">{children}</main>
+      </LocalDataGate>
       <OfflineReady />
     </div>
   );
