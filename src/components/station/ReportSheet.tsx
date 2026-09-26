@@ -4,6 +4,8 @@ import type { CSSProperties } from "react";
 import { flagFor, rangeLabel, type Gender, type PrevResult, type StationSettings, type StationTest } from "@/lib/station/store";
 import { tableStyleOf, tableColors, DENSITY_PAD, GAP_PX, type TableStyle } from "@/lib/station/tableStyle";
 import { Barcode } from "@/components/station/Barcode";
+import { FormReport } from "@/components/station/FormReport";
+import { isFormCode, decodeForm, type FormCode } from "@/lib/station/templates";
 
 // Lab identity colours (from the printed letterhead): purple + gold.
 const PURPLE = "#5a2a82";
@@ -37,6 +39,9 @@ const CATEGORY_EN: Record<string, string> = {
   "فحوصات TORCH": "TORCH Panel",
   "الفيروسات": "Virology",
   "أدرار": "Urinalysis",
+  "الخروج": "Stool Examination",
+  "السائل المنوي": "Semen Analysis",
+  "الزرع الجرثومي": "Microbiology",
   "فحوصات أخرى": "Other Tests",
 };
 
@@ -70,9 +75,13 @@ export function ReportSheet({
   const ts = tableStyleOf(settings.reportTable);
   const pad = DENSITY_PAD[ts.density];
 
+  // Structured reports (urine / stool / semen / culture) print on their own page.
+  const formRows = rows.filter((r) => isFormCode(r.test?.code));
+  const regular = rows.filter((r) => !isFormCode(r.test?.code));
+
   // Group rows by catalog category, keeping first-appearance order.
   const groups: { cat: string; rows: ReportRow[] }[] = [];
-  for (const r of rows) {
+  for (const r of regular) {
     const ar = r.test?.category?.trim() || "فحوصات أخرى";
     const cat = CATEGORY_EN[ar] ?? ar;
     const g = groups.find((x) => x.cat === cat);
@@ -80,39 +89,8 @@ export function ReportSheet({
     else groups.push({ cat, rows: [r] });
   }
 
-  return (
+  const header = (
     <>
-      {printable && <style>{`@media print {
-        @page { size: ${paper}; margin: 0; }
-        #report-sheet {
-          min-height: ${paper === "A5" ? "208mm" : "295mm"};
-          padding: 12mm 12mm 22mm !important;
-          -webkit-box-decoration-break: clone;
-          box-decoration-break: clone;
-        }
-        #report-sheet thead { display: table-header-group; }
-        #report-sheet tr, #report-sheet .report-keep { break-inside: avoid; }
-        #report-sheet .report-group { break-after: avoid; }
-        #report-sheet .report-footer { position: fixed; left: 12mm; right: 12mm; bottom: 8mm; margin: 0; }
-        #report-sheet .report-watermark { position: fixed; }
-        #report-sheet td, #report-sheet th { padding-top: ${pad.a4}px !important; padding-bottom: ${pad.a4}px !important; }
-        ${paper === "A5" ? `
-        #report-sheet { padding: 8mm 8mm 18mm !important; }
-        #report-sheet table { font-size: ${(ts.fontSize * 10 / 14).toFixed(1)}px !important; }
-        #report-sheet td, #report-sheet th { padding: ${pad.a5}px 4px !important; }
-        #report-sheet .report-footer { left: 8mm; right: 8mm; bottom: 5mm; padding: 4px 8px; font-size: 9px; }
-        ` : ""}
-      }`}</style>}
-
-      <div id="report-sheet" className={`relative isolate mx-auto flex max-w-[210mm] flex-col bg-white p-8 text-black shadow-sm print:mt-0 print:shadow-none ${printable ? "" : "print:hidden"} ${className}`}>
-        {/* Faint centred logo watermark (fixed in print → centred on every page) */}
-        {settings.logo && (
-          <div aria-hidden className="report-watermark pointer-events-none absolute inset-0 -z-10 flex items-center justify-center">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={settings.logo} alt="" className="w-1/2 max-w-[110mm] opacity-[0.06]" style={exact} />
-          </div>
-        )}
-
         {/* Letterhead — purple/gold identity */}
         <div className="flex items-center justify-between gap-4 pb-3">
           <div className="flex items-center gap-3">
@@ -140,12 +118,67 @@ export function ReportSheet({
           <div><span style={{ color: PURPLE }} className="font-semibold">الهاتف:</span> {patient.phone || "—"}</div>
           {referrer && <div><span style={{ color: PURPLE }} className="font-semibold">الطبيب المُحيل:</span> {referrer}</div>}
         </div>
+    </>
+  );
+
+  return (
+    <>
+      {printable && <style>{`@media print {
+        @page { size: ${paper}; margin: 0; }
+        #report-sheet {
+          min-height: ${paper === "A5" ? "208mm" : "295mm"};
+          padding: 12mm 12mm 22mm !important;
+          -webkit-box-decoration-break: clone;
+          box-decoration-break: clone;
+        }
+        #report-sheet thead { display: table-header-group; }
+        #report-sheet tr, #report-sheet .report-keep { break-inside: avoid; }
+        #report-sheet .report-group { break-after: avoid; }
+        #report-sheet .report-page { break-before: page; }
+        #report-sheet .form-table td, #report-sheet .form-table th { padding-top: 2px !important; padding-bottom: 2px !important; }
+        #report-sheet .report-footer { position: fixed; left: 12mm; right: 12mm; bottom: 8mm; margin: 0; }
+        #report-sheet .report-watermark { position: fixed; }
+        #report-sheet td, #report-sheet th { padding-top: ${pad.a4}px !important; padding-bottom: ${pad.a4}px !important; }
+        ${paper === "A5" ? `
+        #report-sheet { padding: 8mm 8mm 18mm !important; }
+        #report-sheet table { font-size: ${(ts.fontSize * 10 / 14).toFixed(1)}px !important; }
+        #report-sheet td, #report-sheet th { padding: ${pad.a5}px 4px !important; }
+        #report-sheet .form-table td, #report-sheet .form-table th { padding: 0.5px 4px !important; }
+        #report-sheet .form-sec { margin-bottom: 2.5mm; }
+        #report-sheet .form-sec:last-child { margin-bottom: 0; }
+        #report-sheet table.form-table { font-size: ${(ts.fontSize * 9 / 14).toFixed(1)}px !important; line-height: 1.2 !important; }
+        #report-sheet .report-footer { left: 8mm; right: 8mm; bottom: 5mm; padding: 4px 8px; font-size: 9px; }
+        ` : ""}
+      }`}</style>}
+
+      <div id="report-sheet" className={`relative isolate mx-auto flex max-w-[210mm] flex-col bg-white p-8 text-black shadow-sm print:mt-0 print:shadow-none ${printable ? "" : "print:hidden"} ${className}`}>
+        {/* Faint centred logo watermark (fixed in print → centred on every page) */}
+        {settings.logo && (
+          <div aria-hidden className="report-watermark pointer-events-none absolute inset-0 -z-10 flex items-center justify-center">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={settings.logo} alt="" className="w-1/2 max-w-[110mm] opacity-[0.06]" style={exact} />
+          </div>
+        )}
+
+        {header}
 
         {/* Results — printed in English, left to right (the entry screen stays Arabic). */}
-        <ResultsTable
-          ts={ts} groups={groups} empty={rows.length === 0} emptyText={emptyText}
-          gender={gender} age={patient.age} prev={prev} printPrev={printPrev} paper={paper}
-        />
+        {(regular.length > 0 || formRows.length === 0) && (
+          <ResultsTable
+            ts={ts} groups={groups} empty={rows.length === 0} emptyText={emptyText}
+            gender={gender} age={patient.age} prev={prev} printPrev={printPrev} paper={paper}
+          />
+        )}
+
+        {formRows.map((r, i) => {
+          const first = i === 0 && regular.length === 0;
+          return (
+            <div key={r.key} className={first ? "" : "report-page mt-10 border-t-2 border-dashed border-gray-300 pt-8 print:mt-0 print:border-0 print:pt-0"}>
+              {!first && header}
+              <FormReport code={r.test!.code as FormCode} values={decodeForm(r.value)} ts={ts} />
+            </div>
+          );
+        })}
 
         {/* Bottom group — signature sits at the bottom of the last page */}
         <div className="report-keep mt-auto">

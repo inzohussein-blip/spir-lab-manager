@@ -8,6 +8,7 @@ import {
   type StationVisit, type StationTest, type StationSettings,
 } from "@/lib/station/store";
 import { ReportSheet } from "@/components/station/ReportSheet";
+import { valueText } from "@/lib/station/templates";
 
 
 export default function StationVisitsPage() {
@@ -71,7 +72,7 @@ export default function StationVisitsPage() {
         const f = t ? flagFor(r.value, t.normal, v.patient.gender, v.patient.age) : null;
         lines.push([
           dayOf(v.created_at), v.accession ?? "", v.patient.name, g, v.patient.age ?? "", v.patient.phone ?? "",
-          r.name_ar, r.value, r.unit ?? "", t ? rangeLabel(t.normal, v.patient.gender, t.unit, v.patient.age) : "", f ? flagText[f] : "",
+          r.name_ar, valueText(r.value, t?.code), r.unit ?? "", t ? rangeLabel(t.normal, v.patient.gender, t.unit, v.patient.age) : "", f ? flagText[f] : "",
         ].map(csvCell).join(","));
       }
     }

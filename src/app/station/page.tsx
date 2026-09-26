@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search, Printer, Save, Check, Tag, Beaker, Layers, Pencil, UserRound, StickyNote, Plus, X, RotateCcw, ListChecks, ChevronDown, type LucideIcon } from "lucide-react";
+import { Search, Printer, Save, Check, Tag, ClipboardList, Beaker, Layers, Pencil, UserRound, StickyNote, Plus, X, RotateCcw, ListChecks, ChevronDown, type LucideIcon } from "lucide-react";
 import {
   getTests, addVisit, updateVisit, getVisit, getSettings, getPanels, nextAccession, uid, rangeLabel, flagFor,
   getPatients, getPatient, upsertPatient, addPatientNote, deductStockForTests, getDoctors, addDoctor,
@@ -11,6 +11,8 @@ import {
 } from "@/lib/station/store";
 import { ReportSheet } from "@/components/station/ReportSheet";
 import { TubeLabels } from "@/components/station/TubeLabel";
+import { FormDialog, fillNormals } from "@/components/station/ReportForms";
+import { isFormCode, decodeForm, encodeForm, formProgress, type FormCode } from "@/lib/station/templates";
 import { computeDerived } from "@/lib/station/derived";
 import { useToast } from "@/components/station/Toast";
 
@@ -90,6 +92,8 @@ function StationEntryPage() {
   const [paper, setPaper] = useState<"A4" | "A5">("A4");
   // Tube-label print job (Settings → «طباعة ملصق الأنبوب»); the report is not printed meanwhile.
   const [labelJob, setLabelJob] = useState(false);
+  // Structured-report form window (urine / stool / semen / culture): the test being filled.
+  const [formFor, setFormFor] = useState<string | null>(null);
   const [justSaved, setJustSaved] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [createdAt, setCreatedAt] = useState<number | null>(null);
@@ -273,8 +277,11 @@ function StationEntryPage() {
 
   // Enter in a result field jumps to the next one.
   function focusNextResult(idx: number) {
-    const next = document.querySelector<HTMLInputElement>(`[data-result-idx="${idx + 1}"]`);
-    if (next) { next.focus(); next.select(); }
+    // Skip form tests (they have no single result box).
+    for (let i = idx + 1; i < chosen.length; i++) {
+      const next = document.querySelector<HTMLInputElement>(`[data-result-idx="${i}"]`);
+      if (next) { next.focus(); next.select(); return; }
+    }
   }
 
   // Keyboard shortcuts: Ctrl+S save, Ctrl+P print (uses the guarded print flow).
@@ -638,6 +645,40 @@ function StationEntryPage() {
               ) : (
                 <div className="flex flex-col gap-3">
                   {chosen.map((t, idx) => {
+                    if (isFormCode(t.code)) {
+                      const code = t.code as FormCode;
+                      const vals = decodeForm(results[t.id]);
+                      const pr = formProgress(code, vals);
+                      const done = pr.filled === pr.total;
+                      return (
+                        <div key={t.id} className="group rounded-xl border border-line p-2.5">
+                          <div className="mb-2 flex items-center justify-between gap-2">
+                            <span className="truncate text-sm font-medium">{t.name_ar}</span>
+                            <div className="flex items-center gap-1">
+                              <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${done ? "bg-teal-50 text-brand-dark" : pr.filled ? "bg-amber-50 text-amber-700" : "bg-canvas text-muted"}`}>
+                                <span dir="ltr">{pr.filled}/{pr.total}</span>
+                              </span>
+                              <button type="button" onClick={() => toggle(t.id)} title="إزالة الفحص"
+                                className="grid size-6 place-items-center rounded-md text-muted opacity-0 hover:bg-red-50 hover:text-red-600 focus:opacity-100 group-hover:opacity-100">
+                                <X className="size-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            <button type="button" onClick={() => setFormFor(t.id)}
+                              className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white hover:bg-brand-dark">
+                              <ClipboardList className="size-4" /> {pr.filled ? "تعديل الاستمارة" : "فتح الاستمارة"}
+                            </button>
+                            {code !== "CS" && (
+                              <button type="button" onClick={() => setResults((r) => ({ ...r, [t.id]: encodeForm(fillNormals(code, decodeForm(r[t.id]))) }))}
+                                title="يملأ الحقول الفارغة بالقيم الطبيعية" className="rounded-lg border border-line px-2.5 py-2 text-xs hover:bg-canvas">
+                                ملء الطبيعي
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    }
                     const f = flagFor(results[t.id] ?? "", t.normal, gender, age);
                     const tint =
                       f === "H" ? "!border-red-300 bg-red-50/50 text-red-700"
@@ -735,6 +776,19 @@ function StationEntryPage() {
         printPrev={printPrev}
         printable={!labelJob}
       />
+      {formFor && (() => {
+        const t = chosen.find((x) => x.id === formFor);
+        if (!t || !isFormCode(t.code)) return null;
+        return (
+          <FormDialog
+            code={t.code as FormCode}
+            testName={t.name_ar}
+            values={decodeForm(results[t.id])}
+            onChange={(v) => setResults((r) => ({ ...r, [t.id]: encodeForm(v) }))}
+            onClose={() => setFormFor(null)}
+          />
+        );
+      })()}
       {labelJob && (
         <TubeLabels
           name={name.trim()}

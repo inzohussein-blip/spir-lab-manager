@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Archive, Search, UserRound, Phone, Plus, Trash2, Printer } from "lucide-react";
+import { valueText } from "@/lib/station/templates";
 import {
-  getPatients, addPatientNote, deletePatients, getVisits,
+  getPatients, addPatientNote, deletePatients, getVisits, getTests,
   type StationPatient, type StationVisit, type Gender,
 } from "@/lib/station/store";
 
@@ -17,7 +18,12 @@ export default function RecordsPage() {
   const [selId, setSelId] = useState<string | null>(null);
   const [note, setNote] = useState("");
 
-  useEffect(() => { setPatients(getPatients()); setVisits(getVisits()); }, []);
+  const [codes, setCodes] = useState<Record<string, string | undefined>>({});
+  useEffect(() => {
+    setPatients(getPatients()); setVisits(getVisits());
+    setCodes(Object.fromEntries(getTests().map((t) => [t.id, t.code])));
+  }, []);
+  const codeOf = (testId: string) => codes[testId];
 
   const filtered = useMemo(() => {
     const t = q.trim().toLowerCase();
@@ -144,7 +150,7 @@ export default function RecordsPage() {
                         <div className="flex flex-wrap gap-1.5">
                           {v.results.map((r, i) => (
                             <span key={i} className="rounded-md bg-canvas px-2 py-0.5 text-xs">
-                              {r.name_ar}: <b>{r.value || "—"}</b>{r.unit ? ` ${r.unit}` : ""}
+                              {r.name_ar}: <b>{valueText(r.value, codeOf(r.testId), true) || "—"}</b>{r.unit ? ` ${r.unit}` : ""}
                             </span>
                           ))}
                         </div>

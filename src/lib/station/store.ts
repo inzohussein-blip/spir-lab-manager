@@ -129,6 +129,8 @@ const K_BACKUP_AT = "station.backupAt.v1";
 const K_CATALOG_VER = "station.catalogVersion.v1";
 /** One-time fix: the urine test's built-in range text became English ("Normal"). */
 const K_FIX_GUE = "station.fixGueNormal.v1";
+/** One-time addition of the structured-form tests (stool, semen, culture) to existing catalogs. */
+const K_ADD_FORMS = "station.addFormTests.v1";
 /** Bump when DEFAULT_TESTS gains tests, so existing installs receive them. */
 const CATALOG_VERSION = 2;
 
@@ -188,6 +190,7 @@ export function getTests(): StationTest[] {
     const seed = DEFAULT_TESTS().map(({ aliases: _a, legacy: _l, ...x }) => x);
     write(K_TESTS, seed);
     write(K_CATALOG_VER, CATALOG_VERSION);
+    write(K_ADD_FORMS, true);
     return seed;
   }
   if (!read<boolean>(K_FIX_GUE, false)) {
@@ -195,6 +198,12 @@ export function getTests(): StationTest[] {
     write(K_TESTS, fixed);
     write(K_FIX_GUE, true);
     t.splice(0, t.length, ...fixed);
+  }
+  if (!read<boolean>(K_ADD_FORMS, false)) {
+    const have = new Set(t.map((x) => x.code));
+    const add = DEFAULT_TESTS().filter((d) => ["GSE", "SFA", "CS"].includes(d.code ?? "") && !have.has(d.code)).map(({ aliases: _a, legacy: _l, ...x }) => x);
+    if (add.length) { t.push(...add); write(K_TESTS, t); }
+    write(K_ADD_FORMS, true);
   }
   if (read<number>(K_CATALOG_VER, 1) < CATALOG_VERSION) {
     const merged = mergeDefaultTests(t);
@@ -742,6 +751,17 @@ function DEFAULT_TESTS(): DefaultTest[] {
   cat = "أدرار";
   sample = "إدرار";
   add("GUE", "تحليل البول العام", "General Urine Examination", "", { kind: "text", text: "Normal" });
+
+  // Structured report forms (see ./templates): entered through a form, printed on their own page.
+  cat = "الخروج";
+  sample = "خروج";
+  add("GSE", "فحص الخروج العام (GSE)", "General Stool Examination", "", { kind: "none" });
+  cat = "السائل المنوي";
+  sample = "سائل منوي";
+  add("SFA", "تحليل السائل المنوي", "Seminal Fluid Analysis", "", { kind: "none" });
+  cat = "الزرع الجرثومي";
+  sample = "حسب نوع العينة";
+  add("CS", "الزرع والحساسية (Culture & Sensitivity)", "Culture & Sensitivity", "", { kind: "none" });
 
   return list;
 }
