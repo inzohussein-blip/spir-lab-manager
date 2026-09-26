@@ -31,7 +31,8 @@ export interface Template { code: string; title: string; sections: TSection[] }
 export const isSub = (r: TRow): r is { sub: string } => "sub" in r;
 
 // ── Shared option lists ──────────────────────────────────────────────────────
-const AMOUNT = [o("Nil", "عدم وجود"), o("A Few (+)", "قليل"), o("Moderate (++)", "متوسط"), o("Many (+++)", "كثير"), o("Plenty / Loaded (++++)", "كثير جداً")];
+/** Amount scale — printed exactly as chosen: Nil, Few, +, ++, +++, ++++, More than (++++). */
+const AMOUNT = [o("Nil", "لا يوجد"), o("Few", "قليل"), o("+", "بسيط"), o("++", "متوسط"), o("+++", "كثير"), o("++++", "كثير جداً"), o("More than (++++)", "مملوء")];
 const CHEM = plain("Nil", "Trace", "+", "++", "+++", "++++");
 const PERCENT = Array.from({ length: 21 }, (_, i) => ({ v: `${i * 5}%` }));
 
@@ -64,7 +65,7 @@ export const GUE: Template = {
       rows: [
         { k: "pus", label: "Pus Cells (WBCs)", unit: "/ H.P.F", normal: "0 - 1", opts: HPF_U },
         { k: "rbc", label: "R.B.Cs (Red Blood Cells)", unit: "/ H.P.F", normal: "0 - 1", opts: HPF_U },
-        { k: "epi", label: "Epithelial Cells", unit: "/ H.P.F", normal: "A Few (+)", opts: AMOUNT },
+        { k: "epi", label: "Epithelial Cells", unit: "/ H.P.F", normal: "Few", opts: AMOUNT },
         { k: "casts", label: "Casts (Hyaline / Granular / Others)", unit: "/ L.P.F", normal: "Nil",
           opts: [o("Nil"), o("Hyaline Casts (Few)"), o("Hyaline Casts (Many)"), o("Granular Casts (Few)"), o("Granular Casts (Many)"), o("WBC Casts"), o("RBC Casts")] },
         { sub: "CRYSTALS & AMORPHOUS DEPOSITS" },
@@ -86,10 +87,8 @@ export const GUE: Template = {
 
 // ── General Stool Examination ────────────────────────────────────────────────
 const HPF_S = [...plain("0 - 1", "1 - 2", "2 - 5", "5 - 10", "10 - 15", "15 - 20", "20 - 30", "30 - 50"), o("Loaded / Plenty", "مملوء")];
-const MUCUS_BLOOD = [o("Nil", "غير موجود"), o("Present (+)", "موجود"), o("Moderate (++)", "متوسط"), o("Abundant (+++)", "كثيف")];
 const PARASITES = [o("Nil", "لا يوجد"), o("Entamoeba histolytica (Cyst)"), o("Entamoeba histolytica (Trophozoite)"), o("Giardia lamblia (Cyst)"), o("Giardia lamblia (Trophozoite)"), o("Entamoeba coli (Cyst)"), o("Blastocystis hominis"), o("Cryptosporidium spp.")];
 const HELMINTHS = [o("Nil", "لا يوجد"), o("Ascaris lumbricoides Ova"), o("Enterobius vermicularis (Pinworm Ova)"), o("Hymenolepis nana Ova"), o("Ancylostoma duodenale Ova"), o("Taenia spp. Ova")];
-const AMOUNT_S = [o("Nil", "غير موجود"), o("A Few (+)", "قليل"), o("Moderate (++)", "متوسط"), o("Many (+++)", "كثير"), o("Plenty (++++)", "كثير جداً")];
 export const GSE: Template = {
   code: "GSE",
   title: "GENERAL STOOL EXAMINATION (G.S.E)",
@@ -103,8 +102,8 @@ export const GSE: Template = {
           opts: [o("Formed", "متماسك / طبيعي"), o("Semi-Formed", "شبه متماسك"), o("Soft", "لين"), o("Loose", "مفكك"), o("Watery / Diarrheal", "مائي / إسهال"), o("Hard", "صلب")] },
         { k: "ph", label: "Reaction (pH)", ref: "Neutral / Slightly Acidic", normal: "Neutral (7.0)",
           opts: plain("Acidic", "Slightly Acidic", "Neutral (7.0)", "Slightly Alkaline", "Alkaline") },
-        { k: "blood", label: "Blood (Macroscopic)", ref: "Nil", normal: "Nil", opts: MUCUS_BLOOD },
-        { k: "mucus", label: "Mucus", ref: "Nil", normal: "Nil", opts: MUCUS_BLOOD },
+        { k: "blood", label: "Blood (Macroscopic)", ref: "Nil", normal: "Nil", opts: AMOUNT },
+        { k: "mucus", label: "Mucus", ref: "Nil", normal: "Nil", opts: AMOUNT },
         { k: "worms", label: "Helminths / Worms", ref: "Nil", normal: "Nil", opts: HELMINTHS },
       ],
     },
@@ -119,9 +118,9 @@ export const GSE: Template = {
         { k: "cyst", label: "Cyst (e.g. E. histolytica / E. coli / Giardia)", unit: "/ H.P.F", normal: "Nil", opts: PARASITES },
         { k: "tropho", label: "Trophozoite (Active Stage)", unit: "/ H.P.F", normal: "Nil", opts: PARASITES },
         { sub: "FUNGI & DIGESTION FINDINGS" },
-        { k: "yeast", label: "Monilia / Yeast Cells", unit: "/ H.P.F", normal: "Nil", opts: AMOUNT_S },
-        { k: "food", label: "Undigested Food Particles", unit: "/ H.P.F", normal: "A Few (+)", opts: AMOUNT_S },
-        { k: "fat", label: "Fat Globules / Starch Granules", unit: "/ H.P.F", normal: "Nil", opts: AMOUNT_S },
+        { k: "yeast", label: "Monilia / Yeast Cells", unit: "/ H.P.F", normal: "Nil", opts: AMOUNT },
+        { k: "food", label: "Undigested Food Particles", unit: "/ H.P.F", normal: "Few", opts: AMOUNT },
+        { k: "fat", label: "Fat Globules / Starch Granules", unit: "/ H.P.F", normal: "Nil", opts: AMOUNT },
         { k: "others", label: "Others / Remarks", unit: "/ H.P.F", normal: "Nil", opts: plain("Nil") },
       ],
     },
@@ -167,11 +166,11 @@ export const SFA: Template = {
         { k: "vitality", label: "Vitality (Live Sperms)", ref: "≥ 58%", opts: PERCENT },
         { k: "aggregation", label: "Sperm Aggregation", ref: "-ve", normal: "-ve", opts: plain("-ve", "+", "++", "+++") },
         { k: "agglutination", label: "Sperm Agglutination", ref: "< 10 Sperm/agglutinate", normal: "Nil",
-          opts: [o("Nil", "غير موجود"), o("A Few (+)", "قليل"), o("Moderate (++)", "متوسط"), o("Severe / Present (+++)", "كثيف / تكتل واضح")] },
+          opts: AMOUNT },
         { k: "wbc", label: "Leucocytes (Pus cells)", ref: "< 1 / HPF", normal: "0 - 1", opts: HPF_SF },
         { k: "rbc", label: "R.B.Cs", ref: "Nil", normal: "Nil", opts: [o("Nil"), ...HPF_SF] },
         { k: "othercells", label: "Others Cells (Spermatogenic)", ref: "Nil", normal: "Nil",
-          opts: [o("Nil", "غير موجود"), o("A Few (+)", "قليل"), o("Moderate (++)", "متوسط"), o("Many (+++)", "كثير")] },
+          opts: AMOUNT },
         { k: "fructose", label: "Fructose Test", ref: "Positive (+ve)", normal: "Positive (+ve)", opts: plain("Positive (+ve)", "Negative (-ve)") },
       ],
     },
@@ -213,10 +212,56 @@ export const TEMPLATES: Record<string, Template> = { GUE, GSE, SFA };
 /** Test codes that use a structured form (CS has its own form and print layout). */
 export const FORM_CODES = ["GUE", "GSE", "SFA", "CS"] as const;
 export type FormCode = (typeof FORM_CODES)[number];
+export type TplCode = Exclude<FormCode, "CS">;
 export const isFormCode = (code?: string): code is FormCode => !!code && (FORM_CODES as readonly string[]).includes(code);
-export const FORM_TITLE: Record<FormCode, string> = {
-  GUE: GUE.title, GSE: GSE.title, SFA: SFA.title, CS: "CULTURE AND SENSITIVITY REPORT",
+
+export type Group = { group: string; items: string[] };
+export interface CultureLists { title: string; specimens: Opt[]; organisms: Group[]; colony: Opt[]; antibiotics: Group[] }
+export const CS_DEFAULT: CultureLists = {
+  title: "CULTURE AND SENSITIVITY REPORT", specimens: CS_SPECIMENS, organisms: CS_ORGANISMS, colony: CS_COLONY, antibiotics: CS_ANTIBIOTICS,
 };
+
+// ── Lab's own edits of the forms (Tests management → «تعديل الاستمارة») ───────
+const K_FORMS = "station.formTemplates.v1";
+type Custom = Partial<Record<TplCode, Template>> & { CS?: CultureLists };
+let cache: { raw: string | null; data: Custom } | null = null;
+function customs(): Custom {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(K_FORMS);
+    if (cache && cache.raw === raw) return cache.data;
+    const data = raw ? (JSON.parse(raw) as Custom) : {};
+    cache = { raw, data };
+    return data;
+  } catch { return {}; }
+}
+/** The form in use: the lab's edited copy if any, otherwise the built-in one. */
+export function templateOf(code: TplCode): Template {
+  const t = customs()[code];
+  return t && Array.isArray(t.sections) ? t : TEMPLATES[code];
+}
+export function cultureOf(): CultureLists {
+  const c = customs().CS;
+  return c && Array.isArray(c.antibiotics) ? { ...CS_DEFAULT, ...c } : CS_DEFAULT;
+}
+export const isCustomForm = (code: FormCode) => !!customs()[code];
+/** Save an edited form, or null to go back to the built-in one. */
+export function saveCustomForm(code: FormCode, value: Template | CultureLists | null): boolean {
+  try {
+    const next: Custom = { ...customs() };
+    if (value) (next as Record<string, unknown>)[code] = value; else delete next[code];
+    localStorage.setItem(K_FORMS, JSON.stringify(next));
+    return true;
+  } catch { return false; }
+}
+export const formTitle = (code: FormCode) => (code === "CS" ? cultureOf().title : templateOf(code).title);
+
+/** Older saved answers used worded amounts; print them in the current short scale. */
+const LEGACY: Record<string, string> = {
+  "A Few (+)": "Few", "Moderate (++)": "++", "Many (+++)": "+++", "Plenty / Loaded (++++)": "++++", "Plenty (++++)": "++++",
+  "Present (+)": "+", "Abundant (+++)": "+++", "Severe / Present (+++)": "+++",
+};
+export const printValue = (v?: string) => (v ? LEGACY[v] ?? v : "");
 
 const PREFIX = "__tpl__:";
 export type FormValues = Record<string, string>;
@@ -240,7 +285,7 @@ export function formProgress(code: FormCode, values: FormValues): { filled: numb
     const need = isGrowth(values.growth) ? ["specimen", "growth", "organism", "colony"] : ["specimen", "growth"];
     return { filled: need.filter((k) => (values[k] ?? "").trim()).length, total: need.length };
   }
-  const f = fieldsOf(TEMPLATES[code]);
+  const f = fieldsOf(templateOf(code));
   return { filled: f.filter((x) => (values[x.k] ?? "").trim()).length, total: f.length };
 }
 
@@ -250,7 +295,7 @@ export function formSummary(code: FormCode, values: FormValues): string {
     const ab = Object.entries(values).filter(([k]) => k.startsWith("ab:")).map(([k, v]) => `${k.slice(3)}=${v}`);
     return [values.specimen, values.growth, values.organism, values.colony, ab.join(", ")].filter(Boolean).join(" | ");
   }
-  return fieldsOf(TEMPLATES[code]).filter((f) => values[f.k]).map((f) => `${f.label}: ${values[f.k]}`).join("; ");
+  return fieldsOf(templateOf(code)).filter((f) => values[f.k]).map((f) => `${f.label}: ${printValue(values[f.k])}`).join("; ");
 }
 
 /** Motility total (PR + NP) and total count (concentration × volume), when both parts are numbers. */

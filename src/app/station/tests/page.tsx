@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Plus, Trash2, Pencil, ListChecks, X, Layers } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Plus, Trash2, Pencil, ListChecks, X, Layers, Search, ClipboardList } from "lucide-react";
+import { isFormCode, type FormCode } from "@/lib/station/templates";
+import { FormTemplateEditor } from "@/components/station/FormTemplateEditor";
 import {
   getTests, saveTests, getPanels, savePanels, unlinkTestFromStock, uid, rangeLabel, AGE_UNIT_LABEL,
   type StationTest, type NormalRange, type StationPanel, type AgeBand, type AgeUnit,
@@ -77,6 +79,8 @@ export default function StationTestsPage() {
   const [panels, setPanels] = useState<StationPanel[]>([]);
   const [panelName, setPanelName] = useState("");
   const [panelSel, setPanelSel] = useState<Set<string>>(new Set());
+  const [q, setQ] = useState("");
+  const [formEdit, setFormEdit] = useState<StationTest | null>(null);
 
   useEffect(() => { setTests(getTests()); setPanels(getPanels()); }, []);
 
@@ -93,6 +97,12 @@ export default function StationTestsPage() {
   function togglePanelTest(id: string) {
     setPanelSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   }
+
+  const shown = useMemo(() => {
+    const k = q.trim().toLowerCase();
+    if (!k) return tests;
+    return tests.filter((t) => [t.name_ar, t.name_en, t.category, t.sample_type, t.code].some((x) => x?.toLowerCase().includes(k)));
+  }, [tests, q]);
 
   function persist(next: StationTest[]) {
     setTests(next);
@@ -245,6 +255,12 @@ export default function StationTestsPage() {
       </div>
 
       {/* Catalog list */}
+      <div className="mb-3 flex items-center gap-2 rounded-lg border border-line bg-surface px-3">
+        <Search className="size-4 text-muted" />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="ابحث عن فحص بالاسم أو التصنيف أو العينة…" aria-label="بحث في الفحوصات" className="w-full bg-transparent py-2 text-sm outline-none" />
+        {q && <span className="shrink-0 text-xs text-muted">{shown.length} من {tests.length}</span>}
+        {q && <button onClick={() => setQ("")} aria-label="مسح البحث" className="text-muted hover:text-ink"><X className="size-4" /></button>}
+      </div>
       <div className="overflow-hidden rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)]">
         <table className="w-full text-sm">
           <thead className="border-b border-line text-right text-muted">
@@ -257,10 +273,10 @@ export default function StationTestsPage() {
             </tr>
           </thead>
           <tbody>
-            {tests.length === 0 && (
-              <tr><td colSpan={5} className="px-4 py-8 text-center text-muted">لا توجد فحوصات بعد</td></tr>
+            {shown.length === 0 && (
+              <tr><td colSpan={5} className="px-4 py-8 text-center text-muted">{tests.length ? "لا نتائج مطابقة للبحث" : "لا توجد فحوصات بعد"}</td></tr>
             )}
-            {tests.map((t) => (
+            {shown.map((t) => (
               <tr key={t.id} className="border-b border-line last:border-0 hover:bg-canvas">
                 <td className="px-4 py-3 font-medium">
                   {t.name_ar}
@@ -269,7 +285,7 @@ export default function StationTestsPage() {
                 <td className="px-4 py-3 text-muted">{t.category ?? "—"}</td>
                 <td className="px-4 py-3 text-muted">{t.sample_type ?? "—"}</td>
                 <td className="px-4 py-3 text-muted">
-                  {t.normal.kind === "sex" ? (
+                  {isFormCode(t.code) ? <span className="text-brand-dark">استمارة — تُعدَّل من زر الاستمارة</span> : t.normal.kind === "sex" ? (
                     <span>
                       <span className="text-blue-600">ذكر</span> <span dir="ltr">{rangeLabel(t.normal, "male", t.unit)}</span>
                       {" · "}
@@ -284,6 +300,11 @@ export default function StationTestsPage() {
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex gap-1">
+                    {isFormCode(t.code) && (
+                      <button onClick={() => setFormEdit(t)} className="inline-flex h-8 items-center gap-1 rounded-lg border border-brand/40 px-2 text-xs font-semibold text-brand-dark hover:bg-brand-light/50" title="إضافة أو حذف أو تعديل حقول الاستمارة">
+                        <ClipboardList className="size-4" /> الاستمارة
+                      </button>
+                    )}
                     <button onClick={() => edit(t)} className="grid size-8 place-items-center rounded-lg border border-line hover:bg-canvas" title="تعديل"><Pencil className="size-4" /></button>
                     <button onClick={() => del(t.id)} className="grid size-8 place-items-center rounded-lg border border-line text-red-600 hover:bg-red-50" title="حذف"><Trash2 className="size-4" /></button>
                   </div>
@@ -293,6 +314,8 @@ export default function StationTestsPage() {
           </tbody>
         </table>
       </div>
+
+      {formEdit && <FormTemplateEditor code={formEdit.code as FormCode} testName={formEdit.name_ar} onClose={() => setFormEdit(null)} />}
 
       {/* Panels (باقات) — named groups selected in one click */}
       <div className="mt-6 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">

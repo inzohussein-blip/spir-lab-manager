@@ -2,7 +2,7 @@
 
 import type { CSSProperties } from "react";
 import {
-  TEMPLATES, FORM_TITLE, isSub, isGrowth, CS_ANTIBIOTICS,
+  templateOf, cultureOf, formTitle, printValue, isSub, isGrowth,
   type FormCode, type FormValues,
 } from "@/lib/station/templates";
 import { tableColors, DENSITY_PAD, type TableStyle } from "@/lib/station/tableStyle";
@@ -18,12 +18,12 @@ export function FormReport({ code, values, ts }: { code: FormCode; values: FormV
 
   return (
     <div dir="ltr" className="mt-5 text-left">
-      <div className="text-center text-lg font-extrabold tracking-wide" style={{ color: c.header }}>{FORM_TITLE[code]}</div>
+      <div className="text-center text-lg font-extrabold tracking-wide" style={{ color: c.header }}>{formTitle(code)}</div>
       {code === "CS" && <div className="text-center text-xs font-bold tracking-wider" style={{ color: c.muted }}>MICROBIOLOGY DEPARTMENT</div>}
       <div className="mb-3 mt-1.5 h-0.5 w-full" style={{ background: c.border, ...exact }} />
 
-      {code === "CS" ? <Culture values={values} c={c} fontSize={ts.fontSize} /> : TEMPLATES[code].sections.map((s) => (
-        <div key={s.title} className="form-sec mb-4 overflow-hidden rounded-lg border last:mb-0" style={{ borderColor: c.border, ...exact }}>
+      {code === "CS" ? <Culture values={values} c={c} fontSize={ts.fontSize} /> : templateOf(code).sections.map((s, si) => (
+        <div key={si} className="form-sec mb-4 overflow-hidden rounded-lg border last:mb-0" style={{ borderColor: c.border, ...exact }}>
           <div className="px-3 py-1.5 text-sm font-bold" style={{ background: c.groupBg, color: c.groupText, ...exact }}>{s.title}</div>
           <table className="form-table w-full border-collapse" style={{ fontSize: ts.fontSize * 0.86, lineHeight: 1.25 }}>
             <thead>
@@ -43,7 +43,7 @@ export function FormReport({ code, values, ts }: { code: FormCode; values: FormV
                   <td className="px-3" style={{ paddingTop: py - 2, paddingBottom: py - 2, borderTop: `1px solid ${line}`, fontWeight: r.indent ? 400 : 600, paddingLeft: r.indent ? 24 : undefined }}>
                     {r.indent ? "• " : ""}{r.label}
                   </td>
-                  <td className="px-3 font-semibold" style={{ paddingTop: py - 2, paddingBottom: py - 2, borderTop: `1px solid ${line}` }}>{values[r.k] ?? ""}</td>
+                  <td className="px-3 font-semibold" style={{ paddingTop: py - 2, paddingBottom: py - 2, borderTop: `1px solid ${line}` }}>{printValue(values[r.k])}</td>
                   <td className="px-3" style={{ paddingTop: py - 2, paddingBottom: py - 2, borderTop: `1px solid ${line}`, color: c.muted }}>{r.ref ?? r.unit ?? ""}</td>
                 </tr>
               ))}
@@ -58,7 +58,10 @@ export function FormReport({ code, values, ts }: { code: FormCode; values: FormV
 function Culture({ values, c, fontSize }: { values: FormValues; c: ReturnType<typeof tableColors>; fontSize: number }) {
   const growth = isGrowth(values.growth);
   const noGrowth = (values.growth ?? "").toLowerCase().startsWith("no growth");
-  const byResult = (x: "S" | "I" | "R") => CS_ANTIBIOTICS.flatMap((g) => g.items).filter((ab) => values[`ab:${ab}`] === x);
+  // Antibiotics in the lab's list order, then any saved ones no longer on the list.
+  const listed = cultureOf().antibiotics.flatMap((g) => g.items);
+  const all = [...listed, ...Object.keys(values).filter((k) => k.startsWith("ab:")).map((k) => k.slice(3)).filter((ab) => !listed.includes(ab))];
+  const byResult = (x: "S" | "I" | "R") => all.filter((ab) => values[`ab:${ab}`] === x);
   const S = byResult("S"), I = byResult("I"), R = byResult("R");
   const rows = Math.max(S.length, I.length, R.length);
   const Line = ({ k, v, color }: { k: string; v?: string; color?: string }) => (

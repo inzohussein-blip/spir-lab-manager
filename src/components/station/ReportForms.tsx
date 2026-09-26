@@ -3,8 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, X, Wand2, Eraser, Check } from "lucide-react";
 import {
-  TEMPLATES, FORM_TITLE, isSub, fieldsOf, sfaComputed, isGrowth,
-  CS_SPECIMENS, CS_GROWTH, CS_ORGANISMS, CS_COLONY, CS_ANTIBIOTICS,
+  templateOf, cultureOf, formTitle, isSub, fieldsOf, sfaComputed, isGrowth, CS_GROWTH,
   type Opt, type FormCode, type FormValues,
 } from "@/lib/station/templates";
 
@@ -59,7 +58,7 @@ export function Combo({ value, onChange, opts, placeholder, ariaLabel }: {
 export function fillNormals(code: FormCode, values: FormValues): FormValues {
   if (code === "CS") return values;
   const next = { ...values };
-  for (const f of fieldsOf(TEMPLATES[code])) if (!next[f.k]?.trim() && f.normal) next[f.k] = f.normal;
+  for (const f of fieldsOf(templateOf(code))) if (!next[f.k]?.trim() && f.normal) next[f.k] = f.normal;
   return next;
 }
 
@@ -80,7 +79,7 @@ export function FormDialog({ code, testName, values, onChange, onClose }: {
         <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 rounded-t-2xl border-b border-line bg-surface px-5 py-3">
           <div className="min-w-0 flex-1">
             <div className="truncate font-bold">{testName}</div>
-            <div className="text-[11px] text-muted" dir="ltr" style={{ textAlign: "right" }}>{FORM_TITLE[code]}</div>
+            <div className="text-[11px] text-muted" dir="ltr" style={{ textAlign: "right" }}>{formTitle(code)}</div>
           </div>
           {code !== "CS" && (
             <button type="button" onClick={() => onChange(fillNormals(code, values))} title="يملأ الحقول الفارغة فقط"
@@ -101,8 +100,8 @@ export function FormDialog({ code, testName, values, onChange, onClose }: {
         <div className="p-5">
           {code === "CS" ? <CultureForm values={values} set={set} /> : (
             <div className="flex flex-col gap-5">
-              {TEMPLATES[code].sections.map((s) => (
-                <section key={s.title}>
+              {templateOf(code).sections.map((s, si) => (
+                <section key={si}>
                   <div className="mb-2 rounded-lg bg-brand-light px-3 py-1.5 text-sm font-bold text-brand-dark" dir="ltr" style={{ textAlign: "left" }}>{s.title}</div>
                   <div dir="ltr" className="grid gap-x-4 gap-y-3 md:grid-cols-2">
                     {s.rows.map((r, i) => isSub(r) ? (
@@ -137,17 +136,18 @@ export function FormDialog({ code, testName, values, onChange, onClose }: {
 
 function CultureForm({ values, set }: { values: FormValues; set: (k: string, v: string) => void }) {
   const growth = isGrowth(values.growth);
-  const organisms: Opt[] = CS_ORGANISMS.flatMap((g) => g.items.map((v) => ({ v, ar: g.group })));
+  const lists = cultureOf();
+  const organisms: Opt[] = lists.organisms.flatMap((g) => g.items.map((v) => ({ v, ar: g.group })));
   const field = (label: string, node: React.ReactNode) => (
     <div dir="ltr" className="text-left"><div className="mb-1 text-xs font-semibold">{label}</div>{node}</div>
   );
   return (
     <div className="flex flex-col gap-4">
       <div dir="ltr" className="grid gap-4 md:grid-cols-2">
-        {field("Specimen (نوع العينة)", <Combo value={values.specimen ?? ""} onChange={(v) => set("specimen", v)} opts={CS_SPECIMENS} ariaLabel="Specimen" />)}
+        {field("Specimen (نوع العينة)", <Combo value={values.specimen ?? ""} onChange={(v) => set("specimen", v)} opts={lists.specimens} ariaLabel="Specimen" />)}
         {field("Culture Result (نتيجة النمو)", <Combo value={values.growth ?? ""} onChange={(v) => set("growth", v)} opts={CS_GROWTH} ariaLabel="Culture" />)}
         {growth && field("Isolated Organism (البكتيريا المعزولة)", <Combo value={values.organism ?? ""} onChange={(v) => set("organism", v)} opts={organisms} ariaLabel="Organism" />)}
-        {growth && field("Colony Count (عدد المستعمرات)", <Combo value={values.colony ?? ""} onChange={(v) => set("colony", v)} opts={CS_COLONY} ariaLabel="Colony" />)}
+        {growth && field("Colony Count (عدد المستعمرات)", <Combo value={values.colony ?? ""} onChange={(v) => set("colony", v)} opts={lists.colony} ariaLabel="Colony" />)}
       </div>
 
       {growth && (
@@ -157,8 +157,8 @@ function CultureForm({ values, set }: { values: FormValues; set: (k: string, v: 
             <div className="text-[11px] text-muted">اضغط S أو I أو R لكل مضاد جُرِّب — اضغط مرة أخرى للإلغاء. غير المحدد لا يُطبع.</div>
           </div>
           <div dir="ltr" className="grid gap-3 md:grid-cols-2">
-            {CS_ANTIBIOTICS.map((g) => (
-              <div key={g.group} className="rounded-xl border border-line p-3" dir="ltr">
+            {lists.antibiotics.map((g, gi) => (
+              <div key={gi} className="rounded-xl border border-line p-3" dir="ltr">
                 <div className="mb-1.5 text-left text-[11px] font-bold uppercase tracking-wide text-muted">{g.group}</div>
                 {g.items.map((ab) => {
                   const cur = values[`ab:${ab}`] ?? "";
