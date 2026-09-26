@@ -6,7 +6,7 @@ import { Search, Printer, Save, Check, Tag, ClipboardList, Beaker, Layers, Penci
 import {
   getTests, addVisit, updateVisit, getVisit, getSettings, getPanels, nextAccession, uid, rangeLabel, flagFor,
   getPatients, getPatient, upsertPatient, addPatientNote, deductStockForTests, getDoctors, addDoctor,
-  previousResults, resultDelta, localYmd,
+  previousResults, resultDelta, localYmd, splitAge, joinAge, type AgeUnitPick,
   type StationTest, type Gender, type StationVisit, type StationSettings, type StationPanel, type StationPatient, type NoteEntry, type StationDoctor,
 } from "@/lib/station/store";
 import { ReportSheet } from "@/components/station/ReportSheet";
@@ -83,6 +83,7 @@ function StationEntryPage() {
   const [name, setName] = useState("");
   const [gender, setGender] = useState<Gender>("");
   const [age, setAge] = useState("");
+  const [ageU, setAgeU] = useState<AgeUnitPick>("y"); // unit kept while the number is being retyped
   const [phone, setPhone] = useState("");
   const [referrer, setReferrer] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -253,7 +254,7 @@ function StationEntryPage() {
     if (unsaved && !window.confirm("توجد بيانات غير محفوظة — هل تريد بدء زيارة جديدة وتجاهلها؟")) return;
     setEditId(null); setCreatedAt(null); setAccession("");
     setPatientId(null); setPatientNotes([]); setNewNote("");
-    setName(""); setGender(""); setAge(""); setPhone(""); setReferrer("");
+    setName(""); setGender(""); setAge(""); setAgeU("y"); setPhone(""); setReferrer("");
     setSelected(new Set()); setResults({}); setQ(""); setBaseline("");
     if (searchParams.get("edit") || searchParams.get("patient")) router.replace("/station");
     nameRef.current?.focus();
@@ -492,7 +493,22 @@ function StationEntryPage() {
                 </label>
                 <label className="text-sm font-medium">
                   العمر
-                  <input value={age} onChange={(e) => setAge(e.target.value)} inputMode="numeric" className={`mt-1 ${inp}`} />
+                  {settings.ageUnit === true ? (() => {
+                    const sp = splitAge(age);
+                    const a = { n: sp.n, unit: sp.n ? sp.unit : ageU };
+                    return (
+                      <div className="mt-1 flex gap-1.5">
+                        <input value={a.n} onChange={(e) => setAge(joinAge(e.target.value, a.unit))} inputMode="decimal" aria-label="العمر" className={inp} />
+                        <select value={a.unit} onChange={(e) => { const u = e.target.value as AgeUnitPick; setAgeU(u); setAge(joinAge(a.n, u)); }} aria-label="وحدة العمر" className={`${inp} w-24 shrink-0`}>
+                          <option value="y">سنة</option>
+                          <option value="m">شهر</option>
+                          <option value="d">يوم</option>
+                        </select>
+                      </div>
+                    );
+                  })() : (
+                    <input value={age} onChange={(e) => setAge(e.target.value)} inputMode="numeric" className={`mt-1 ${inp}`} />
+                  )}
                 </label>
                 <label className="text-sm font-medium">
                   رقم الهاتف

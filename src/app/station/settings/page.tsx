@@ -232,6 +232,20 @@ export default function StationSettingsPage() {
           label="طيّ مجموعات الفحوصات"
           desc="تُطوى كل مجموعة تحت عنوانها وتُفتح بالضغط عليه، والبحث يفتحها تلقائياً."
         />
+        <div className="h-3" />
+        <Toggle
+          checked={s.ageUnit === true}
+          onChange={(v) => setOption({ ageUnit: v })}
+          label="وحدة العمر (سنة / شهر / يوم)"
+          desc="قائمة بجانب حقل العمر بدل كتابة «6 أشهر» — مفيدة للأطفال ومعدلاتهم حسب العمر. السنوات تُحفظ رقماً كما هي."
+        />
+        <div className="h-3" />
+        <Toggle
+          checked={s.deliveryStatus === true}
+          onChange={(v) => setOption({ deliveryStatus: v })}
+          label="حالة تسليم النتائج"
+          desc="في «الزيارات المحفوظة» عمود «التسليم» (لم تُسلَّم / سُلِّمت مع التاريخ)، وفلتر للزيارات غير المسلّمة، وتسليم عدة زيارات دفعة واحدة."
+        />
       </div>
 
       {/* Report forms (urine, stool, semen, culture) */}
@@ -267,6 +281,12 @@ export default function StationSettingsPage() {
             onChange={(v) => setOption({ csTestedOnly: v })}
             label="الزرع: طباعة المضادات المفحوصة فقط"
             desc="عند الإيقاف (الافتراضي) تُطبع قائمة المضادات كاملة كما في الورقة، والمضاد غير المفحوص يبقى فارغاً."
+          />
+          <Toggle
+            checked={s.formExtraNormals === true}
+            onChange={(v) => setOption({ formExtraNormals: v })}
+            label="قيم طبيعية إضافية في محرر الاستمارات"
+            desc="في «إدارة الفحوصات ← الاستمارة» يظهر لكل حقل «قيم أخرى تُعتبر طبيعية» وخيار «حقل وصفي»، لتحديد ما لا يُطبع بخط عريض."
           />
         </div>
       </div>

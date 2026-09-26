@@ -104,7 +104,7 @@ export default function RecordsPage() {
                   <span className="grid size-12 place-items-center rounded-full bg-brand-light text-lg font-bold text-brand-dark">{sel.name?.trim()?.[0] ?? "؟"}</span>
                   <div>
                     <div className="text-lg font-bold">{sel.name}</div>
-                    <div className="text-xs text-muted">{genderText(sel.gender)}{sel.age ? ` · ${sel.age} سنة` : ""}{sel.phone ? ` · ${sel.phone}` : ""}</div>
+                    <div className="text-xs text-muted">{genderText(sel.gender)}{sel.age ? ` · ${sel.age}${/^\s*\d+(\.\d+)?\s*$/.test(sel.age) ? " سنة" : ""}` : ""}{sel.phone ? ` · ${sel.phone}` : ""}</div>
                   </div>
                 </div>
                 <div className="flex gap-2">

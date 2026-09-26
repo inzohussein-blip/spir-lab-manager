@@ -72,6 +72,8 @@ export interface StationVisit {
   patient: { name: string; gender: Gender; age?: string; phone?: string };
   referrer?: string;
   results: { testId: string; name_ar: string; value: string; unit?: string }[];
+  /** When the results were handed to the patient (Settings → «حالة التسليم»). */
+  delivered_at?: number;
 }
 
 export interface NoteEntry { ts: number; text: string; }
@@ -158,6 +160,12 @@ export interface StationSettings {
   /** Report forms (see ./templates formOptionsOf): semen conclusion (on), semen auto-calculation (on),
    *  hide empty rows (off), culture: print tested antibiotics only (off), bold abnormal answers (on). */
   sfaDiagnosis?: boolean;
+  /** Delivery status on saved visits — off by default. */
+  deliveryStatus?: boolean;
+  /** Year / month / day selector next to the age field — off by default. */
+  ageUnit?: boolean;
+  /** Form editor: extra answers that also count as normal — off by default. */
+  formExtraNormals?: boolean;
   sfaAutoCalc?: boolean;
   formHideEmpty?: boolean;
   csTestedOnly?: boolean;
@@ -263,7 +271,18 @@ export function getVisit(id: string): StationVisit | null {
 }
 /** Replace an existing visit (used when re-saving after an edit). */
 export function updateVisit(v: StationVisit): boolean {
-  return write(K_VISITS, getVisits().map((x) => (x.id === v.id ? v : x)));
+  // An edit from the entry screen keeps the delivery mark.
+  return write(K_VISITS, getVisits().map((x) => (x.id === v.id ? { ...v, ...(x.delivered_at && !v.delivered_at ? { delivered_at: x.delivered_at } : {}) } : x)));
+}
+/** Mark visits as handed to the patient (or back to not delivered). */
+export function setDelivered(ids: string[], delivered: boolean): boolean {
+  const set = new Set(ids);
+  const at = Date.now();
+  return write(K_VISITS, getVisits().map((v) => {
+    if (!set.has(v.id)) return v;
+    const { delivered_at: _d, ...rest } = v;
+    return delivered ? { ...rest, delivered_at: v.delivered_at ?? at } : rest;
+  }));
 }
 export function deleteVisits(ids: string[]): void {
   const set = new Set(ids);
@@ -776,4 +795,24 @@ function DEFAULT_TESTS(): DefaultTest[] {
   add("CS", "الزرع والحساسية (Culture & Sensitivity)", "Culture & Sensitivity", "", { kind: "none" });
 
   return list;
+}
+
+// ── Age with a unit (Settings → «وحدة العمر») ─────────────────────────────────
+export type AgeUnitPick = "y" | "m" | "d";
+/** Split a stored age ("35", "6 أشهر", "10 أيام") into number + unit. */
+export function splitAge(age?: string): { n: string; unit: AgeUnitPick } {
+  const m = /^\s*(\d+(?:[.,]\d+)?)\s*(.*)$/.exec(age ?? "");
+  if (!m) return { n: (age ?? "").trim(), unit: "y" };
+  const days = ageInDays(age);
+  const n = Number(m[1].replace(",", "."));
+  const unit: AgeUnitPick = days == null || !m[2].trim() ? "y" : Math.abs(days - n) < 1e-9 ? "d" : Math.abs(days - n * DAYS.m) < 1e-6 ? "m" : "y";
+  return { n: m[1], unit };
+}
+/** Age text saved and printed: years stay a plain number; months / days carry an Arabic unit the age bands understand. */
+export function joinAge(n: string, unit: AgeUnitPick): string {
+  const t = n.trim();
+  if (!t || unit === "y") return t;
+  const k = Number(t.replace(",", "."));
+  const few = k >= 3 && k <= 10;
+  return unit === "m" ? `${t} ${few ? "أشهر" : "شهر"}` : `${t} ${few ? "أيام" : "يوم"}`;
 }

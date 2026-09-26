@@ -5,7 +5,7 @@ import { Plus, Trash2, Pencil, ListChecks, X, Layers, Search, ClipboardList } fr
 import { isFormCode, type FormCode } from "@/lib/station/templates";
 import { FormTemplateEditor } from "@/components/station/FormTemplateEditor";
 import {
-  getTests, saveTests, getPanels, savePanels, unlinkTestFromStock, uid, rangeLabel, AGE_UNIT_LABEL,
+  getTests, saveTests, getPanels, savePanels, unlinkTestFromStock, uid, rangeLabel, AGE_UNIT_LABEL, getSettings,
   type StationTest, type NormalRange, type StationPanel, type AgeBand, type AgeUnit,
 } from "@/lib/station/store";
 
@@ -315,7 +315,7 @@ export default function StationTestsPage() {
         </table>
       </div>
 
-      {formEdit && <FormTemplateEditor code={formEdit.code as FormCode} testName={formEdit.name_ar} onClose={() => setFormEdit(null)} />}
+      {formEdit && <FormTemplateEditor code={formEdit.code as FormCode} testName={formEdit.name_ar} onClose={() => setFormEdit(null)} extraNormals={getSettings().formExtraNormals === true} />}
 
       {/* Panels (باقات) — named groups selected in one click */}
       <div className="mt-6 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">

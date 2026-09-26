@@ -36,14 +36,18 @@ const move = <T,>(a: T[], i: number, d: number): T[] => {
 };
 
 /** Edit one of the four report forms: add / remove / rename fields, sections and lists. */
-export function FormTemplateEditor({ code, testName, onClose }: { code: FormCode; testName: string; onClose: () => void }) {
+export function FormTemplateEditor({ code, testName, onClose, extraNormals = false }: {
+  code: FormCode; testName: string; onClose: () => void;
+  /** Settings → «قيم طبيعية إضافية»: edit which other answers also count as normal. */
+  extraNormals?: boolean;
+}) {
   const custom = isCustomForm(code);
   return (
     <div className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/40 p-3 sm:p-6" role="dialog" aria-modal="true" aria-label={`تعديل استمارة ${testName}`}>
       <div className="w-full max-w-5xl rounded-2xl border border-line bg-surface shadow-[var(--shadow-pop)]">
         {code === "CS"
           ? <CultureEditor testName={testName} custom={custom} onClose={onClose} />
-          : <TemplateEditor code={code} testName={testName} custom={custom} onClose={onClose} />}
+          : <TemplateEditor code={code} testName={testName} custom={custom} onClose={onClose} extraNormals={extraNormals} />}
       </div>
     </div>
   );
@@ -74,7 +78,7 @@ function resetTo(code: FormCode, onClose: () => void) {
 }
 
 // ── Urine / stool / semen ────────────────────────────────────────────────────
-function TemplateEditor({ code, testName, custom, onClose }: { code: TplCode; testName: string; custom: boolean; onClose: () => void }) {
+function TemplateEditor({ code, testName, custom, onClose, extraNormals }: { code: TplCode; testName: string; custom: boolean; onClose: () => void; extraNormals: boolean }) {
   const [t, setT] = useState<Template>(() => clone(templateOf(code)));
   const setSec = (si: number, patch: Partial<TSection>) => setT((x) => ({ ...x, sections: x.sections.map((s, j) => (j === si ? { ...s, ...patch } : s)) }));
   const setRows = (si: number, f: (rows: TRow[]) => TRow[]) => setT((x) => ({ ...x, sections: x.sections.map((s, j) => (j === si ? { ...s, rows: f(s.rows) } : s)) }));
@@ -162,6 +166,52 @@ function TemplateEditor({ code, testName, custom, onClose }: { code: TplCode; te
                         />
                         <div className="text-[11px] text-muted" dir="rtl">خيار في كل سطر. التلميح العربي اختياري بعد «|» ولا يُطبع.</div>
                       </details>
+                      {extraNormals && (() => {
+                        const ok = r.ok ?? [];
+                        const inList = (x: string) => r.opts?.some((o) => o.v === x);
+                        const others = ok.filter((x) => !inList(x));
+                        const setOk = (next: string[]) => setRow(si, ri, { ok: next.length ? Array.from(new Set(next)) : undefined });
+                        return (
+                          <details className="basis-full">
+                            <summary className="cursor-pointer text-xs text-brand-dark">
+                              قيم أخرى تُعتبر طبيعية ({r.noFlag ? "لا يُميَّز" : ok.length})
+                            </summary>
+                            <div className="mt-1.5 rounded-lg border border-dashed border-line p-2" dir="rtl">
+                              <p className="mb-1.5 text-[11px] text-muted">
+                                تُطبع بخط عادي مثل القيمة الطبيعية «{r.normal || "—"}» عند تفعيل «تمييز النتيجة غير الطبيعية». اضغط القيمة لإضافتها أو إزالتها.
+                              </p>
+                              {!!r.opts?.length && (
+                                <div className="mb-2 flex flex-wrap gap-1" dir="ltr">
+                                  {r.opts.filter((o) => o.v !== r.normal).map((o) => {
+                                    const on = ok.includes(o.v);
+                                    return (
+                                      <button key={o.v} type="button" aria-pressed={on} disabled={r.noFlag}
+                                        onClick={() => setOk(on ? ok.filter((x) => x !== o.v) : [...ok, o.v])}
+                                        className={`rounded-full border px-2 py-0.5 text-xs disabled:opacity-40 ${on ? "border-brand bg-brand-light font-semibold text-brand-dark" : "border-line text-muted hover:bg-canvas"}`}>
+                                        {o.v}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                              <input
+                                key={others.join("|")}
+                                defaultValue={others.join(", ")}
+                                disabled={r.noFlag}
+                                onBlur={(e) => setOk([...ok.filter(inList), ...e.target.value.split(",").map((x) => x.trim()).filter(Boolean)])}
+                                placeholder="قيم غير موجودة في القائمة — افصل بينها بفاصلة"
+                                aria-label="قيم طبيعية أخرى"
+                                dir="ltr"
+                                className={`text-xs disabled:opacity-40 ${inp}`}
+                              />
+                              <label className="mt-2 flex items-center gap-1.5 text-xs text-muted">
+                                <input type="checkbox" checked={!!r.noFlag} onChange={(e) => setRow(si, ri, { noFlag: e.target.checked || undefined })} />
+                                حقل وصفي — لا يُطبع بخط عريض أبداً
+                              </label>
+                            </div>
+                          </details>
+                        );
+                      })()}
                     </div>
                   </div>
                 );
