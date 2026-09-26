@@ -4,6 +4,7 @@ import { SignJWT, exportJWK, generateKeyPair, importJWK, type JWK, type KeyLike 
 import { query as appQuery } from "@/lib/db";
 import { cleanModules, type LicenseModule, type LicensePayload } from "./modules";
 import { licenseDbUrl } from "./env";
+import { newTotpSecret, totpMatch, totpUri } from "./totp";
 export { licenseDbUrl, durableStorage, passwordSet, licensingEnabled, licenseStorage } from "./env";
 
 /**
@@ -127,20 +128,26 @@ type SealedKey = { v: 1; pub: JWK; iv: string; tag: string; data: string };
 type PlainKey = { priv: JWK; pub: JWK };
 const sealSecret = () => (process.env.AUTH_SECRET ?? "").trim();
 const sealKey = (secret: string) => createHash("sha256").update(`lic-signing-key:${secret}`).digest();
-function seal(priv: JWK, pub: JWK, secret: string): SealedKey {
+type Sealed = { iv: string; tag: string; data: string };
+function sealText(text: string, secret: string, aad: string): Sealed {
   const iv = randomBytes(12);
   const c = createCipheriv("aes-256-gcm", sealKey(secret), iv);
-  c.setAAD(Buffer.from(JSON.stringify(pub)));
-  const data = Buffer.concat([c.update(JSON.stringify(priv), "utf8"), c.final()]);
-  return { v: 1, pub, iv: iv.toString("base64"), tag: c.getAuthTag().toString("base64"), data: data.toString("base64") };
+  c.setAAD(Buffer.from(aad));
+  const data = Buffer.concat([c.update(text, "utf8"), c.final()]);
+  return { iv: iv.toString("base64"), tag: c.getAuthTag().toString("base64"), data: data.toString("base64") };
 }
-function unseal(s: SealedKey, secret: string): JWK | null {
+function unsealText(s: Sealed, secret: string, aad: string): string | null {
   try {
     const d = createDecipheriv("aes-256-gcm", sealKey(secret), Buffer.from(s.iv, "base64"));
-    d.setAAD(Buffer.from(JSON.stringify(s.pub)));
+    d.setAAD(Buffer.from(aad));
     d.setAuthTag(Buffer.from(s.tag, "base64"));
-    return JSON.parse(Buffer.concat([d.update(Buffer.from(s.data, "base64")), d.final()]).toString("utf8")) as JWK;
+    return Buffer.concat([d.update(Buffer.from(s.data, "base64")), d.final()]).toString("utf8");
   } catch { return null; }
+}
+const seal = (priv: JWK, pub: JWK, secret: string): SealedKey => ({ v: 1, pub, ...sealText(JSON.stringify(priv), secret, JSON.stringify(pub)) });
+function unseal(s: SealedKey, secret: string): JWK | null {
+  const t = unsealText(s, secret, JSON.stringify(s.pub));
+  try { return t ? (JSON.parse(t) as JWK) : null; } catch { return null; }
 }
 /** Read the stored key: the private key when usable, and whether it is sealed. */
 function openStored(raw: string, secret: string): { priv: JWK | null; pub: JWK; sealed: boolean } | null {
@@ -183,6 +190,62 @@ export async function publicKey(): Promise<JWK> { return (await signingKeys()!).
 async function signLicense(p: Omit<LicensePayload, "iat">): Promise<string> {
   const { priv } = await signingKeys()!;
   return new SignJWT({ ...p }).setProtectedHeader({ alg: "ES256" }).setIssuedAt().sign(priv);
+}
+
+// ── Two-step sign-in for the owner (authenticator app) ────────────────────────
+// The shared secret is kept sealed with AUTH_SECRET like the signing key. LICENSE_2FA_OFF=1 in the
+// server's environment switches the second step off (lost phone); set it up again, then remove it.
+const TOTP_AAD = "owner-totp";
+export const twoFactorForcedOff = () => process.env.LICENSE_2FA_OFF === "1";
+async function readTotp(key: "owner_totp" | "owner_totp_pending"): Promise<string | null> {
+  const raw = await getConfig(key).catch(() => null);
+  const secret = sealSecret();
+  if (!raw || !secret) return null;
+  try { return unsealText(JSON.parse(raw) as Sealed, secret, TOTP_AAD); } catch { return null; }
+}
+/** enabled: set up and readable; broken: set up, but AUTH_SECRET changed since (it no longer opens — set up again). */
+export async function twoFactorStatus(): Promise<{ enabled: boolean; broken: boolean; forcedOff: boolean; canSetup: boolean }> {
+  const stored = !!(await getConfig("owner_totp").catch(() => null));
+  const enabled = stored && (await readTotp("owner_totp")) != null;
+  return { enabled, broken: stored && !enabled, forcedOff: twoFactorForcedOff(), canSetup: !!sealSecret() };
+}
+/** Is a second step needed to sign in now? */
+export async function twoFactorRequired(): Promise<boolean> {
+  return !twoFactorForcedOff() && (await readTotp("owner_totp")) != null;
+}
+/** A code is accepted once: a step already used (or older) is refused. */
+async function useCode(secret: string, code: string): Promise<boolean> {
+  const step = totpMatch(secret, code);
+  if (step == null) return false;
+  const last = Number((await getConfig("owner_totp_last")) ?? 0);
+  if (step <= last) return false;
+  await setConfig("owner_totp_last", String(step));
+  return true;
+}
+export async function checkOwnerCode(code: string): Promise<boolean> {
+  const secret = await readTotp("owner_totp");
+  return !!secret && (await useCode(secret, code));
+}
+/** Start setting up: a new secret, kept aside until a first code from the phone confirms it. */
+export async function startTwoFactorSetup(): Promise<{ secret: string; uri: string } | null> {
+  const key = sealSecret();
+  if (!key) return null;
+  const secret = newTotpSecret();
+  await setConfig("owner_totp_pending", JSON.stringify(sealText(secret, key, TOTP_AAD)));
+  return { secret, uri: totpUri(secret, "owner", "Lab codes") };
+}
+export async function confirmTwoFactor(code: string): Promise<boolean> {
+  const secret = await readTotp("owner_totp_pending");
+  if (!secret || !(await useCode(secret, code))) return false;
+  await setConfig("owner_totp", (await getConfig("owner_totp_pending"))!);
+  await query(`delete from license_config where key = 'owner_totp_pending'`);
+  return true;
+}
+/** Turn it off: needs a current code, unless it was switched off from the environment. */
+export async function disableTwoFactor(code: string): Promise<boolean> {
+  if (!twoFactorForcedOff() && !(await checkOwnerCode(code))) return false;
+  await query(`delete from license_config where key in ('owner_totp', 'owner_totp_pending')`);
+  return true;
 }
 
 // ── Codes ─────────────────────────────────────────────────────────────────────

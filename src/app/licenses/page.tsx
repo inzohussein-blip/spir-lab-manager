@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   KeyRound, LogOut, Plus, Copy, Check, Ban, Play, MonitorSmartphone, RefreshCw, Trash2, Pencil, ShieldAlert,
-  FlaskConical, Download, ChevronDown, MessageSquare, History, Wallet, MessageSquareText, Database, Upload, ShieldCheck,
+  FlaskConical, Download, ChevronDown, MessageSquare, History, Wallet, MessageSquareText, Database, Upload, ShieldCheck, Smartphone,
 } from "lucide-react";
 import { LICENSE_MODULES, DEFAULT_MODULES, moduleLabel, type LicenseModule } from "@/lib/license/modules";
 
@@ -18,7 +18,8 @@ interface Row {
 interface Ev { license_id: string; at: number; kind: string; detail: string }
 interface Storage { source: "license-db" | "app-db" | "embedded"; ok: boolean; codes?: number; roundTripMs?: number; error?: string; keySealed?: boolean }
 interface SignIn { at: number; ok: boolean; ip: string; agent: string }
-type Data = { enabled: boolean; owner: boolean; needsDb?: boolean; storage?: Storage; licenses?: Row[]; events?: Ev[]; signIns?: SignIn[]; contact?: string; now?: number };
+interface TwoFactor { enabled: boolean; broken: boolean; forcedOff: boolean; canSetup: boolean }
+type Data = { enabled: boolean; owner: boolean; needsDb?: boolean; storage?: Storage; licenses?: Row[]; events?: Ev[]; signIns?: SignIn[]; twoFactor?: TwoFactor; contact?: string; now?: number };
 const agentLabel = (ua: string) => {
   const os = /Windows/.test(ua) ? "Windows" : /Android/.test(ua) ? "Android" : /iPhone|iPad/.test(ua) ? "iOS" : /Mac OS/.test(ua) ? "Mac" : /Linux/.test(ua) ? "Linux" : "";
   const br = /Edg\//.test(ua) ? "Edge" : /Chrome\//.test(ua) ? "Chrome" : /Firefox\//.test(ua) ? "Firefox" : /Safari\//.test(ua) ? "Safari" : "";
@@ -118,6 +119,8 @@ function exportCsv(rows: Row[], now: number) {
 export default function LicensesPage() {
   const [data, setData] = useState<Data | null>(null);
   const [pw, setPw] = useState("");
+  const [code, setCode] = useState("");
+  const [needCode, setNeedCode] = useState(false);
   const [err, setErr] = useState("");
   const [shown, setShown] = useState<{ row: Row; code: string } | null>(null);
   const [copied, setCopied] = useState("");
@@ -143,8 +146,11 @@ export default function LicensesPage() {
   async function login(e: React.FormEvent) {
     e.preventDefault();
     setErr("");
-    const d = await post({ op: "login", password: pw });
-    if (d.ok) { setPw(""); load(); } else setErr(d.error === "too_many" ? "محاولات كثيرة — حاول بعد قليل." : "كلمة المرور غير صحيحة.");
+    const d = await post({ op: "login", password: pw, code: needCode ? code : undefined });
+    if (d.ok) { setPw(""); setCode(""); setNeedCode(false); load(); return; }
+    if (d.error === "need_code") { setNeedCode(true); return; }
+    setCode("");
+    setErr(d.error === "too_many" ? "محاولات كثيرة — حاول بعد قليل." : d.error === "wrong_code" ? "رمز التحقق غير صحيح أو مستعمل — اكتب الرمز الظاهر الآن." : "كلمة المرور غير صحيحة.");
   }
   async function create(trial: boolean) {
     const days = trial ? TRIAL_DAYS : f.days === -1 ? Number(f.custom) : f.days;
@@ -223,7 +229,14 @@ export default function LicensesPage() {
       <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-brand-light text-brand-dark"><KeyRound className="size-6" /></span>
       <div className="mt-3 text-lg font-bold">إدارة الرموز</div>
       <p className="mb-4 mt-1 text-sm text-muted">صفحة المالك فقط.</p>
-      <input type="password" value={pw} onChange={(e) => { setPw(e.target.value); setErr(""); }} placeholder="كلمة المرور" autoFocus aria-label="كلمة المرور" className={`${inp} text-center`} />
+      <input type="password" value={pw} onChange={(e) => { setPw(e.target.value); setErr(""); }} placeholder="كلمة المرور" autoFocus={!needCode} readOnly={needCode} aria-label="كلمة المرور" className={`${inp} text-center`} />
+      {needCode && (
+        <div className="mt-3">
+          <label className="mb-1 flex items-center justify-center gap-1 text-xs text-muted"><Smartphone className="size-3.5" /> رمز التحقق من تطبيق الهاتف (6 أرقام)</label>
+          <input value={code} onChange={(e) => { setCode(e.target.value.replace(/\D/g, "").slice(0, 6)); setErr(""); }} inputMode="numeric" autoComplete="one-time-code" autoFocus
+            dir="ltr" placeholder="000000" aria-label="رمز التحقق" className={`${inp} text-center font-mono text-lg tracking-[0.4em]`} />
+        </div>
+      )}
       <button className="mt-3 w-full rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-dark">دخول</button>
       {err && <p className="mt-2 text-xs text-red-600">{err}</p>}
     </form>,
@@ -444,6 +457,8 @@ export default function LicensesPage() {
         </div>
       </div>
 
+      <TwoFactorCard tf={data.twoFactor} reload={load} />
+
       {/* Owner sign-in log */}
       <div className="mt-6 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
         <div className="flex items-center gap-2 text-sm font-semibold"><ShieldCheck className="size-4" /> سجل الدخول لهذه الصفحة</div>
@@ -546,6 +561,80 @@ function ModuleChips({ value, onChange }: { value: LicenseModule[]; onChange: (m
           </button>
         );
       })}
+    </div>
+  );
+}
+
+/** «التحقق بخطوتين»: a 6-digit code from an authenticator app on the owner's phone, with the password. */
+function TwoFactorCard({ tf, reload }: { tf?: TwoFactor; reload: () => void }) {
+  const [setup, setSetup] = useState<{ secret: string; qr: string } | null>(null);
+  const [code, setCode] = useState("");
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  if (!tf) return null;
+  const codeInput = (
+    <input value={code} onChange={(e) => { setCode(e.target.value.replace(/\D/g, "").slice(0, 6)); setMsg(""); }} inputMode="numeric" autoComplete="one-time-code"
+      dir="ltr" placeholder="000000" aria-label="رمز التحقق" className="w-36 rounded-lg border border-line bg-surface px-3 py-2 text-center font-mono text-sm tracking-[0.3em] outline-none focus:border-brand" />
+  );
+  async function run(op: string, ok: string) {
+    setBusy(true);
+    const d = await post({ op, code });
+    setBusy(false); setCode("");
+    if (d.ok) { setSetup(null); setMsg(ok); reload(); } else setMsg("الرمز غير صحيح أو مستعمل — اكتب الرمز الظاهر الآن في التطبيق.");
+  }
+  async function begin() {
+    setBusy(true); setMsg("");
+    const d = await post({ op: "totp_setup" });
+    setBusy(false);
+    if (d.ok) setSetup({ secret: d.secret, qr: d.qr }); else setMsg("يحتاج المتغير AUTH_SECRET في Vercel.");
+  }
+  return (
+    <div className="mt-6 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]" data-testid="two-factor">
+      <div className="flex items-center gap-2 text-sm font-semibold"><Smartphone className="size-4" /> التحقق بخطوتين</div>
+      <p className="mb-3 mt-1 text-xs text-muted">مع كلمة المرور يُطلب رمز من 6 أرقام يتغيّر كل 30 ثانية في تطبيق على هاتفك (Google Authenticator أو Microsoft Authenticator). لو تسرّبت كلمة المرور لا يدخل أحد بدون هاتفك.</p>
+      {tf.forcedOff && (
+        <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">التحقق بخطوتين موقوف الآن من Vercel (المتغير <b dir="ltr">LICENSE_2FA_OFF</b>). فعّله من جديد بهاتفك، ثم احذف المتغير وأعد النشر.</p>
+      )}
+      {tf.broken && !setup && (
+        <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">تغيّر AUTH_SECRET بعد التفعيل فلم يعد الرمز القديم يعمل — التحقق متوقف الآن. فعّله من جديد.</p>
+      )}
+      {tf.enabled && !tf.forcedOff ? (
+        <div className="space-y-2">
+          <p className="text-sm font-medium text-brand-dark">✓ مفعّل — يُطلب رمز الهاتف عند كل دخول.</p>
+          <div className="flex flex-wrap items-center gap-2">
+            {codeInput}
+            <button disabled={busy || code.length !== 6} onClick={() => { if (window.confirm("إيقاف التحقق بخطوتين؟ سيكفي بعدها كلمة المرور وحدها.")) run("totp_disable", "أُوقف التحقق بخطوتين."); }}
+              className="rounded-lg border border-red-300 px-3 py-2 text-sm text-red-700 hover:bg-red-50 disabled:opacity-50">إيقاف</button>
+          </div>
+          <p className="text-xs text-muted">إذا فقدت هاتفك: أضف في Vercel المتغير <b dir="ltr">LICENSE_2FA_OFF</b> بقيمة <b dir="ltr">1</b> وأعد النشر، ادخل بكلمة المرور وفعّله بالهاتف الجديد، ثم احذف المتغير.</p>
+        </div>
+      ) : setup ? (
+        <div className="flex flex-wrap items-start gap-4">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={setup.qr} alt="رمز QR لتطبيق التحقق" className="size-44 rounded-lg border border-line bg-white p-1" />
+          <ol className="min-w-0 flex-1 list-decimal space-y-2 ps-5 text-sm">
+            <li>ثبّت على هاتفك <b>Google Authenticator</b> أو <b>Microsoft Authenticator</b>.</li>
+            <li>في التطبيق اختر «إضافة» ← «مسح رمز QR» وامسح الرمز. أو اكتب هذا المفتاح يدوياً:
+              <div data-testid="totp-secret" dir="ltr" className="mt-1 select-all break-all rounded-md bg-canvas px-2 py-1 font-mono text-xs">{setup.secret.match(/.{1,4}/g)!.join(" ")}</div>
+            </li>
+            <li>اكتب الرمز الظاهر في التطبيق:
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                {codeInput}
+                <button disabled={busy || code.length !== 6} onClick={() => run("totp_enable", "✓ فُعّل التحقق بخطوتين.")}
+                  className="rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-50">تأكيد التفعيل</button>
+                <button onClick={() => { setSetup(null); setCode(""); setMsg(""); }} className="rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas">إلغاء</button>
+              </div>
+            </li>
+          </ol>
+        </div>
+      ) : tf.canSetup ? (
+        <button disabled={busy} onClick={begin} className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-50">
+          <Smartphone className="size-4" /> تفعيل التحقق بخطوتين
+        </button>
+      ) : (
+        <p className="text-xs text-amber-700">يحتاج المتغير AUTH_SECRET في Vercel أولاً.</p>
+      )}
+      {msg && <p className="mt-2 text-xs text-brand-dark">{msg}</p>}
     </div>
   );
 }
