@@ -4,8 +4,8 @@
 const { spawnSync } = require('node:child_process');
 const path = require('node:path');
 const SUITES = {
-  plain: ['station.entry.cjs', 'station.storage.cjs', 'station.options.cjs', 'station.forms.cjs', 'pages.crawl.cjs', 'admin.crawl.cjs'],
-  codes: ['codes.core.cjs', 'codes.manager.cjs', 'codes.2fa.cjs'],
+  plain: ['station.entry.cjs', 'station.storage.cjs', 'station.offline.cjs', 'station.options.cjs', 'station.forms.cjs', 'pages.crawl.cjs', 'admin.crawl.cjs'],
+  codes: ['codes.core.cjs', 'codes.manager.cjs', 'codes.2fa.cjs', 'codes.offline.cjs'],
 };
 const mode = process.argv[2] || 'plain';
 if (!SUITES[mode]) { console.error(`unknown mode "${mode}" — use: ${Object.keys(SUITES).join(' | ')}`); process.exit(2); }

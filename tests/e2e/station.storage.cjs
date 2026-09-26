@@ -47,6 +47,18 @@ const { B, ok, launch, done, kv, kvPut, resetLocal, pdfPages } = require('./lib.
   const body = await t3.locator('body').innerText();
   ok(body.includes('مراجع التبويب الأول') && body.includes('مراجع التبويب الثاني'), 'a new tab lists both visits');
 
+  // An older saved copy of the app, opened offline, writes to localStorage again: its visits are
+  // added, everything else it wrote never replaces the current data.
+  await t3.evaluate(() => {
+    localStorage.setItem('station.visits.v1', JSON.stringify([{ id: 'from-old-copy', created_at: Date.now(), patient: { name: 'مراجع النسخة القديمة', gender: 'male' }, results: [] }]));
+    localStorage.setItem('station.settings.v1', JSON.stringify({ labName: 'إعدادات النسخة القديمة', labSubtitle: '' }));
+  });
+  await t3.reload(); await t3.waitForTimeout(1200);
+  const vs = (await kv(t3, 'station.visits.v1')).map((v) => v.patient.name);
+  ok(vs.length === 3 && vs.includes('مراجع النسخة القديمة') && vs.includes('مراجع التبويب الأول'), `old-copy visit added, none lost (${vs.length})`);
+  ok((await kv(t3, 'station.settings.v1')).labName === 'مختبر الترحيل', 'old-copy settings do not replace the current ones');
+  ok(await t3.evaluate(() => localStorage.getItem('station.visits.v1') === null && localStorage.getItem('station.settings.v1') === null), 'localStorage cleared again');
+
   // Reprint a tube label from the visits list (Settings → tube labels on, 2 copies).
   await kvPut(t3, 'station.settings.v1', { ...(await kv(t3, 'station.settings.v1')), tubeLabel: true, labelCopies: 2 });
   await t3.reload(); await t3.waitForTimeout(1200);

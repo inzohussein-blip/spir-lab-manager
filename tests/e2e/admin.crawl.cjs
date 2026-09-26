@@ -32,6 +32,15 @@ const routes = ['/', '/appointments', '/audit', '/calendar', '/insights', '/inve
   bad.length = 0;
   for (const r of detail) await visit(r);
   ok(detail.length >= 2 && bad.length === 0, `${detail.length} record pages open (${detail.map((d) => d.split('/')[1]).join(', ')})` + (bad.length ? ': ' + bad.join(', ') : ''));
+  // Saving still works (server actions): a new patient appears in the list and opens.
+  const name = 'مريض فحص الترقية ' + Date.now().toString().slice(-5);
+  await p.goto(B + '/patients/new');
+  await p.fill('input[name="full_name"]', name); await p.fill('input[name="age_years"]', '40'); await p.fill('input[name="phone"]', '07712345678');
+  await p.click('button:has-text("حفظ المريض")'); await p.waitForTimeout(2500);
+  await p.goto(B + '/patients?q=' + encodeURIComponent(name));
+  const link = p.locator('a', { hasText: name }).first();
+  ok(await link.count() === 1, 'new patient saved and listed');
+  if (await link.count()) { await link.click(); await p.waitForTimeout(1200); ok((await p.locator('body').innerText()).includes(name), 'patient page opens'); }
   ok(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.slice(0, 3).join(' | ') : ''));
   await b.close();
   done();

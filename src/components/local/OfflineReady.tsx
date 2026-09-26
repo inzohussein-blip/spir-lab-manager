@@ -12,8 +12,10 @@ import { CloudOff, CheckCircle2, RefreshCw, X } from "lucide-react";
 const SCOPES = ["/welcome", "/station", "/store", "/training", "/qc", "/roster"];
 const RECHECK_EVERY = 30 * 60 * 1000; // while a page stays open
 
-/** Build id of the code running in this page (from Next's inline data). */
+/** Build id of the code running in this page (<meta name="lab-build">, else Next 14's inline data). */
 function pageBuild(): string | null {
+  const meta = document.querySelector<HTMLMetaElement>('meta[name="lab-build"]')?.content;
+  if (meta) return meta;
   for (const s of Array.from(document.scripts)) {
     const m = /buildId\\?"\s*:\s*\\?"([^"\\]+)/.exec(s.textContent ?? "");
     if (m) return m[1];

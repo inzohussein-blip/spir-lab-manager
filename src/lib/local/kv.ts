@@ -11,6 +11,10 @@
  * On the first open after the update, the station data found in localStorage is copied in
  * and then removed there. If IndexedDB cannot be used (some private windows), everything
  * stays on localStorage as before.
+ *
+ * Data found in localStorage later (an older saved copy of the app opened without internet
+ * writes there) never replaces what IndexedDB holds: visits and patients entered in it are
+ * added, anything else is dropped.
  */
 
 const DB_NAME = "lab-local";
@@ -19,6 +23,22 @@ const PREFIXES = ["station.", "purchasing.", "training.", "qc.", "roster."];
 /** Kept in localStorage: read by the inline script that sets the theme before the page paints. */
 const isTheme = (k: string) => k.endsWith(".theme.v1");
 const isData = (k: string) => PREFIXES.some((p) => k.startsWith(p)) && !isTheme(k);
+/** Records a lab may enter in an older saved copy; merged in by id when both sides have them. */
+const RECORDS = new Set(["station.visits.v1", "station.patients.v1"]);
+
+/** What to keep for a key found in localStorage while IndexedDB already holds it. */
+function merge(k: string, current: string, found: string): string {
+  if (!RECORDS.has(k)) return current;
+  try {
+    const a = JSON.parse(current) as { id?: unknown }[], b = JSON.parse(found) as { id?: unknown }[];
+    if (!Array.isArray(a) || !Array.isArray(b)) return current;
+    const have = new Set(a.map((x) => x?.id));
+    const extra = b.filter((x) => x && typeof x.id === "string" && !have.has(x.id));
+    return extra.length ? JSON.stringify([...a, ...extra]) : current;
+  } catch {
+    return current;
+  }
+}
 
 let mem: Map<string, string> | null = null; // null → not loaded (or no IndexedDB): use localStorage
 let db: IDBDatabase | null = null;
@@ -49,18 +69,26 @@ export function kvReady(): Promise<boolean> {
       const [keys, values] = await Promise.all([req(tx.objectStore(STORE).getAllKeys()), req(tx.objectStore(STORE).getAll())]);
       const m = new Map<string, string>();
       keys.forEach((k, i) => { if (typeof k === "string" && typeof values[i] === "string") m.set(k, values[i] as string); });
-      // Anything still in localStorage is newer (older versions, or a session without IndexedDB): move it in.
+      // Station data in localStorage: moved in on the first open after the update; found again later
+      // (an older saved copy opened offline) it only adds visits / patients (see merge).
       const moved: [string, string][] = [];
+      const found: string[] = [];
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
-        if (k && isData(k)) moved.push([k, localStorage.getItem(k) ?? ""]);
+        if (!k || !isData(k)) continue;
+        found.push(k);
+        const v = localStorage.getItem(k) ?? "";
+        const cur = m.get(k);
+        const next = cur == null ? v : merge(k, cur, v);
+        if (next !== cur) moved.push([k, next]);
       }
       if (moved.length) {
         const w = d.transaction(STORE, "readwrite");
         for (const [k, v] of moved) w.objectStore(STORE).put(v, k);
         await done(w);
-        for (const [k, v] of moved) { m.set(k, v); localStorage.removeItem(k); }
+        for (const [k, v] of moved) m.set(k, v);
       }
+      for (const k of found) localStorage.removeItem(k);
       d.onversionchange = () => d.close();
       db = d; mem = m;
       if (typeof BroadcastChannel !== "undefined") {

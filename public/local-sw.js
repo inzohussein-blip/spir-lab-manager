@@ -144,8 +144,10 @@ self.addEventListener("message", (event) => {
   event.waitUntil(running.then((r) => tell(r)));
 });
 
+// The build a page belongs to: <meta name="lab-build"> (set in the root layout), else the
+// id Next.js 14 wrote into the page data.
 const buildIdOf = (html) => {
-  const m = /buildId\\?"\s*:\s*\\?"([^"\\]+)/.exec(html);
+  const m = /<meta name="lab-build" content="([^"]+)"/.exec(html) || /buildId\\?"\s*:\s*\\?"([^"\\]+)/.exec(html);
   return m ? m[1] : null;
 };
 
@@ -191,17 +193,37 @@ async function prepare(tell) {
     // Scripts, styles and anything they reference; hashed files are immutable, so
     // reuse copies from the previous version instead of downloading them again.
     const queue = [...assets];
+    const optional = new Set(); // found inside scripts: saved when they exist, never fatal
     for (let i = 0; i < queue.length; i++) {
       const u = queue[i];
       let res = await caches.match(u);
       if (!res) {
-        res = await fetch(u, { credentials: "same-origin" });
-        if (!res.ok) throw new Error(u + " → " + res.status);
+        res = await fetch(u, { credentials: "same-origin" }).catch(() => null);
+        if (!res || !res.ok) {
+          if (optional.has(u)) continue;
+          throw new Error(u + " → " + (res ? res.status : "network"));
+        }
       }
       await cache.put(u, res.clone());
+      const add = (a) => { if (!assets.has(a)) { assets.add(a); queue.push(a); } };
       if (u.endsWith(".css")) {
-        const css = await res.text();
-        for (const m of css.matchAll(/url\((\/_next\/static\/[^)"']+)\)/g)) if (!assets.has(m[1])) { assets.add(m[1]); queue.push(m[1]); }
+        // Fonts and images: absolute (/_next/static/…) or relative to the stylesheet (../media/…).
+        const css = await res.clone().text();
+        for (const m of css.matchAll(/url\(\s*["']?([^)"']+)["']?\s*\)/g)) {
+          if (m[1].startsWith("data:")) continue;
+          const p = new URL(m[1], self.location.origin + u).pathname;
+          if (p.startsWith("/_next/static/")) add(p);
+        }
+      }
+      if (u.endsWith(".js")) {
+        // Lazily loaded chunks (the barcode, QR and license-check libraries…): Turbopack names
+        // them in the chunks that load them ("static/chunks/….js").
+        const js = await res.clone().text();
+        for (const m of js.matchAll(/["'](static\/(?:chunks|media)\/[^"'\\\s]+)["']/g)) {
+          const a = "/_next/" + m[1];
+          if (!assets.has(a)) optional.add(a);
+          add(a);
+        }
       }
       if (/\/webpack-[^/]+\.js$/.test(u)) {
         // Lazily loaded chunks (e.g. the barcode library) are listed in the webpack runtime.

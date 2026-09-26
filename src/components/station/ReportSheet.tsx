@@ -1,9 +1,9 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import { useEffect, type CSSProperties } from "react";
 import { flagFor, rangeLabel, type Gender, type PrevResult, type StationSettings, type StationTest } from "@/lib/station/store";
 import { tableStyleOf, tableColors, DENSITY_PAD, GAP_PX, type TableStyle } from "@/lib/station/tableStyle";
-import { Barcode } from "@/components/station/Barcode";
+import { Barcode, loadBarcode } from "@/components/station/Barcode";
 import { QrCode } from "@/components/station/QrCode";
 import { labQrCode, type LabQrCode } from "@/lib/station/labQr";
 import { FormReport } from "@/components/station/FormReport";
@@ -73,6 +73,8 @@ export function ReportSheet({
   /** false while another sheet (e.g. tube labels) is being printed: stays on screen, not on paper. */
   printable?: boolean;
 }) {
+  // Ready before «طباعة» assigns a sample number, so its barcode is on the first print too.
+  useEffect(() => { void loadBarcode(); }, []);
   const gender = patient.gender;
   const ts = tableStyleOf(settings.reportTable);
   const pad = DENSITY_PAD[ts.density];
