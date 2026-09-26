@@ -31,18 +31,4 @@ export async function isOwner(): Promise<boolean> {
   try { await jwtVerify(t, key()); return true; } catch { return false; }
 }
 
-// Best-effort brake on guessing (per server instance).
-const fails = new Map<string, { n: number; since: number }>();
-const WINDOW = 10 * 60 * 1000;
-export function tooManyTries(ip: string, max = 10): boolean {
-  const f = fails.get(ip);
-  return !!f && Date.now() - f.since < WINDOW && f.n >= max;
-}
-export function noteFail(ip: string) {
-  const now = Date.now();
-  const f = fails.get(ip);
-  const cur = f && now - f.since < WINDOW ? f : { n: 0, since: now };
-  fails.set(ip, { n: cur.n + 1, since: cur.since });
-}
-export function clearFails(ip: string) { fails.delete(ip); }
 export const ipOf = (h: Headers) => (h.get("x-forwarded-for") ?? "").split(",")[0].trim() || "local";

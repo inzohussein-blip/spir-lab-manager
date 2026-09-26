@@ -91,6 +91,11 @@ function ensureTables() {
     await query(`create table if not exists license_events (
       id text primary key, license_id text not null, at bigint not null, kind text not null, detail text not null default '')`);
     await query(`create index if not exists license_events_license on license_events (license_id, at desc)`);
+    // Wrong-code / wrong-password attempts (shared by every server instance) and the owner's sign-ins (0017).
+    await query(`create table if not exists license_attempts (id text primary key, k text not null, at bigint not null)`);
+    await query(`create index if not exists license_attempts_k on license_attempts (k, at)`);
+    await query(`create table if not exists license_owner_log (
+      id text primary key, at bigint not null, ok boolean not null, ip text not null default '', agent text not null default '')`);
   })().catch((e) => { ensured = null; throw e; });
   return ensured;
 }
@@ -337,4 +342,91 @@ export async function storageStatus(write = false): Promise<{ source: string; ok
   } catch (e) {
     return { source, ok: false, error: e instanceof Error ? e.message.slice(0, 160) : "error" };
   }
+}
+
+// ── Attempt limits (kept in the database so they hold across server instances) ─────
+const ATTEMPT_WINDOW = 10 * 60_000;
+const attemptKey = (kind: "activate" | "owner", ip: string) => `${kind}:${ip}`;
+/** Too many wrong tries from this address in the last 10 minutes? */
+export async function attemptsBlocked(kind: "activate" | "owner", ip: string, max: number): Promise<boolean> {
+  try {
+    await ensureTables();
+    const r = await queryOne<{ n: string | number }>(`select count(*) as n from license_attempts where k = $1 and at > $2`, [attemptKey(kind, ip), Date.now() - ATTEMPT_WINDOW]);
+    return Number(r?.n ?? 0) >= max;
+  } catch { return false; } // never lock anyone out because the counter is unreachable
+}
+export async function noteAttempt(kind: "activate" | "owner", ip: string) {
+  try {
+    await ensureTables();
+    await query(`insert into license_attempts (id, k, at) values ($1, $2, $3)`, [randomUUID(), attemptKey(kind, ip), Date.now()]);
+    await query(`delete from license_attempts where at < $1`, [Date.now() - DAY]);
+  } catch { /* ignore */ }
+}
+export async function clearAttempts(kind: "activate" | "owner", ip: string) {
+  try { await query(`delete from license_attempts where k = $1`, [attemptKey(kind, ip)]); } catch { /* ignore */ }
+}
+
+// ── Owner sign-in log («سجل الدخول») ────────────────────────────────────────────
+export interface OwnerSignIn { at: number; ok: boolean; ip: string; agent: string }
+export async function logOwnerSignIn(ok: boolean, ip: string, agent: string) {
+  try {
+    await ensureTables();
+    await query(`insert into license_owner_log (id, at, ok, ip, agent) values ($1, $2, $3, $4, $5)`, [randomUUID(), Date.now(), ok, ip.slice(0, 64), agent.slice(0, 80)]);
+    await query(`delete from license_owner_log where at < $1`, [Date.now() - 180 * DAY]);
+  } catch { /* the log never blocks signing in */ }
+}
+export async function ownerSignIns(limit = 30): Promise<OwnerSignIn[]> {
+  try {
+    await ensureTables();
+    const rows = await query<{ at: string | number; ok: boolean | string; ip: string; agent: string }>(
+      `select at, ok, ip, agent from license_owner_log order by at desc limit $1`, [limit]);
+    return rows.map((r) => ({ at: Number(r.at), ok: bool(r.ok), ip: r.ip, agent: r.agent }));
+  } catch { return []; }
+}
+
+// ── Backup of the codes («نسخة احتياطية للرموز») ───────────────────────────────
+// Codes (as hashes — the codes themselves are never stored), history and the contact line.
+// The signing key is left out on purpose: after a restore the server makes a new one and every
+// device picks it up at its next online check.
+export interface CodesBackup {
+  app: "lab-codes"; version: 1; exported_at: string;
+  licenses: Record<string, unknown>[]; events: Record<string, unknown>[]; contact: string;
+}
+export async function exportCodes(): Promise<CodesBackup> {
+  await ensureTables();
+  const licenses = await query<Record<string, unknown>>(`select * from station_licenses order by created_at`);
+  const events = await query<Record<string, unknown>>(`select * from license_events order by at`);
+  return { app: "lab-codes", version: 1, exported_at: new Date().toISOString(), licenses, events, contact: (await getConfig("contact")) ?? "" };
+}
+const LIC_COLS = ["id", "code_hash", "code_hint", "lab_name", "note", "duration_days", "modules", "status", "device_id", "device_label",
+  "activated_at", "expires_at", "last_seen_at", "created_at", "price", "paid", "paid_at", "message", "device_name", "is_trial"] as const;
+/** Merge a backup in: codes are added or updated by id (nothing is deleted); history is added once. */
+export async function importCodes(data: unknown): Promise<{ licenses: number; events: number }> {
+  const b = data as Partial<CodesBackup>;
+  if (!b || b.app !== "lab-codes" || !Array.isArray(b.licenses) || !Array.isArray(b.events)) throw new Error("invalid");
+  await ensureTables();
+  let nl = 0, ne = 0;
+  for (const r of b.licenses) {
+    if (typeof r.id !== "string" || typeof r.code_hash !== "string" || typeof r.lab_name !== "string") continue;
+    const vals = LIC_COLS.map((c) => {
+      const v = r[c];
+      if (c === "paid" || c === "is_trial") return v === true || v === "t" || v === "true";
+      if (c === "modules") return typeof v === "string" ? v : JSON.stringify(cleanModules(v));
+      return v ?? (["note", "code_hint", "price", "message", "device_name"].includes(c) ? "" : c === "status" ? "active" : null);
+    });
+    await query(
+      `insert into station_licenses (${LIC_COLS.join(", ")}) values (${LIC_COLS.map((_, i) => `$${i + 1}`).join(", ")})
+       on conflict (id) do update set ${LIC_COLS.filter((c) => c !== "id").map((c) => `${c} = excluded.${c}`).join(", ")}`,
+      vals,
+    );
+    nl++;
+  }
+  for (const e of b.events) {
+    if (typeof e.id !== "string" || typeof e.license_id !== "string") continue;
+    await query(`insert into license_events (id, license_id, at, kind, detail) values ($1, $2, $3, $4, $5) on conflict (id) do nothing`,
+      [e.id, e.license_id, Number(e.at), String(e.kind ?? ""), String(e.detail ?? "")]);
+    ne++;
+  }
+  if (typeof b.contact === "string" && b.contact.trim()) await setConfig("contact", b.contact.trim().slice(0, 300));
+  return { licenses: nl, events: ne };
 }

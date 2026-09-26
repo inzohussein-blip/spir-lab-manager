@@ -1,0 +1,70 @@
+# Checks every push and Pull Request: types, build, then the browser tests (tests/e2e) —
+# once with lab codes off (stations, forms, every page) and once with lab codes on
+# (activation, locks, the code manager) on a fresh throw-away database.
+name: Tests
+
+on:
+  push:
+    branches: [main, "claude/**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
+
+      - name: Browser for the tests
+        run: npx playwright-core install --with-deps chromium
+
+      - name: Tests — lab codes off
+        env:
+          PORT: "3456"
+          E2E_BASE: http://localhost:3456
+        run: |
+          npm start > server-plain.log 2>&1 &
+          for i in $(seq 1 90); do curl -sf -o /dev/null http://localhost:3456/welcome && break; sleep 1; done
+          npm run -s test:e2e
+
+      - name: Tests — lab codes on
+        env:
+          PORT: "3457"
+          E2E_BASE: http://localhost:3457
+          # Test-only values for a throw-away database; not the real site's secrets.
+          LICENSE_ADMIN_PASSWORD: owner-test-pass
+          AUTH_SECRET: ci-only-secret-not-used-anywhere-else-0123456789
+          PGLITE_DATA_DIR: ${{ runner.temp }}/pglite-codes
+        run: |
+          npm start > server-codes.log 2>&1 &
+          for i in $(seq 1 90); do curl -sf -o /dev/null http://localhost:3457/welcome && break; sleep 1; done
+          npm run -s test:e2e:codes
+
+      - name: Server logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-logs
+          path: server-*.log
+          retention-days: 7

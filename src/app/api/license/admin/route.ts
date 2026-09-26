@@ -1,8 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import {
-  licensingEnabled, passwordSet, durableStorage, storageStatus, listLicenses, listEvents, createLicense, updateLicense, getContact, setContact, type LicenseAction,
+  licensingEnabled, passwordSet, durableStorage, storageStatus, attemptsBlocked, noteAttempt, clearAttempts,
+  logOwnerSignIn, ownerSignIns, exportCodes, importCodes, listLicenses, listEvents, createLicense, updateLicense, getContact, setContact, type LicenseAction,
 } from "@/lib/license/server";
-import { passwordMatches, startOwnerSession, endOwnerSession, isOwner, tooManyTries, noteFail, clearFails, ipOf } from "@/lib/license/owner";
+import { passwordMatches, startOwnerSession, endOwnerSession, isOwner, ipOf } from "@/lib/license/owner";
 
 /** Owner endpoints for the code manager (/licenses). */
 export const dynamic = "force-dynamic";
@@ -13,7 +14,7 @@ export async function GET() {
   if (!(await isOwner())) return json({ enabled: true, owner: false });
   const storage = await storageStatus();
   if (!storage.ok) return json({ enabled: true, owner: true, storage, licenses: [], events: [], contact: "", now: Date.now() });
-  return json({ enabled: true, owner: true, storage, licenses: await listLicenses(), events: await listEvents(), contact: await getContact(), now: Date.now() });
+  return json({ enabled: true, owner: true, storage, licenses: await listLicenses(), events: await listEvents(), signIns: await ownerSignIns(), contact: await getContact(), now: Date.now() });
 }
 
 export async function POST(req: NextRequest) {
@@ -23,13 +24,16 @@ export async function POST(req: NextRequest) {
 
   if (b.op === "login") {
     const ip = ipOf(req.headers);
-    if (tooManyTries(ip, 8)) return json({ ok: false, error: "too_many" }, 429);
+    const agent = req.headers.get("user-agent") ?? "";
+    if (await attemptsBlocked("owner", ip, 8)) { await logOwnerSignIn(false, ip, agent); return json({ ok: false, error: "too_many" }, 429); }
     if (!passwordMatches(String(b.password ?? ""))) {
-      noteFail(ip);
+      await noteAttempt("owner", ip);
+      await logOwnerSignIn(false, ip, agent);
       await new Promise((r) => setTimeout(r, 500));
       return json({ ok: false, error: "wrong" }, 401);
     }
-    clearFails(ip);
+    await clearAttempts("owner", ip);
+    await logOwnerSignIn(true, ip, agent);
     await startOwnerSession();
     return json({ ok: true });
   }
@@ -46,6 +50,11 @@ export async function POST(req: NextRequest) {
   if (b.op === "update") {
     const r = await updateLicense(String(b.id ?? ""), b.change as LicenseAction);
     return json({ ok: true, ...r });
+  }
+  if (b.op === "backup") return json({ ok: true, backup: await exportCodes() });
+  if (b.op === "restore") {
+    try { return json({ ok: true, ...(await importCodes(b.backup)) }); }
+    catch { return json({ ok: false, error: "invalid" }, 400); }
   }
   if (b.op === "selftest") return json({ ok: true, storage: await storageStatus(true) });
   if (b.op === "contact") { await setContact(String(b.contact ?? "")); return json({ ok: true }); }

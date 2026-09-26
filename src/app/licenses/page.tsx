@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   KeyRound, LogOut, Plus, Copy, Check, Ban, Play, MonitorSmartphone, RefreshCw, Trash2, Pencil, ShieldAlert,
-  FlaskConical, Download, ChevronDown, MessageSquare, History, Wallet, MessageSquareText, Database,
+  FlaskConical, Download, ChevronDown, MessageSquare, History, Wallet, MessageSquareText, Database, Upload, ShieldCheck,
 } from "lucide-react";
 import { LICENSE_MODULES, DEFAULT_MODULES, moduleLabel, type LicenseModule } from "@/lib/license/modules";
 
@@ -17,7 +17,13 @@ interface Row {
 }
 interface Ev { license_id: string; at: number; kind: string; detail: string }
 interface Storage { source: "license-db" | "app-db" | "embedded"; ok: boolean; codes?: number; roundTripMs?: number; error?: string }
-type Data = { enabled: boolean; owner: boolean; needsDb?: boolean; storage?: Storage; licenses?: Row[]; events?: Ev[]; contact?: string; now?: number };
+interface SignIn { at: number; ok: boolean; ip: string; agent: string }
+type Data = { enabled: boolean; owner: boolean; needsDb?: boolean; storage?: Storage; licenses?: Row[]; events?: Ev[]; signIns?: SignIn[]; contact?: string; now?: number };
+const agentLabel = (ua: string) => {
+  const os = /Windows/.test(ua) ? "Windows" : /Android/.test(ua) ? "Android" : /iPhone|iPad/.test(ua) ? "iOS" : /Mac OS/.test(ua) ? "Mac" : /Linux/.test(ua) ? "Linux" : "";
+  const br = /Edg\//.test(ua) ? "Edge" : /Chrome\//.test(ua) ? "Chrome" : /Firefox\//.test(ua) ? "Firefox" : /Safari\//.test(ua) ? "Safari" : "";
+  return [os, br].filter(Boolean).join(" · ") || "—";
+};
 const SOURCE: Record<Storage["source"], string> = {
   "license-db": "قاعدة الرموز المنفصلة (Neon)",
   "app-db": "قاعدة بيانات الموقع (DATABASE_URL)",
@@ -122,6 +128,7 @@ export default function LicensesPage() {
   const [sort, setSort] = useState<Sort>("expiry");
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [test, setTest] = useState<Storage | null>(null);
+  const [backupMsg, setBackupMsg] = useState("");
   const [testing, setTesting] = useState(false);
 
   const load = useCallback(async () => {
@@ -391,6 +398,61 @@ export default function LicensesPage() {
             </div>
           );
         })}
+      </div>
+
+      {/* Backup of the codes */}
+      <div className="mt-6 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
+        <div className="flex items-center gap-2 text-sm font-semibold"><Database className="size-4" /> نسخة احتياطية للرموز</div>
+        <p className="mb-3 mt-1 text-xs text-muted">
+          ملف يحفظ كل الرموز (مشفّرة كما هي في القاعدة — لا تظهر فيه الرموز نفسها) وسجلها وسطر التواصل. الاسترجاع يضيف ويحدّث ولا يحذف شيئاً.
+          احفظ الملف في مكان آمن ولا تشاركه.
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={async () => {
+            const d = await post({ op: "backup" });
+            if (!d.ok) { setBackupMsg("تعذّر التصدير."); return; }
+            const blob = new Blob([JSON.stringify(d.backup, null, 2)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url; a.download = `lab-codes-backup-${new Date().toLocaleDateString("en-CA")}.json`;
+            document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 2000);
+            setBackupMsg(`نُزّلت النسخة: ${d.backup.licenses.length} رمز و${d.backup.events.length} حدث.`);
+          }} className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas">
+            <Download className="size-4" /> تنزيل نسخة احتياطية
+          </button>
+          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas">
+            <Upload className="size-4" /> استرجاع نسخة
+            <input type="file" accept="application/json,.json" aria-label="ملف النسخة" className="hidden" onChange={async (e) => {
+              const file = e.target.files?.[0]; e.target.value = "";
+              if (!file) return;
+              let backup: unknown;
+              try { backup = JSON.parse(await file.text()); } catch { setBackupMsg("الملف غير صالح."); return; }
+              if (!window.confirm("استرجاع هذه النسخة؟ تُضاف الرموز غير الموجودة وتُحدَّث الموجودة إلى ما في الملف.")) return;
+              const d = await post({ op: "restore", backup });
+              setBackupMsg(d.ok ? `تم الاسترجاع: ${d.licenses} رمز و${d.events} حدث.` : "الملف ليس نسخة رموز صالحة.");
+              load();
+            }} />
+          </label>
+          {backupMsg && <span className="text-xs text-brand-dark">{backupMsg}</span>}
+        </div>
+      </div>
+
+      {/* Owner sign-in log */}
+      <div className="mt-6 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
+        <div className="flex items-center gap-2 text-sm font-semibold"><ShieldCheck className="size-4" /> سجل الدخول لهذه الصفحة</div>
+        <p className="mb-2 mt-1 text-xs text-muted">آخر محاولات الدخول الناجحة والفاشلة. بعد 8 محاولات خاطئة من نفس العنوان يُمنع الدخول 10 دقائق.</p>
+        {(data.signIns ?? []).length === 0 ? <p className="text-xs text-muted">لا شيء بعد.</p> : (
+          <ul className="max-h-64 overflow-y-auto rounded-lg border border-line text-xs">
+            {data.signIns!.map((x, i) => (
+              <li key={i} className={`flex flex-wrap items-center justify-between gap-2 border-b border-line px-3 py-1.5 last:border-0 ${x.ok ? "" : "bg-red-50/60"}`}>
+                <span className={`font-semibold ${x.ok ? "text-brand-dark" : "text-red-700"}`}>{x.ok ? "✓ دخول ناجح" : "✗ محاولة فاشلة"}</span>
+                <span className="text-muted" dir="ltr">{x.ip}</span>
+                <span className="text-muted">{agentLabel(x.agent)}</span>
+                <span className="tabular-nums text-muted">{fmtTime(x.at)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       {/* Contact line */}
