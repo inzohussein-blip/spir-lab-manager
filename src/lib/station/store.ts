@@ -491,7 +491,10 @@ export interface StationBackup {
   patients?: StationPatient[];
   stock?: StockItem[];
   doctors?: StationDoctor[];
+  /** The lab's own edits of the report forms (Tests management → «الاستمارة»). */
+  forms?: unknown;
 }
+const K_FORMS = "station.formTemplates.v1";
 
 export function exportBackup(): StationBackup {
   return {
@@ -506,6 +509,7 @@ export function exportBackup(): StationBackup {
     patients: getPatients(),
     stock: getStock(),
     doctors: getDoctors(),
+    forms: read<unknown>(K_FORMS, null) ?? undefined,
   };
 }
 
@@ -522,6 +526,7 @@ export function importBackup(data: unknown): boolean {
     if (b.patients) ok = write(K_PATIENTS, b.patients) && ok;
     if (b.stock) ok = write(K_STOCK, b.stock) && ok;
     if (b.doctors) ok = write(K_DOCTORS, b.doctors) && ok;
+    if (b.forms && typeof b.forms === "object") ok = write(K_FORMS, b.forms) && ok;
     return ok;
   } catch {
     return false;

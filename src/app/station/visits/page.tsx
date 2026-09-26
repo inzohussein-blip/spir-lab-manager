@@ -8,7 +8,7 @@ import {
   type StationVisit, type StationTest, type StationSettings,
 } from "@/lib/station/store";
 import { ReportSheet } from "@/components/station/ReportSheet";
-import { valueText } from "@/lib/station/templates";
+import { valueText, isFormCode } from "@/lib/station/templates";
 
 
 export default function StationVisitsPage() {
@@ -20,6 +20,7 @@ export default function StationVisitsPage() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [paper, setPaper] = useState<"A4" | "A5">("A4");
 
   useEffect(() => { setVisits(getVisits()); setTests(getTests()); setSettings(getSettings()); }, []);
 
@@ -33,7 +34,7 @@ export default function StationVisitsPage() {
       { before: sel.created_at, excludeId: sel.id },
     );
   }, [sel, settings.printPrevious]);
-  const printPrev = !!sel && sel.results.some((r) => prev[r.testId]);
+  const printPrev = !!sel && sel.results.some((r) => prev[r.testId] && !isFormCode(byId(r.testId)?.code));
   const dayOf = (ms: number) => {
     const d = new Date(ms);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -195,14 +196,20 @@ export default function StationVisitsPage() {
 
       {sel && (
         <>
-          <div className="no-print mt-4 flex justify-center">
+          <div className="no-print mt-4 flex items-center justify-center gap-2">
+            <div className="flex overflow-hidden rounded-lg border border-line text-sm">
+              {(["A4", "A5"] as const).map((x) => (
+                <button key={x} onClick={() => setPaper(x)} className={`px-3 py-1.5 ${paper === x ? "bg-brand text-white" : "hover:bg-canvas"}`}>{x}</button>
+              ))}
+            </div>
             <button onClick={() => window.print()} className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark">
-              <Printer className="size-4" /> طباعة
+              <Printer className="size-4" /> طباعة {paper}
             </button>
           </div>
           <ReportSheet
             className="mt-4"
             settings={settings}
+            paper={paper}
             date={dayOf(sel.created_at)}
             accession={sel.accession}
             patient={sel.patient}

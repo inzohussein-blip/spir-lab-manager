@@ -211,7 +211,7 @@ function StationEntryPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [patientId, editId, createdAt, savedTick]);
   const showPrev = settings.showPrevious !== false;
-  const printPrev = settings.printPrevious === true && chosen.some((t) => prev[t.id]);
+  const printPrev = settings.printPrevious === true && chosen.some((t) => prev[t.id] && !isFormCode(t.code));
 
   // Chosen tests still missing a result value — used for incomplete-entry protection.
   // Optional: auto-calculated derived tests (Settings). A value typed by hand is never overwritten.
