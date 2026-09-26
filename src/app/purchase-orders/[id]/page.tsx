@@ -10,7 +10,8 @@ const statusLabel: Record<string, string> = {
   draft: "مسودة", ordered: "مطلوب", received: "مُستلم", cancelled: "ملغى",
 };
 
-export default async function PurchaseOrderDetailPage({ params }: { params: { id: string } }) {
+export default async function PurchaseOrderDetailPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const po = await queryOne<any>(
     `select po.*, s.name as supplier from purchase_orders po
        left join suppliers s on s.id = po.supplier_id where po.id = $1`,

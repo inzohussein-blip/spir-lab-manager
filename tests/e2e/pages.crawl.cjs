@@ -1,5 +1,5 @@
 // Every public page opens without errors or sideways scrolling — desktop, phone and dark mode.
-const { B, ok, launch, done } = require('./lib.cjs');
+const { B, ok, launch, done, kv, resetLocal } = require('./lib.cjs');
 const routes = ['/welcome', '/station', '/station/inventory', '/station/records', '/station/settings', '/station/tests', '/station/visits',
   '/store', '/store/report', '/store/settings', '/store/suppliers',
   '/training', '/training/cards', '/training/edit', '/training/exam', '/training/manual', '/training/map', '/training/media', '/training/quiz',
@@ -15,9 +15,9 @@ const routes = ['/welcome', '/station', '/station/inventory', '/station/records'
     p.on('pageerror', (e) => errs.push('PAGEERR ' + e.message.slice(0, 150)));
     p.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errs.push('CONSOLE ' + m.text().slice(0, 150)); });
     await p.goto(B + '/welcome');
-    await p.evaluate((t) => { localStorage.clear(); localStorage.setItem('theme', t); localStorage.setItem('local.activation.v1', 'legacy'); }, theme);
+    await resetLocal(p, { theme, 'local.activation.v1': 'legacy' });
     await p.goto(B + '/training'); await p.waitForTimeout(800);
-    const first = await p.evaluate(() => JSON.parse(localStorage.getItem('training.tests.v1') || '[{"id":"x"}]')[0].id);
+    const first = ((await kv(p, 'training.tests.v1')) || [{ id: 'x' }])[0].id;
     let bad = 0;
     for (const r0 of routes) {
       const r = r0.replace('FIRST', first);

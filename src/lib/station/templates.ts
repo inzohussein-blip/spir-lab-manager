@@ -8,6 +8,8 @@
  * Printed values are English; the Arabic next to an option is a hint for the staff only.
  */
 
+import { kvGet, kvSet } from "@/lib/local/kv";
+
 export type Opt = { v: string; ar?: string };
 const o = (v: string, ar?: string): Opt => ({ v, ar });
 const plain = (...vs: string[]): Opt[] => vs.map((v) => ({ v }));
@@ -243,7 +245,7 @@ let cache: { raw: string | null; data: Custom } | null = null;
 function customs(): Custom {
   if (typeof window === "undefined") return {};
   try {
-    const raw = localStorage.getItem(K_FORMS);
+    const raw = kvGet(K_FORMS);
     if (cache && cache.raw === raw) return cache.data;
     const data = raw ? (JSON.parse(raw) as Custom) : {};
     cache = { raw, data };
@@ -269,8 +271,7 @@ export function saveCustomForm(code: FormCode, value: Template | CultureLists | 
   try {
     const next: Custom = { ...customs() };
     if (value) (next as Record<string, unknown>)[code] = value; else delete next[code];
-    localStorage.setItem(K_FORMS, JSON.stringify(next));
-    return true;
+    return kvSet(K_FORMS, JSON.stringify(next));
   } catch { return false; }
 }
 export const formTitle = (code: FormCode) => (code === "CS" ? cultureOf().title : templateOf(code).title);

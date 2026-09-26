@@ -30,4 +30,31 @@ function done(label) {
   console.log(`${label || path.basename(process.argv[1])}: ${pass} passed, ${fail} failed`);
   process.exitCode = fail ? 1 : 0;
 }
-module.exports = { B, OWNER, ok, launch, tmp, pdfPages, done };
+
+// Station data lives in IndexedDB "lab-local" (src/lib/local/kv.ts); these read / change it from a test.
+const IDB = `(() => new Promise((res, rej) => { const r = indexedDB.open('lab-local', 1);
+  r.onupgradeneeded = () => { if (!r.result.objectStoreNames.contains('kv')) r.result.createObjectStore('kv'); };
+  r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }))`;
+/** The stored JSON value of a station key (null when missing). */
+const kv = (page, k) => page.evaluate(async ([k, IDB]) => {
+  const d = await (0, eval)(IDB)();
+  const v = await new Promise((res) => { const r = d.transaction('kv').objectStore('kv').get(k); r.onsuccess = () => res(r.result); r.onerror = () => res(undefined); });
+  d.close();
+  const raw = v ?? localStorage.getItem(k);
+  return raw == null ? null : JSON.parse(raw);
+}, [k, IDB]);
+/** Write (or with null, delete) a station key directly; reload the page afterwards. */
+const kvPut = (page, k, value) => page.evaluate(async ([k, value, IDB]) => {
+  const d = await (0, eval)(IDB)();
+  await new Promise((res) => { const tx = d.transaction('kv', 'readwrite'); const s = tx.objectStore('kv');
+    if (value == null) s.delete(k); else s.put(JSON.stringify(value), k); tx.oncomplete = tx.onerror = res; });
+  d.close(); localStorage.removeItem(k);
+}, [k, value, IDB]);
+/** A clean device: empty localStorage (plus the given keys) and no station data; reload afterwards. */
+const resetLocal = (page, keep = {}) => page.evaluate(async (keep) => {
+  localStorage.clear();
+  for (const [k, v] of Object.entries(keep)) localStorage.setItem(k, v);
+  await new Promise((res) => { const r = indexedDB.deleteDatabase('lab-local'); r.onsuccess = r.onerror = r.onblocked = res; });
+}, keep);
+
+module.exports = { B, OWNER, ok, launch, tmp, pdfPages, done, kv, kvPut, resetLocal };

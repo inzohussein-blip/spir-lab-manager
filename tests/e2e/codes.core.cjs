@@ -1,4 +1,4 @@
-const { B, OWNER, ok, launch, tmp, pdfPages, done } = require('./lib.cjs');
+const { B, OWNER, ok, launch, tmp, pdfPages, done, kv } = require('./lib.cjs');
 const DAY = 86400000;
 (async () => {
   const b = await launch();
@@ -129,7 +129,7 @@ const DAY = 86400000;
   await a.fill('input[aria-label="رمز المختبر"]', codeA2); await a.click('button:has-text("تفعيل رمز جديد")'); await a.waitForTimeout(1800);
   ok(await a.locator('div[role=dialog]').count() === 0, 'locked device unlocks with a new code');
   // data kept
-  ok(await a.evaluate(() => !!localStorage.getItem('station.tests.v1')), 'station data still on the device');
+  ok(!!(await kv(a, 'station.tests.v1')), 'station data still on the device');
   // owner list
   await o.reload(); await o.waitForTimeout(800);
   const txt = await o.locator('body').innerText();

@@ -1,4 +1,4 @@
-const { B, OWNER, ok, launch, tmp, pdfPages, done } = require('./lib.cjs');
+const { B, OWNER, ok, launch, tmp, pdfPages, done, kv, resetLocal } = require('./lib.cjs');
 const fs = require('node:fs');
 (async () => {
   const b = await launch();
@@ -6,8 +6,8 @@ const fs = require('node:fs');
   const p = await ctx.newPage();
   const errs = []; p.on('pageerror', e => errs.push(e.message.slice(0, 140)));
   p.on('dialog', d => d.accept());
-  const ls = (k) => p.evaluate((k) => JSON.parse(localStorage.getItem(k) || 'null'), k);
-  await p.goto(B + '/station'); await p.evaluate(() => { localStorage.clear(); localStorage.setItem('local.activation.v1', 'legacy'); }); await p.reload(); await p.waitForTimeout(1200);
+  const ls = (k) => kv(p, k);
+  await p.goto(B + '/station'); await resetLocal(p, { 'local.activation.v1': 'legacy' }); await p.reload(); await p.waitForTimeout(1200);
   const tests = await ls('station.tests.v1');
   const hb = tests.find(t => /hemoglobin/i.test(t.name_en || '')), glu = tests.find(t => /glucose/i.test(t.name_en || ''));
   // stock linked to Hb
@@ -86,9 +86,9 @@ const fs = require('node:fs');
   ok(!!backup.forms, 'backup includes edited report forms');
   // restore into a clean browser
   const ctx2 = await b.newContext(); const q = await ctx2.newPage(); q.on('dialog', d => d.accept());
-  await q.goto(B + '/station/settings'); await q.evaluate(() => { localStorage.clear(); localStorage.setItem('local.activation.v1', 'legacy'); }); await q.reload(); await q.waitForTimeout(800);
+  await q.goto(B + '/station/settings'); await resetLocal(q, { 'local.activation.v1': 'legacy' }); await q.reload(); await q.waitForTimeout(800);
   await q.setInputFiles('input[type=file][accept*="json"]', await bk.path()); await q.waitForTimeout(1500);
-  const r = await q.evaluate(() => ({ v: JSON.parse(localStorage.getItem('station.visits.v1') || '[]').length, f: localStorage.getItem('station.formTemplates.v1') }));
+  const r = { v: ((await kv(q, 'station.visits.v1')) || []).length, f: JSON.stringify(await kv(q, 'station.formTemplates.v1')) };
   ok(r.v === 2, 'restore brings back visits');
   ok(!!r.f && r.f.includes('MY CULTURE'), 'restore brings back edited forms');
   ok(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.join(' | ') : ''));

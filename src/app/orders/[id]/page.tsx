@@ -13,11 +13,12 @@ import { money } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
-export default async function OrderDetailPage({
-  params,
-}: {
-  params: { id: string };
-}) {
+export default async function OrderDetailPage(
+  props: {
+    params: Promise<{ id: string }>;
+  }
+) {
+  const params = await props.params;
   const order = await queryOne<any>(
     `select o.*, p.full_name from test_orders o
        join patients p on p.id = o.patient_id where o.id = $1`,

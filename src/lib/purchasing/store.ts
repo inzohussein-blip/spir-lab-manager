@@ -3,8 +3,10 @@
 /**
  * Local, offline-first store for the standalone Purchasing app — a separate
  * system with no link to the lab admin panel or the lab station. Everything
- * lives in this browser's localStorage (single machine, no database).
+ * lives in this browser's storage (lib/local/kv — single machine, no database).
  */
+
+import { kvGet, kvSet } from "@/lib/local/kv";
 
 export interface Supplier {
   id: string;
@@ -41,7 +43,7 @@ const K_SET = "purchasing.settings.v1";
 
 function read<T>(key: string, fallback: T): T {
   try {
-    const raw = localStorage.getItem(key);
+    const raw = kvGet(key);
     return raw ? (JSON.parse(raw) as T) : fallback;
   } catch {
     return fallback;
@@ -50,8 +52,7 @@ function read<T>(key: string, fallback: T): T {
 /** Returns false when the browser refused the write (storage full or blocked). */
 function write<T>(key: string, value: T): boolean {
   try {
-    localStorage.setItem(key, JSON.stringify(value));
-    return true;
+    return kvSet(key, JSON.stringify(value));
   } catch {
     return false;
   }

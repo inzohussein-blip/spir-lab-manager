@@ -29,7 +29,7 @@ export default async function RootLayout({
 }: {
   children: ReactNode;
 }) {
-  const pathname = headers().get("x-pathname") ?? "";
+  const pathname = (await headers()).get("x-pathname") ?? "";
   // The login screen and the standalone Lab Station render without the main
   // app chrome (the station brings its own sidebar and needs no session).
   const isBare =

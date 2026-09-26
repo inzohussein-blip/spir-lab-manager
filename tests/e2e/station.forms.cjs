@@ -1,17 +1,15 @@
 // Report forms (urine, stool, semen, culture): entry, saving, reopening and printing (A4 + A5, one page each).
-const { B, ok, launch, pdfPages, done } = require('./lib.cjs');
+const { B, ok, launch, pdfPages, done, kv, kvPut, resetLocal } = require('./lib.cjs');
 (async () => {
   const b = await launch();
   const p = await b.newPage({ viewport: { width: 1440, height: 950 } });
   const errs = []; p.on('pageerror', (e) => errs.push(e.message.slice(0, 120)));
   // An existing install whose catalog predates the stool / semen / culture forms.
-  await p.goto(B + '/station'); await p.evaluate(() => { localStorage.clear(); localStorage.setItem('local.activation.v1', 'legacy'); }); await p.reload(); await p.waitForTimeout(1500);
-  await p.evaluate(() => {
-    const t = JSON.parse(localStorage.getItem('station.tests.v1')).filter((x) => !['GSE', 'SFA', 'CS'].includes(x.code));
-    localStorage.setItem('station.tests.v1', JSON.stringify(t)); localStorage.removeItem('station.addFormTests.v1');
-  });
+  await p.goto(B + '/station'); await resetLocal(p, { 'local.activation.v1': 'legacy' }); await p.reload(); await p.waitForTimeout(1500);
+  await kvPut(p, 'station.tests.v1', (await kv(p, 'station.tests.v1')).filter((x) => !['GSE', 'SFA', 'CS'].includes(x.code)));
+  await kvPut(p, 'station.addFormTests.v1', null);
   await p.reload(); await p.waitForTimeout(800);
-  const codes = await p.evaluate(() => JSON.parse(localStorage.getItem('station.tests.v1')).map((x) => x.code));
+  const codes = (await kv(p, 'station.tests.v1')).map((x) => x.code);
   ok(['GUE', 'GSE', 'SFA', 'CS'].every((c) => codes.includes(c)), 'form tests are added to an existing catalog once');
 
   await p.locator('label:has-text("الاسم الثلاثي") input').fill('مريض الاستمارات');
@@ -52,7 +50,7 @@ const { B, ok, launch, pdfPages, done } = require('./lib.cjs');
   ok(await badge('الزرع والحساسية') === '2/2', 'culture: specimen + organism filled');
 
   await p.click('button:has-text("حفظ")'); await p.waitForTimeout(500);
-  const vid = await p.evaluate(() => JSON.parse(localStorage.getItem('station.visits.v1'))[0].id);
+  const vid = (await kv(p, 'station.visits.v1'))[0].id;
   await p.goto(B + '/station?edit=' + vid); await p.waitForTimeout(1000);
   ok(await badge('تحليل البول العام') === '21/21' && await badge('الزرع والحساسية') === '2/2', 'forms kept after reopening the visit');
 

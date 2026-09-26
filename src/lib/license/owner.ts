@@ -19,14 +19,14 @@ export function passwordMatches(given: string): boolean {
 
 export async function startOwnerSession(): Promise<void> {
   const token = await new SignJWT({ owner: true }).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("12h").sign(key());
-  cookies().set(COOKIE, token, { httpOnly: true, sameSite: "strict", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 12 * 3600 });
+  (await cookies()).set(COOKIE, token, { httpOnly: true, sameSite: "strict", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 12 * 3600 });
 }
-export function endOwnerSession(): void {
-  cookies().delete(COOKIE);
+export async function endOwnerSession(): Promise<void> {
+  (await cookies()).delete(COOKIE);
 }
 export async function isOwner(): Promise<boolean> {
   if (!password()) return false;
-  const t = cookies().get(COOKIE)?.value;
+  const t = (await cookies()).get(COOKIE)?.value;
   if (!t) return false;
   try { await jwtVerify(t, key()); return true; } catch { return false; }
 }

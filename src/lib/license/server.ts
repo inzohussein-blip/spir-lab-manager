@@ -1,9 +1,10 @@
 import "server-only";
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "node:crypto";
 import { SignJWT, exportJWK, generateKeyPair, importJWK, type JWK, type KeyLike } from "jose";
 import { query as appQuery } from "@/lib/db";
 import { cleanModules, type LicenseModule, type LicensePayload } from "./modules";
 import { licenseDbUrl } from "./env";
+import { newTotpSecret, totpMatch, totpUri } from "./totp";
 export { licenseDbUrl, durableStorage, passwordSet, licensingEnabled, licenseStorage } from "./env";
 
 /**
@@ -11,8 +12,8 @@ export { licenseDbUrl, durableStorage, passwordSet, licensingEnabled, licenseSto
  * number of days counted from that activation, with the stations (and the full admin panel)
  * it may open. The code itself is stored only as a hash.
  *
- * A device gets a license signed with an ES256 key kept in the database; the stations verify it
- * offline and refresh it from the server when online (extension, station changes, stop).
+ * A device gets a license signed with an ES256 key kept in the database, sealed with AUTH_SECRET;
+ * the stations verify it offline and refresh it from the server when online (extension, station changes, stop).
  * Switched on by setting LICENSE_ADMIN_PASSWORD (the owner's password for /licenses).
  */
 
@@ -117,29 +118,134 @@ export async function getContact(): Promise<string> {
 }
 export async function setContact(v: string) { await setConfig("contact", v.trim().slice(0, 300)); }
 
-// ── Signing key (generated once, kept server-side in the database) ────────────
+// ── Signing key (generated once, kept in the database encrypted with AUTH_SECRET) ─────
+// A copy of the database alone cannot sign licenses: the private key is sealed with AES-256-GCM
+// under a key derived from AUTH_SECRET, which lives only in the server's environment.
+// A key found stored in the clear (older versions), or one that no longer opens (AUTH_SECRET
+// changed), is replaced by a new one; devices keep their current license offline and receive
+// the new public key with their next online check.
+type SealedKey = { v: 1; pub: JWK; iv: string; tag: string; data: string };
+type PlainKey = { priv: JWK; pub: JWK };
+const sealSecret = () => (process.env.AUTH_SECRET ?? "").trim();
+const sealKey = (secret: string) => createHash("sha256").update(`lic-signing-key:${secret}`).digest();
+type Sealed = { iv: string; tag: string; data: string };
+function sealText(text: string, secret: string, aad: string): Sealed {
+  const iv = randomBytes(12);
+  const c = createCipheriv("aes-256-gcm", sealKey(secret), iv);
+  c.setAAD(Buffer.from(aad));
+  const data = Buffer.concat([c.update(text, "utf8"), c.final()]);
+  return { iv: iv.toString("base64"), tag: c.getAuthTag().toString("base64"), data: data.toString("base64") };
+}
+function unsealText(s: Sealed, secret: string, aad: string): string | null {
+  try {
+    const d = createDecipheriv("aes-256-gcm", sealKey(secret), Buffer.from(s.iv, "base64"));
+    d.setAAD(Buffer.from(aad));
+    d.setAuthTag(Buffer.from(s.tag, "base64"));
+    return Buffer.concat([d.update(Buffer.from(s.data, "base64")), d.final()]).toString("utf8");
+  } catch { return null; }
+}
+const seal = (priv: JWK, pub: JWK, secret: string): SealedKey => ({ v: 1, pub, ...sealText(JSON.stringify(priv), secret, JSON.stringify(pub)) });
+function unseal(s: SealedKey, secret: string): JWK | null {
+  const t = unsealText(s, secret, JSON.stringify(s.pub));
+  try { return t ? (JSON.parse(t) as JWK) : null; } catch { return null; }
+}
+/** Read the stored key: the private key when usable, and whether it is sealed. */
+function openStored(raw: string, secret: string): { priv: JWK | null; pub: JWK; sealed: boolean } | null {
+  try {
+    const v = JSON.parse(raw) as SealedKey | PlainKey;
+    if ("data" in v) return { priv: secret ? unseal(v, secret) : null, pub: v.pub, sealed: true };
+    // A key stored in the clear is only kept while there is nothing to seal it with.
+    return { priv: secret ? null : v.priv, pub: v.pub, sealed: false };
+  } catch { return null; }
+}
 let keys: Promise<{ priv: KeyLike | Uint8Array; pub: JWK }> | null = null;
 function signingKeys() {
   keys ??= (async () => {
+    const secret = sealSecret();
     const saved = await getConfig("signing_key");
-    if (saved) {
-      const { priv, pub } = JSON.parse(saved) as { priv: JWK; pub: JWK };
-      return { priv: await importJWK(priv, "ES256"), pub };
-    }
+    const cur = saved ? openStored(saved, secret) : null;
+    if (cur?.priv) return { priv: await importJWK(cur.priv, "ES256"), pub: cur.pub };
     const kp = await generateKeyPair("ES256", { extractable: true });
     const priv = await exportJWK(kp.privateKey), pub = await exportJWK(kp.publicKey);
-    await query(`insert into license_config (key, value) values ('signing_key', $1) on conflict (key) do nothing`, [JSON.stringify({ priv, pub })]);
-    // Another instance may have won the race — always use what is stored.
-    const stored = JSON.parse((await getConfig("signing_key"))!) as { priv: JWK; pub: JWK };
+    const value = JSON.stringify(secret ? seal(priv, pub, secret) : { priv, pub });
+    // Replace only what was read, so parallel server instances settle on one key.
+    if (saved == null) await query(`insert into license_config (key, value) values ('signing_key', $1) on conflict (key) do nothing`, [value]);
+    else await query(`update license_config set value = $1 where key = 'signing_key' and value = $2`, [value, saved]);
+    const stored = openStored((await getConfig("signing_key"))!, secret);
+    if (!stored?.priv) throw new Error("signing key unavailable");
     return { priv: await importJWK(stored.priv, "ES256"), pub: stored.pub };
   })().catch((e) => { keys = null; throw e; });
   return keys;
+}
+/** For the owner's page: is the stored signing key sealed with AUTH_SECRET? */
+export async function signingKeySealed(): Promise<boolean> {
+  try {
+    await signingKeys();
+    const raw = await getConfig("signing_key");
+    return !!raw && !!openStored(raw, sealSecret())?.sealed;
+  } catch { return false; }
 }
 export async function publicKey(): Promise<JWK> { return (await signingKeys()!).pub; }
 
 async function signLicense(p: Omit<LicensePayload, "iat">): Promise<string> {
   const { priv } = await signingKeys()!;
   return new SignJWT({ ...p }).setProtectedHeader({ alg: "ES256" }).setIssuedAt().sign(priv);
+}
+
+// ── Two-step sign-in for the owner (authenticator app) ────────────────────────
+// The shared secret is kept sealed with AUTH_SECRET like the signing key. LICENSE_2FA_OFF=1 in the
+// server's environment switches the second step off (lost phone); set it up again, then remove it.
+const TOTP_AAD = "owner-totp";
+export const twoFactorForcedOff = () => process.env.LICENSE_2FA_OFF === "1";
+async function readTotp(key: "owner_totp" | "owner_totp_pending"): Promise<string | null> {
+  const raw = await getConfig(key).catch(() => null);
+  const secret = sealSecret();
+  if (!raw || !secret) return null;
+  try { return unsealText(JSON.parse(raw) as Sealed, secret, TOTP_AAD); } catch { return null; }
+}
+/** enabled: set up and readable; broken: set up, but AUTH_SECRET changed since (it no longer opens — set up again). */
+export async function twoFactorStatus(): Promise<{ enabled: boolean; broken: boolean; forcedOff: boolean; canSetup: boolean }> {
+  const stored = !!(await getConfig("owner_totp").catch(() => null));
+  const enabled = stored && (await readTotp("owner_totp")) != null;
+  return { enabled, broken: stored && !enabled, forcedOff: twoFactorForcedOff(), canSetup: !!sealSecret() };
+}
+/** Is a second step needed to sign in now? */
+export async function twoFactorRequired(): Promise<boolean> {
+  return !twoFactorForcedOff() && (await readTotp("owner_totp")) != null;
+}
+/** A code is accepted once: a step already used (or older) is refused. */
+async function useCode(secret: string, code: string): Promise<boolean> {
+  const step = totpMatch(secret, code);
+  if (step == null) return false;
+  const last = Number((await getConfig("owner_totp_last")) ?? 0);
+  if (step <= last) return false;
+  await setConfig("owner_totp_last", String(step));
+  return true;
+}
+export async function checkOwnerCode(code: string): Promise<boolean> {
+  const secret = await readTotp("owner_totp");
+  return !!secret && (await useCode(secret, code));
+}
+/** Start setting up: a new secret, kept aside until a first code from the phone confirms it. */
+export async function startTwoFactorSetup(): Promise<{ secret: string; uri: string } | null> {
+  const key = sealSecret();
+  if (!key) return null;
+  const secret = newTotpSecret();
+  await setConfig("owner_totp_pending", JSON.stringify(sealText(secret, key, TOTP_AAD)));
+  return { secret, uri: totpUri(secret, "owner", "Lab codes") };
+}
+export async function confirmTwoFactor(code: string): Promise<boolean> {
+  const secret = await readTotp("owner_totp_pending");
+  if (!secret || !(await useCode(secret, code))) return false;
+  await setConfig("owner_totp", (await getConfig("owner_totp_pending"))!);
+  await query(`delete from license_config where key = 'owner_totp_pending'`);
+  return true;
+}
+/** Turn it off: needs a current code, unless it was switched off from the environment. */
+export async function disableTwoFactor(code: string): Promise<boolean> {
+  if (!twoFactorForcedOff() && !(await checkOwnerCode(code))) return false;
+  await query(`delete from license_config where key in ('owner_totp', 'owner_totp_pending')`);
+  return true;
 }
 
 // ── Codes ─────────────────────────────────────────────────────────────────────

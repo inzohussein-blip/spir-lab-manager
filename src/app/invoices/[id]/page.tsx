@@ -16,7 +16,8 @@ const statusTone: Record<string, string> = {
   void: "bg-gray-100 text-gray-500",
 };
 
-export default async function InvoiceDetailPage({ params }: { params: { id: string } }) {
+export default async function InvoiceDetailPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const inv = await queryOne<any>(
     `select inv.*, p.full_name, p.phone from invoices inv
        left join patients p on p.id = inv.patient_id where inv.id = $1`,
