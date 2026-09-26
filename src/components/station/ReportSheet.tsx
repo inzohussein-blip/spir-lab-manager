@@ -145,6 +145,12 @@ export function ReportSheet({
         #report-sheet td, #report-sheet th { padding: ${pad.a5}px 4px !important; }
         #report-sheet .form-table td, #report-sheet .form-table th { padding: 0.5px 4px !important; }
         #report-sheet .form-sec { margin-bottom: 2.5mm; }
+        #report-sheet .cs-box { padding: 5px 12px !important; font-size: ${(ts.fontSize * 10 / 14).toFixed(1)}px !important; }
+        #report-sheet .cs-box > div { padding-top: 1px; padding-bottom: 1px; }
+        #report-sheet .cs-ast { margin-top: 3mm; }
+        #report-sheet .cs-ast-title { display: none; }
+        #report-sheet .report-sign { margin-top: 3mm; }
+        #report-sheet .report-sign .mb-6 { margin-bottom: 4mm; }
         #report-sheet .form-sec:last-child { margin-bottom: 0; }
         #report-sheet table.form-table { font-size: ${(ts.fontSize * 9 / 14).toFixed(1)}px !important; line-height: 1.2 !important; }
         #report-sheet .report-footer { left: 8mm; right: 8mm; bottom: 5mm; padding: 4px 8px; font-size: 9px; }
@@ -182,7 +188,7 @@ export function ReportSheet({
 
         {/* Bottom group — signature sits at the bottom of the last page */}
         <div className="report-keep mt-auto">
-          <div className="mt-10 flex items-end justify-between text-xs text-gray-600">
+          <div className="report-sign mt-10 flex items-end justify-between text-xs text-gray-600">
             <div>
               <div className="mb-6">اعتمد النتائج:</div>
               <div className="w-48 border-t pt-1 text-center text-gray-500" style={{ borderColor: GOLD }}>التوقيع / الختم</div>

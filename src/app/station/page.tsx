@@ -669,12 +669,10 @@ function StationEntryPage() {
                               className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white hover:bg-brand-dark">
                               <ClipboardList className="size-4" /> {pr.filled ? "تعديل الاستمارة" : "فتح الاستمارة"}
                             </button>
-                            {code !== "CS" && (
-                              <button type="button" onClick={() => setResults((r) => ({ ...r, [t.id]: encodeForm(fillNormals(code, decodeForm(r[t.id]))) }))}
-                                title="يملأ الحقول الفارغة بالقيم الطبيعية" className="rounded-lg border border-line px-2.5 py-2 text-xs hover:bg-canvas">
-                                ملء الطبيعي
-                              </button>
-                            )}
+                            <button type="button" onClick={() => setResults((r) => ({ ...r, [t.id]: encodeForm(fillNormals(code, decodeForm(r[t.id]))) }))}
+                              title={code === "CS" ? "نتيجة الزرع: No growth" : "يملأ الحقول الفارغة بالقيم الطبيعية"} className="rounded-lg border border-line px-2.5 py-2 text-xs hover:bg-canvas">
+                              ملء الطبيعي
+                            </button>
                           </div>
                         </div>
                       );

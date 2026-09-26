@@ -86,7 +86,7 @@ export const GUE: Template = {
 };
 
 // ── General Stool Examination ────────────────────────────────────────────────
-const HPF_S = [...plain("0 - 1", "1 - 2", "2 - 5", "5 - 10", "10 - 15", "15 - 20", "20 - 30", "30 - 50"), o("Loaded / Plenty", "مملوء")];
+const HPF_S = [...plain("Nil", "0 - 1", "1 - 2", "2 - 5", "5 - 10", "10 - 15", "15 - 20", "20 - 30", "30 - 50"), o("Loaded / Plenty", "مملوء")];
 const PARASITES = [o("Nil", "لا يوجد"), o("Entamoeba histolytica (Cyst)"), o("Entamoeba histolytica (Trophozoite)"), o("Giardia lamblia (Cyst)"), o("Giardia lamblia (Trophozoite)"), o("Entamoeba coli (Cyst)"), o("Blastocystis hominis"), o("Cryptosporidium spp.")];
 const HELMINTHS = [o("Nil", "لا يوجد"), o("Ascaris lumbricoides Ova"), o("Enterobius vermicularis (Pinworm Ova)"), o("Hymenolepis nana Ova"), o("Ancylostoma duodenale Ova"), o("Taenia spp. Ova")];
 export const GSE: Template = {
@@ -111,7 +111,7 @@ export const GSE: Template = {
       title: "2. Microscopic Examination", col: "Unit / Field",
       rows: [
         { k: "pus", label: "Pus Cells (WBCs)", unit: "/ H.P.F", normal: "0 - 1", opts: HPF_S },
-        { k: "rbc", label: "R.B.Cs (Red Blood Cells)", unit: "/ H.P.F", normal: "0 - 1", opts: HPF_S },
+        { k: "rbc", label: "R.B.Cs (Red Blood Cells)", unit: "/ H.P.F", normal: "Nil", opts: HPF_S },
         { sub: "PARASITES & OVA" },
         { k: "ova", label: "Ova (Eggs)", unit: "/ H.P.F", normal: "Nil", opts: HELMINTHS },
         { k: "larva", label: "Larva", unit: "/ H.P.F", normal: "Nil", opts: [o("Nil", "لا يوجد"), o("Present", "موجود")] },
@@ -136,8 +136,8 @@ export const SFA: Template = {
     {
       title: "Macroscopical Examination", col: "Normal Values",
       rows: [
-        { k: "abstinence", label: "Abstinence Period", ref: "3 – 5 days", opts: plain("1 day", "2 days", "3 days", "4 days", "5 days", "6 days", "7 days", "> 7 days") },
-        { k: "volume", label: "Volume", ref: "≥ 1.5 ml", opts: ["0.5", "1.0", "1.5", "2.0", "2.5", "3.0", "3.5", "4.0", "4.5", "5.0", "5.5", "6.0"].map((v) => ({ v: `${v} ml` })) },
+        { k: "abstinence", label: "Abstinence Period", ref: "3 – 5 days", normal: "3 days", opts: plain("1 day", "2 days", "3 days", "4 days", "5 days", "6 days", "7 days", "> 7 days") },
+        { k: "volume", label: "Volume", ref: "≥ 1.5 ml", normal: "3.0 ml", opts: ["0.5", "1.0", "1.5", "2.0", "2.5", "3.0", "3.5", "4.0", "4.5", "5.0", "5.5", "6.0"].map((v) => ({ v: `${v} ml` })) },
         { k: "viscosity", label: "Viscosity", ref: "Drops ≤ 2 cm thread", normal: "Normal",
           opts: [o("Normal", "طبيعي"), o("Viscid / High Viscosity", "عالي اللزوجة"), o("Liquid / Low Viscosity", "سائل / منخفض اللزوجة")] },
         { k: "liquefaction", label: "Liquefaction Time", ref: "Within 30 – 60 minutes", normal: "Within 30 - 60 Minutes",
@@ -150,20 +150,20 @@ export const SFA: Template = {
     {
       title: "Microscopical Examination", col: "Normal Values",
       rows: [
-        { k: "conc", label: "Sperm Concentration", ref: "≥ 15 millions/ml",
+        { k: "conc", label: "Sperm Concentration", ref: "≥ 15 millions/ml", normal: "60 millions/ml",
           opts: [o("Nil (Azoospermia)", "لا توجد نطف"), ...["< 1", "5", "10", "15", "20", "30", "40", "60", "80", "100", "> 120"].map((v) => ({ v: `${v} millions/ml` })), o("Oligozoospermia", "قلة النطف")] },
-        { k: "total", label: "Total Sperm Count", ref: "≥ 39 millions/ejaculate" },
+        { k: "total", label: "Total Sperm Count", ref: "≥ 39 millions/ejaculate", normal: "180 millions/ejaculate" },
         { sub: "Sperm Motility Percent:" },
-        { k: "pr", label: "Progressive Motile (Active)", ref: "Progressive motile sperms ≥ 40% ; within 60 minutes.", indent: true, opts: PERCENT },
-        { k: "np", label: "Non-Progressive Motile (Sluggish)", indent: true, opts: PERCENT },
-        { k: "im", label: "Immotile", indent: true, opts: PERCENT },
-        { k: "tm", label: "Total Motility (PR + NP)", ref: "≥ 40%", indent: true, opts: PERCENT },
+        { k: "pr", label: "Progressive Motile (Active)", ref: "Progressive motile sperms ≥ 40% ; within 60 minutes.", indent: true, normal: "50%", opts: PERCENT },
+        { k: "np", label: "Non-Progressive Motile (Sluggish)", indent: true, normal: "10%", opts: PERCENT },
+        { k: "im", label: "Immotile", indent: true, normal: "40%", opts: PERCENT },
+        { k: "tm", label: "Total Motility (PR + NP)", ref: "≥ 40%", indent: true, normal: "60%", opts: PERCENT },
         { sub: "Sperm Morphology Percent:" },
-        { k: "normalf", label: "Normal", ref: "> 30%", indent: true, opts: PERCENT },
-        { k: "abnormalf", label: "Abnormal", ref: "< 70%", indent: true, opts: PERCENT },
-        { k: "defects", label: "Abnormal Forms Type", indent: true,
+        { k: "normalf", label: "Normal", ref: "> 30%", indent: true, normal: "40%", opts: PERCENT },
+        { k: "abnormalf", label: "Abnormal", ref: "< 70%", indent: true, normal: "60%", opts: PERCENT },
+        { k: "defects", label: "Abnormal Forms Type", indent: true, normal: "Mixed (Head / Neck / Tail)",
           opts: [o("Head Defects", "تشوهات الرأس"), o("Neck / Midpiece Defects", "تشوهات العنق"), o("Tail Defects", "تشوهات الذيل"), o("Mixed (Head / Neck / Tail)", "مختلطة")] },
-        { k: "vitality", label: "Vitality (Live Sperms)", ref: "≥ 58%", opts: PERCENT },
+        { k: "vitality", label: "Vitality (Live Sperms)", ref: "≥ 58%", normal: "70%", opts: PERCENT },
         { k: "aggregation", label: "Sperm Aggregation", ref: "-ve", normal: "-ve", opts: plain("-ve", "+", "++", "+++") },
         { k: "agglutination", label: "Sperm Agglutination", ref: "< 10 Sperm/agglutinate", normal: "Nil",
           opts: AMOUNT },
@@ -190,21 +190,29 @@ export const CS_GROWTH: Opt[] = [
   o("Contaminated sample — re-sample required", "عينة ملوثة / يُعاد الفحص"),
 ];
 export const CS_ORGANISMS: { group: string; items: string[] }[] = [
-  { group: "Gram-Negative Bacteria", items: ["Escherichia coli (E. coli)", "Klebsiella pneumoniae", "Pseudomonas aeruginosa", "Proteus mirabilis", "Proteus vulgaris", "Enterobacter species", "Salmonella spp.", "Shigella spp."] },
+  { group: "Gram-Negative Bacteria", items: ["Escherichia coli (E. coli)", "Klebsiella spp.", "Klebsiella pneumoniae", "Pseudomonas aeruginosa", "Proteus mirabilis", "Proteus vulgaris", "Enterobacter species", "Salmonella spp.", "Shigella spp."] },
   { group: "Gram-Positive Bacteria", items: ["Staphylococcus aureus", "Methicillin-Resistant Staphylococcus aureus (MRSA)", "Enterococcus faecalis", "Streptococcus pneumoniae", "Streptococcus pyogenes"] },
   { group: "Fungi & Yeasts", items: ["Candida albicans", "Candida non-albicans spp."] },
 ];
 export const CS_COLONY: Opt[] = [
   o("< 10⁴ CFU/mL", "غير دال سريرياً"), o("10⁴ - 10⁵ CFU/mL", "نمو متوسط / مشكوك فيه"), o("> 10⁵ CFU/mL", "نمو مؤكد وشديد"),
 ];
+/** Antibiotics in the order of the lab's paper report (printed in two columns: first half left, second half right). */
 export const CS_ANTIBIOTICS: { group: string; items: string[] }[] = [
-  { group: "Penicillins & Beta-lactams", items: ["Amoxicillin/Clavulanate", "Ampicillin/Sulbactam", "Piperacillin/Tazobactam"] },
-  { group: "Cephalosporins", items: ["Ceftriaxone", "Cefotaxime", "Ceftazidime", "Cefepime", "Cefixime"] },
-  { group: "Fluoroquinolones", items: ["Ciprofloxacin", "Levofloxacin", "Ofloxacin"] },
-  { group: "Carbapenems", items: ["Meropenem", "Imipenem"] },
-  { group: "Aminoglycosides", items: ["Amikacin", "Gentamicin"] },
-  { group: "Glycopeptides & Others", items: ["Vancomycin", "Nitrofurantoin", "Trimethoprim/Sulfamethoxazole", "Linezolid"] },
+  { group: "Types of antibiotics", items: [
+    "Amoxiclave", "Amikacin", "Meropenem", "Aztreonam", "Cefotaxime", "Ceftriaxone", "Ciprofloxacin", "Cefoxitin", "Cefixime", "Ceftazidime",
+    "Cefpodoxime", "Cefuroxime", "Cefepime", "Cephalexin", "Azithromycin", "Amoxicillin", "Piperacillin", "Penicillin G", "Tetracycline",
+    "Tobramycin", "Trimethoprim", "Nitrofurantoin", "Nalidixic acid", "Norfloxacin", "Imipenem", "Gentamicin", "Ofloxacin", "Levofloxacin",
+    "Lincomycin", "Rifampin", "Moxifloxacin", "Metronidazole", "Clarithromycin", "Clindamycin", "Oxacillin", "Erythromycin", "Vancomycin", "Streptomycin",
+  ] },
 ];
+/** Sensitivity scale, stored as printed. Older saves used S / I / R. */
+export const AST_SCALE = [
+  { v: "H.S", name: "High sensitive", ar: "حساس جداً" },
+  { v: "M.S", name: "Moderate sensitive", ar: "حساس متوسط" },
+  { v: "R", name: "Resistant", ar: "مقاوم" },
+] as const;
+export const astValue = (v?: string) => (v === "S" ? "H.S" : v === "I" ? "M.S" : v ?? "");
 export const isGrowth = (g?: string) => (g ?? "").toLowerCase().startsWith("significant");
 
 // ── Registry + value encoding ────────────────────────────────────────────────
@@ -282,7 +290,7 @@ export const fieldsOf = (t: Template): TField[] => t.sections.flatMap((s) => s.r
 /** Number of filled answers / total, for the entry-screen badge. */
 export function formProgress(code: FormCode, values: FormValues): { filled: number; total: number } {
   if (code === "CS") {
-    const need = isGrowth(values.growth) ? ["specimen", "growth", "organism", "colony"] : ["specimen", "growth"];
+    const need = isGrowth(values.growth) ? ["specimen", "growth", "organism"] : ["specimen", "growth"];
     return { filled: need.filter((k) => (values[k] ?? "").trim()).length, total: need.length };
   }
   const f = fieldsOf(templateOf(code));
@@ -292,7 +300,7 @@ export function formProgress(code: FormCode, values: FormValues): { filled: numb
 /** One-line text version (CSV export). */
 export function formSummary(code: FormCode, values: FormValues): string {
   if (code === "CS") {
-    const ab = Object.entries(values).filter(([k]) => k.startsWith("ab:")).map(([k, v]) => `${k.slice(3)}=${v}`);
+    const ab = Object.entries(values).filter(([k]) => k.startsWith("ab:")).map(([k, v]) => `${k.slice(3)}=${astValue(v)}`);
     return [values.specimen, values.growth, values.organism, values.colony, ab.join(", ")].filter(Boolean).join(" | ");
   }
   return fieldsOf(templateOf(code)).filter((f) => values[f.k]).map((f) => `${f.label}: ${printValue(values[f.k])}`).join("; ");

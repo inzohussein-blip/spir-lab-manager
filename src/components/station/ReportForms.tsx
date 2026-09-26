@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, X, Wand2, Eraser, Check } from "lucide-react";
 import {
-  templateOf, cultureOf, formTitle, isSub, fieldsOf, sfaComputed, isGrowth, CS_GROWTH,
+  templateOf, cultureOf, formTitle, isSub, fieldsOf, sfaComputed, isGrowth, CS_GROWTH, AST_SCALE, astValue,
   type Opt, type FormCode, type FormValues,
 } from "@/lib/station/templates";
 
@@ -54,9 +54,9 @@ export function Combo({ value, onChange, opts, placeholder, ariaLabel }: {
   );
 }
 
-/** Fill every empty field with its normal value. */
+/** Fill every empty field with its normal value (a normal culture is "no growth"). */
 export function fillNormals(code: FormCode, values: FormValues): FormValues {
-  if (code === "CS") return values;
+  if (code === "CS") return values.growth?.trim() ? values : { ...values, growth: CS_GROWTH[0].v };
   const next = { ...values };
   for (const f of fieldsOf(templateOf(code))) if (!next[f.k]?.trim() && f.normal) next[f.k] = f.normal;
   return next;
@@ -81,12 +81,10 @@ export function FormDialog({ code, testName, values, onChange, onClose }: {
             <div className="truncate font-bold">{testName}</div>
             <div className="text-[11px] text-muted" dir="ltr" style={{ textAlign: "right" }}>{formTitle(code)}</div>
           </div>
-          {code !== "CS" && (
-            <button type="button" onClick={() => onChange(fillNormals(code, values))} title="يملأ الحقول الفارغة فقط"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-sm hover:bg-canvas">
-              <Wand2 className="size-4" /> ملء القيم الطبيعية
-            </button>
-          )}
+          <button type="button" onClick={() => onChange(fillNormals(code, values))} title={code === "CS" ? "نتيجة الزرع: No growth" : "يملأ الحقول الفارغة فقط"}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-sm hover:bg-canvas">
+            <Wand2 className="size-4" /> ملء القيم الطبيعية
+          </button>
           <button type="button" onClick={() => window.confirm("مسح كل حقول الاستمارة؟") && onChange({})}
             className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-sm text-red-600 hover:bg-red-50">
             <Eraser className="size-4" /> مسح
@@ -147,31 +145,33 @@ function CultureForm({ values, set }: { values: FormValues; set: (k: string, v: 
         {field("Specimen (نوع العينة)", <Combo value={values.specimen ?? ""} onChange={(v) => set("specimen", v)} opts={lists.specimens} ariaLabel="Specimen" />)}
         {field("Culture Result (نتيجة النمو)", <Combo value={values.growth ?? ""} onChange={(v) => set("growth", v)} opts={CS_GROWTH} ariaLabel="Culture" />)}
         {growth && field("Isolated Organism (البكتيريا المعزولة)", <Combo value={values.organism ?? ""} onChange={(v) => set("organism", v)} opts={organisms} ariaLabel="Organism" />)}
-        {growth && field("Colony Count (عدد المستعمرات)", <Combo value={values.colony ?? ""} onChange={(v) => set("colony", v)} opts={lists.colony} ariaLabel="Colony" />)}
+        {growth && field("Colony Count (عدد المستعمرات — اختياري)", <Combo value={values.colony ?? ""} onChange={(v) => set("colony", v)} opts={lists.colony} ariaLabel="Colony" />)}
       </div>
 
       {growth && (
         <div>
-          <div className="mb-2 flex items-center justify-between gap-2">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <div className="text-sm font-bold">فحص الحساسية للمضادات (AST)</div>
-            <div className="text-[11px] text-muted">اضغط S أو I أو R لكل مضاد جُرِّب — اضغط مرة أخرى للإلغاء. غير المحدد لا يُطبع.</div>
+            <div className="text-[11px] text-muted">
+              {AST_SCALE.map((x) => `${x.v} = ${x.ar}`).join(" · ")} — اضغط مرة أخرى للإلغاء. غير المحدد يُطبع فارغاً.
+            </div>
           </div>
-          <div dir="ltr" className="grid gap-3 md:grid-cols-2">
-            {lists.antibiotics.map((g, gi) => (
-              <div key={gi} className="rounded-xl border border-line p-3" dir="ltr">
-                <div className="mb-1.5 text-left text-[11px] font-bold uppercase tracking-wide text-muted">{g.group}</div>
+          {lists.antibiotics.map((g, gi) => (
+            <div key={gi} className="mb-3 rounded-xl border border-line p-3" dir="ltr">
+              {lists.antibiotics.length > 1 && <div className="mb-1.5 text-left text-[11px] font-bold uppercase tracking-wide text-muted">{g.group}</div>}
+              <div className="gap-x-8 md:columns-2">
                 {g.items.map((ab) => {
-                  const cur = values[`ab:${ab}`] ?? "";
+                  const cur = astValue(values[`ab:${ab}`]);
                   return (
-                    <div key={ab} className="flex items-center justify-between gap-2 py-1 text-sm">
+                    <div key={ab} className="flex break-inside-avoid items-center justify-between gap-2 border-b border-line/60 py-1 text-sm">
                       <span className="text-left">{ab}</span>
                       <div className="flex gap-1">
-                        {(["S", "I", "R"] as const).map((x) => (
-                          <button key={x} type="button" onClick={() => set(`ab:${ab}`, cur === x ? "" : x)} aria-label={`${ab} ${x}`} aria-pressed={cur === x}
-                            className={`grid size-7 place-items-center rounded-md border text-xs font-bold ${cur === x
-                              ? x === "S" ? "border-green-600 bg-green-600 text-white" : x === "I" ? "border-amber-500 bg-amber-500 text-white" : "border-red-600 bg-red-600 text-white"
+                        {AST_SCALE.map(({ v }) => (
+                          <button key={v} type="button" onClick={() => set(`ab:${ab}`, cur === v ? "" : v)} aria-label={`${ab} ${v}`} aria-pressed={cur === v}
+                            className={`h-7 w-10 rounded-md border text-xs font-bold ${cur === v
+                              ? v === "H.S" ? "border-green-600 bg-green-600 text-white" : v === "M.S" ? "border-amber-500 bg-amber-500 text-white" : "border-red-600 bg-red-600 text-white"
                               : "border-line text-muted hover:bg-canvas"}`}>
-                            {x}
+                            {v}
                           </button>
                         ))}
                       </div>
@@ -179,8 +179,8 @@ function CultureForm({ values, set }: { values: FormValues; set: (k: string, v: 
                   );
                 })}
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
         </div>
       )}
 
