@@ -141,7 +141,7 @@ self.addEventListener("message", (event) => {
   const source = event.source;
   const tell = (msg) => { try { source && source.postMessage({ type: "local-offline", ...msg }); } catch { /* page gone */ } };
   running = running || prepare(tell).finally(() => { running = null; });
-  event.waitUntil(running.then((r) => tell(r)));
+  event.waitUntil(running.then((r) => tell(r), (e) => tell({ status: "error", error: String((e && e.message) || e) })));
 });
 
 // The build a page belongs to: <meta name="lab-build"> (set in the root layout), else the

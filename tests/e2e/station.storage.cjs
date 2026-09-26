@@ -76,4 +76,4 @@ const { B, ok, launch, done, kv, kvPut, resetLocal, pdfPages } = require('./lib.
   ok(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.join(' | ') : ''));
   await b.close();
   done();
-})().catch((e) => { console.error(e); process.exitCode = 1; });
+})().catch((e) => { console.error(e); process.exit(1); });

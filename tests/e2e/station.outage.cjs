@@ -83,4 +83,4 @@ const close = (s) => new Promise((res) => { s.closeAllConnections?.(); s.close((
   await b.close();
   await stop(next);
   done();
-})().catch((e) => { console.error(e); process.exitCode = 1; process.exit(1); });
+})().catch((e) => { console.error(e); process.exit(1); });

@@ -44,4 +44,4 @@ const routes = ['/', '/appointments', '/audit', '/calendar', '/insights', '/inve
   ok(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.slice(0, 3).join(' | ') : ''));
   await b.close();
   done();
-})().catch((e) => { console.error(e); process.exitCode = 1; });
+})().catch((e) => { console.error(e); process.exit(1); });

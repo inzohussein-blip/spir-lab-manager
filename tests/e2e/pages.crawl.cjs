@@ -33,4 +33,4 @@ const routes = ['/welcome', '/station', '/station/inventory', '/station/records'
   }
   await b.close();
   done();
-})().catch((e) => { console.error(e); process.exitCode = 1; });
+})().catch((e) => { console.error(e); process.exit(1); });

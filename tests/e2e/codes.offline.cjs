@@ -72,4 +72,4 @@ const LAB = 'مختبر بدون إنترنت ' + Date.now().toString(36); // ow
   ok(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.join(' | ') : ''));
   await b.close();
   done();
-})().catch((e) => { console.error(e); process.exitCode = 1; });
+})().catch((e) => { console.error(e); process.exit(1); });
