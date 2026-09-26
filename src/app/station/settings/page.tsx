@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Settings, Check, Image as ImageIcon, Download, Upload, Trash2, Stethoscope, Plus, Pencil, X, Smartphone, History, ListCollapse, ClipboardList } from "lucide-react";
+import { Settings, Check, Image as ImageIcon, Download, Upload, Trash2, Stethoscope, Plus, Pencil, X, Smartphone, History, ListCollapse, ClipboardList, QrCode as QrCodeIcon } from "lucide-react";
+import { labQrCode, QR_TITLE_DEFAULT, QR_HINT_DEFAULT } from "@/lib/station/labQr";
+import { LabQrCard } from "@/components/station/ReportSheet";
 import {
   getSettings, saveSettings, normalizeUrl, exportBackup, importBackup, getDoctors, saveDoctors, markBackupNow, daysSinceBackup, getVisits, storageUsage, requestPersistentStorage, uid,
   type StationSettings, type StationDoctor,
@@ -128,42 +130,6 @@ export default function StationSettingsPage() {
             <input value={s.footer ?? ""} onChange={(e) => setS({ ...s, footer: e.target.value })} placeholder="العنوان - الهاتف" className={`mt-1 ${inp}`} />
           </label>
 
-          <Toggle
-            checked={s.labQr !== false}
-            onChange={(v) => setOption({ labQr: v })}
-            label="رمز معلومات المختبر (QR) أسفل التقرير"
-            desc="مربع صغير بجانب التوقيع يقرؤه أي هاتف بالكاميرا فيفتح موقع المختبر أو يعرض معلوماته."
-          />
-          {s.labQr !== false && (
-            <label className="text-sm font-medium">رابط موقع المختبر (اختياري)
-              <input
-                value={s.labUrl ?? ""}
-                onChange={(e) => setS({ ...s, labUrl: e.target.value })}
-                dir="ltr"
-                inputMode="url"
-                placeholder="https://… أو رابط الموقع على خرائط Google"
-                className={`mt-1 text-left ${inp}`}
-              />
-              <span className={`block text-xs font-normal ${s.labUrl?.trim() && !normalizeUrl(s.labUrl) ? "text-red-600" : "text-muted"}`}>
-                {s.labUrl?.trim() && !normalizeUrl(s.labUrl)
-                  ? "الرابط غير صحيح — اكتبه كاملاً بلا مسافات، مثل lab.com أو https://maps.app.goo.gl/…"
-                  : "عند إدخال رابط يفتح رمز المختبر الموقع مباشرة عند مسحه بالهاتف (بدل نص المعلومات). اضغط «حفظ» بعد التعديل."}
-              </span>
-            </label>
-          )}
-          {s.labQr !== false && !normalizeUrl(s.labUrl) && (
-            <label className="text-sm font-medium">نص رمز المختبر (اختياري)
-              <textarea
-                value={s.labQrText ?? ""}
-                onChange={(e) => setS({ ...s, labQrText: e.target.value })}
-                rows={3}
-                placeholder={[s.labName, s.labSubtitle, s.footer].map((x) => x?.trim()).filter(Boolean).join("\n") || "اسم المختبر، العنوان، الهاتف، رابط الموقع…"}
-                className={`mt-1 ${inp}`}
-              />
-              <span className="block text-xs font-normal text-muted">إذا تُرك فارغاً يحمل الرمز اسم المختبر والعنوان الفرعي وسطر التذييل. اضغط «حفظ» بعد التعديل.</span>
-            </label>
-          )}
-
           <div className="text-sm font-medium">شعار المختبر</div>
           <div className="flex items-center gap-3">
             {s.logo ? (
@@ -189,6 +155,72 @@ export default function StationSettingsPage() {
             <Check className="size-4" /> حفظ
           </button>
           {saved && <p className="text-xs text-brand-dark">تم الحفظ.</p>}
+        </div>
+      </div>
+
+      {/* QR code(s) at the bottom of the report */}
+      <div className="mb-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
+        <div className="mb-3 flex items-center gap-2 text-sm font-semibold"><QrCodeIcon className="size-4" /> رمز QR أسفل التقرير</div>
+        <div className="flex flex-col gap-3">
+          <Toggle
+            checked={s.labQr !== false}
+            onChange={(v) => setOption({ labQr: v })}
+            label="طباعة رمز المختبر بجانب التوقيع"
+            desc="يقرؤه أي هاتف بالكاميرا مباشرة، دون تطبيق."
+          />
+          {s.labQr !== false && (() => {
+            const badUrl = !!s.labUrl?.trim() && !normalizeUrl(s.labUrl);
+            const code = labQrCode(s);
+            return (
+              <>
+                <p className="text-xs text-muted">
+                  رمز واحد يحمل كل معلومات المختبر: الاسم والهواتف والعنوان ورابط الموقع. يظهر للمراجع كبطاقة اتصال — يضغط الرقم للاتصال، أو الرابط لفتح الخريطة، أو يحفظ المختبر في جهات الاتصال.
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="text-sm font-medium">أرقام الهاتف
+                    <input value={s.labPhone ?? ""} onChange={(e) => setS({ ...s, labPhone: e.target.value })} dir="ltr" inputMode="tel" placeholder="07XX XXX XXXX, 07XX XXX XXXX" className={`mt-1 text-left ${inp}`} />
+                    <span className="block text-xs font-normal text-muted">أكثر من رقم؟ افصل بينها بفاصلة.</span>
+                  </label>
+                  <label className="text-sm font-medium">العنوان
+                    <input value={s.labAddress ?? ""} onChange={(e) => setS({ ...s, labAddress: e.target.value })} placeholder="المدينة - الحي - أقرب نقطة دالة" className={`mt-1 ${inp}`} />
+                  </label>
+                </div>
+                <label className="text-sm font-medium">رابط موقع المختبر
+                  <input value={s.labUrl ?? ""} onChange={(e) => setS({ ...s, labUrl: e.target.value })} dir="ltr" inputMode="url"
+                    placeholder="https://maps.app.goo.gl/… أو رابط الموقع" className={`mt-1 text-left ${inp}`} />
+                  <span className={`block text-xs font-normal ${badUrl ? "text-red-600" : "text-muted"}`}>
+                    {badUrl ? "الرابط غير صحيح — اكتبه كاملاً بلا مسافات، مثل lab.com أو https://maps.app.goo.gl/…"
+                      : "من خرائط Google: افتح موقع المختبر ← مشاركة ← نسخ الرابط، ثم الصقه هنا."}
+                  </span>
+                </label>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="text-sm font-medium">العبارة الرئيسية بجانب الرمز
+                    <input value={s.labQrTitle ?? ""} onChange={(e) => setS({ ...s, labQrTitle: e.target.value })} placeholder={QR_TITLE_DEFAULT} className={`mt-1 ${inp}`} />
+                  </label>
+                  <label className="text-sm font-medium">العبارة الصغيرة تحتها
+                    <input value={s.labQrHint ?? ""} onChange={(e) => setS({ ...s, labQrHint: e.target.value })} placeholder={QR_HINT_DEFAULT} className={`mt-1 ${inp}`} />
+                  </label>
+                </div>
+                <Toggle
+                  checked={s.labQrLogo !== false}
+                  onChange={(v) => setOption({ labQrLogo: v })}
+                  label="شعار المختبر وسط الرمز"
+                  desc="يبقى الرمز مقروءاً لأنه يُصنع بدرجة تصحيح أخطاء عالية."
+                />
+
+                <div className="rounded-xl border border-dashed border-line bg-white p-3">
+                  <div className="mb-2 text-xs font-medium text-muted">معاينة — جرّب مسحها بهاتفك من الشاشة</div>
+                  {code && <div className="flex" dir="ltr"><LabQrCard q={code} logo={s.labQrLogo !== false ? s.logo : undefined} /></div>}
+                </div>
+
+                <button onClick={() => save()} className="inline-flex w-fit items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark">
+                  <Check className="size-4" /> حفظ
+                </button>
+                {saved && <p className="text-xs text-brand-dark">تم الحفظ.</p>}
+              </>
+            );
+          })()}
         </div>
       </div>
 

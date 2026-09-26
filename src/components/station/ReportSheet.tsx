@@ -1,10 +1,11 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import { flagFor, rangeLabel, normalizeUrl, type Gender, type PrevResult, type StationSettings, type StationTest } from "@/lib/station/store";
+import { flagFor, rangeLabel, type Gender, type PrevResult, type StationSettings, type StationTest } from "@/lib/station/store";
 import { tableStyleOf, tableColors, DENSITY_PAD, GAP_PX, type TableStyle } from "@/lib/station/tableStyle";
 import { Barcode } from "@/components/station/Barcode";
 import { QrCode } from "@/components/station/QrCode";
+import { labQrCode, type LabQrCode } from "@/lib/station/labQr";
 import { FormReport } from "@/components/station/FormReport";
 import { isFormCode, decodeForm, formOptionsOf, type FormCode } from "@/lib/station/templates";
 
@@ -90,11 +91,9 @@ export function ReportSheet({
     else groups.push({ cat, rows: [r] });
   }
 
-  // QR code at the bottom (Settings → «رمز معلومات المختبر», on by default): opens the lab's website
-  // when a link is set, otherwise carries the lab's details as text.
-  const labUrl = normalizeUrl(settings.labUrl);
-  const labQr = settings.labQr === false ? "" : (labUrl || settings.labQrText?.trim() ||
-    [settings.labName, settings.labSubtitle, settings.footer].map((x) => x?.trim()).filter(Boolean).join("\n"));
+  // QR code at the bottom (Settings → «رمز QR أسفل التقرير», see lib/station/labQr).
+  const qrCode = labQrCode(settings);
+  const qrLogo = settings.labQrLogo !== false ? settings.logo : undefined;
 
   const header = (
     <>
@@ -164,7 +163,8 @@ export function ReportSheet({
         #report-sheet .cs-ast-title { display: none; }
         #report-sheet .report-pbc > span { width: 36mm !important; height: 8mm !important; }
         #report-sheet .report-pbc > div { font-size: 9.5px !important; }
-        #report-sheet .report-qr > img { width: 15mm !important; height: 15mm !important; }
+        #report-sheet .report-qr img { width: 20mm !important; height: 20mm !important; }
+        #report-sheet .report-qr { padding: 3px 5px !important; }
         #report-sheet .form-top { margin-top: 2.5mm; }
         #report-sheet .form-title { font-size: 15px; }
         #report-sheet .form-sec-title { padding-top: 2px; padding-bottom: 2px; font-size: 12px; }
@@ -212,15 +212,7 @@ export function ReportSheet({
               <div className="mb-6">اعتمد النتائج:</div>
               <div className="w-48 border-t pt-1 text-center text-gray-500" style={{ borderColor: GOLD }}>التوقيع / الختم</div>
             </div>
-            {labQr && (
-              <div className="report-qr flex items-center gap-2">
-                <div className="text-left text-[10px] leading-snug text-gray-500">
-                  <div className="font-bold" style={{ color: PURPLE }}>{labUrl ? "موقع المختبر" : "معلومات المختبر"}</div>
-                  <div>امسح الرمز بالهاتف</div>
-                </div>
-                <QrCode text={labQr} className="block size-16" />
-              </div>
-            )}
+            {qrCode && <LabQrCard q={qrCode} logo={qrLogo} />}
           </div>
 
           {settings.footer && (
@@ -312,6 +304,19 @@ export function ResultsTable({ ts, groups, empty = false, emptyText = "No tests 
             ])}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+}
+
+/** The printed QR code with its caption (title + hint), in a small gold-edged card. */
+export function LabQrCard({ q, logo }: { q: LabQrCode; logo?: string }) {
+  return (
+    <div className="report-qr flex items-center gap-2 rounded-lg border px-2 py-1.5" style={{ borderColor: GOLD }}>
+      <QrCode text={q.content} logo={logo} className="block size-[22mm]" />
+      <div dir="rtl" className="max-w-[34mm] text-right leading-snug">
+        <div className="text-[11px] font-bold" style={{ color: PURPLE }}>{q.title}</div>
+        <div className="mt-0.5 text-[9.5px] text-gray-500">{q.hint}</div>
       </div>
     </div>
   );

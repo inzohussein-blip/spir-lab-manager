@@ -162,10 +162,16 @@ export interface StationSettings {
   sfaDiagnosis?: boolean;
   /** QR code with the lab's details at the bottom of the report — on by default. */
   labQr?: boolean;
-  /** Its text; empty → lab name, subtitle and footer line. */
-  labQrText?: string;
-  /** The lab's website / map link — when set, the QR code opens it directly. */
+  /** The lab's website / map link. */
   labUrl?: string;
+  /** Contact-card details carried by the report QR code (see ./labQr). */
+  labPhone?: string;
+  labAddress?: string;
+  /** Lab logo in the middle of the QR code — on by default. */
+  labQrLogo?: boolean;
+  /** Printed captions next to the code (empty → defaults). */
+  labQrTitle?: string;
+  labQrHint?: string;
   /** Delivery status on saved visits — off by default. */
   deliveryStatus?: boolean;
   /** Year / month / day selector next to the age field — off by default. */
