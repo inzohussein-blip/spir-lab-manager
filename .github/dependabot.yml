@@ -1,0 +1,18 @@
+# Library updates: one grouped Pull Request a month into main (security fixes come sooner,
+# when "Dependabot security updates" is on in the repository settings). Each one runs the tests.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    target-branch: main
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: main
+    schedule:
+      interval: monthly

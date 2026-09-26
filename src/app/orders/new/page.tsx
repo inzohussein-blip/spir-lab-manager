@@ -17,11 +17,12 @@ type Patient = {
   is_pregnant: boolean;
 };
 
-export default async function NewOrderPage({
-  searchParams,
-}: {
-  searchParams: { patient?: string };
-}) {
+export default async function NewOrderPage(
+  props: {
+    searchParams: Promise<{ patient?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const patientId = searchParams.patient;
 
   // ── Step 0: pick a patient when none is passed ──────────────────────────────

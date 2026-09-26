@@ -7,7 +7,8 @@ export const dynamic = "force-dynamic";
 
 /** Printable sample labels (one per distinct specimen type) with the accession
  *  barcode — "Print Lab Labels" from the bench mockup. */
-export default async function LabelPage({ params }: { params: { id: string } }) {
+export default async function LabelPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const order = await queryOne<any>(
     `select o.accession_no, o.order_date, p.full_name, p.gender, p.age_years
        from test_orders o join patients p on p.id = o.patient_id

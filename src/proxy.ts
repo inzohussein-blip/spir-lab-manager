@@ -8,7 +8,7 @@ import { licensingEnabled } from "@/lib/license/env";
  * a lightweight auth gate: unauthenticated visitors are redirected to /login.
  * This only checks cookie presence — the signature is verified server-side.
  */
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const hasSession = req.cookies.has("lab_session");
   const isLogin = pathname === "/login";

@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
     await startOwnerSession();
     return json({ ok: true });
   }
-  if (b.op === "logout") { endOwnerSession(); return json({ ok: true }); }
+  if (b.op === "logout") { await endOwnerSession(); return json({ ok: true }); }
 
   if (!(await isOwner())) return json({ ok: false, error: "auth" }, 401);
   if (b.op === "create") {
