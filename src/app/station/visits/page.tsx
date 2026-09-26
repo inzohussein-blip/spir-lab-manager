@@ -2,12 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Printer, Trash2, FileText, Search, Pencil, Download, PackageCheck, Clock } from "lucide-react";
+import { Printer, Trash2, FileText, Search, Pencil, Download, PackageCheck, Clock, Tag } from "lucide-react";
 import {
-  getVisits, getTests, getSettings, rangeLabel, flagFor, deleteVisits, previousResults, setDelivered,
+  getVisits, getTests, getSettings, rangeLabel, flagFor, deleteVisits, previousResults, setDelivered, nextAccession, updateVisit,
   type StationVisit, type StationTest, type StationSettings,
 } from "@/lib/station/store";
 import { ReportSheet } from "@/components/station/ReportSheet";
+import { TubeLabels } from "@/components/station/TubeLabel";
 import { valueText, isFormCode } from "@/lib/station/templates";
 
 
@@ -22,6 +23,23 @@ export default function StationVisitsPage() {
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [paper, setPaper] = useState<"A4" | "A5">("A4");
   const [deliv, setDeliv] = useState<"all" | "pending" | "done">("all");
+  // Reprint a tube label (Settings → «طباعة ملصق الأنبوب»), e.g. for a torn sticker.
+  const [labelFor, setLabelFor] = useState<StationVisit | null>(null);
+  // A visit saved but never printed has no sample number yet: it gets one now (as on the entry screen).
+  function printLabel(v: StationVisit) {
+    if (!v.accession) {
+      v = { ...v, accession: nextAccession() };
+      updateVisit(v);
+      setVisits(getVisits());
+    }
+    setLabelFor(v);
+  }
+  useEffect(() => {
+    if (!labelFor) return;
+    const done = () => setLabelFor(null);
+    window.addEventListener("afterprint", done);
+    return () => window.removeEventListener("afterprint", done);
+  }, [labelFor]);
 
   useEffect(() => { setVisits(getVisits()); setTests(getTests()); setSettings(getSettings()); }, []);
 
@@ -225,6 +243,9 @@ export default function StationVisitsPage() {
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap gap-1">
                     <button onClick={() => setSel(v)} className="inline-flex items-center gap-1 rounded-lg border border-line px-3 py-1 text-xs hover:bg-canvas"><Printer className="size-3.5" /> عرض/طباعة</button>
+                    {settings.tubeLabel && (
+                      <button onClick={() => printLabel(v)} title="طباعة ملصق الأنبوب" className="inline-flex items-center gap-1 rounded-lg border border-line px-3 py-1 text-xs hover:bg-canvas"><Tag className="size-3.5" /> ملصق</button>
+                    )}
                     <Link href={`/station?edit=${v.id}`} className="inline-flex items-center gap-1 rounded-lg border border-line px-3 py-1 text-xs hover:bg-canvas"><Pencil className="size-3.5" /> تعديل</Link>
                     <button onClick={() => remove([v.id])} className="grid size-7 place-items-center rounded-lg border border-line text-red-600 hover:bg-red-50"><Trash2 className="size-4" /></button>
                   </div>
@@ -259,8 +280,19 @@ export default function StationVisitsPage() {
             prev={prev}
             printPrev={printPrev}
             emptyText="No results"
+            printable={!labelFor}
           />
         </>
+      )}
+      {labelFor && (
+        <TubeLabels
+          name={labelFor.patient.name}
+          accession={labelFor.accession!}
+          date={dayOf(labelFor.created_at)}
+          size={settings.labelSize ?? "50x25"}
+          copies={settings.labelCopies ?? 1}
+          onReady={() => setTimeout(() => window.print(), 60)}
+        />
       )}
     </div>
   );
