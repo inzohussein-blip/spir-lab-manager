@@ -15,7 +15,7 @@ export async function GET() {
   if (!(await isOwner())) return json({ enabled: true, owner: false });
   const storage = await storageStatus();
   if (!storage.ok) return json({ enabled: true, owner: true, storage, licenses: [], events: [], contact: "", now: Date.now() });
-  return json({ enabled: true, owner: true, storage: { ...storage, keySealed: await signingKeySealed() }, licenses: await listLicenses(), events: await listEvents(), signIns: await ownerSignIns(), twoFactor: await twoFactorStatus(), contact: await getContact(), now: Date.now() });
+  return json({ enabled: true, owner: true, storage: { ...storage, keySealed: await signingKeySealed() }, licenses: await listLicenses(), events: await listEvents(), signIns: await ownerSignIns(), twoFactor: await twoFactorStatus(), contact: await getContact(), version: process.env.LAB_VERSION ?? "", now: Date.now() });
 }
 
 export async function POST(req: NextRequest) {

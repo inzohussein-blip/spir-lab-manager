@@ -72,6 +72,8 @@ export interface LicenseRow {
   /** Owner's name for the device (e.g. «حاسوب الاستقبال»). */
   device_name: string;
   is_trial: boolean;
+  /** The app version the device last reported (empty: a version from before this was sent). */
+  app_version: string;
 }
 
 export interface LicenseEvent { license_id: string; at: number; kind: string; detail: string }
@@ -100,6 +102,7 @@ function ensureTables() {
     for (const col of [
       "price text not null default ''", "paid boolean not null default false", "paid_at bigint",
       "message text not null default ''", "device_name text not null default ''", "is_trial boolean not null default false",
+      "app_version text not null default ''", // 0018
     ]) await query(`alter table station_licenses add column if not exists ${col}`);
     await query(`create table if not exists license_events (
       id text primary key, license_id text not null, at bigint not null, kind text not null, detail text not null default '')`);
@@ -272,10 +275,10 @@ function newCode(): string {
 
 type Raw = Omit<LicenseRow, "modules" | "activated_at" | "expires_at" | "last_seen_at" | "created_at" | "paid_at" | "paid" | "is_trial"> & {
   modules: string; activated_at: string | number | null; expires_at: string | number | null; last_seen_at: string | number | null; created_at: string | number;
-  paid_at: string | number | null; paid: boolean | string; is_trial: boolean | string;
+  paid_at: string | number | null; paid: boolean | string; is_trial: boolean | string; app_version: string | null;
 };
 const COLS = `id, lab_name, note, code_hint, duration_days, modules, status, device_id, device_label,
-  activated_at, expires_at, last_seen_at, created_at, price, paid, paid_at, message, device_name, is_trial`;
+  activated_at, expires_at, last_seen_at, created_at, price, paid, paid_at, message, device_name, is_trial, app_version`;
 const bool = (v: boolean | string) => v === true || v === "t" || v === "true";
 const num = (v: string | number | null) => (v == null ? null : Number(v));
 function toRow(r: Raw): LicenseRow {
@@ -285,7 +288,7 @@ function toRow(r: Raw): LicenseRow {
     ...r, duration_days: Number(r.duration_days), modules: cleanModules(mods),
     activated_at: num(r.activated_at), expires_at: num(r.expires_at), last_seen_at: num(r.last_seen_at), created_at: Number(r.created_at),
     paid_at: num(r.paid_at), paid: bool(r.paid), is_trial: bool(r.is_trial),
-    price: r.price ?? "", message: r.message ?? "", device_name: r.device_name ?? "",
+    price: r.price ?? "", message: r.message ?? "", device_name: r.device_name ?? "", app_version: r.app_version ?? "",
   };
 }
 
@@ -415,7 +418,10 @@ async function issue(row: LicenseRow, device: string): Promise<DeviceResult> {
 }
 
 /** A lab enters its code on a device: bind on first use (starting the period), refuse other devices. */
-export async function activate(code: string, device: string, label: string): Promise<DeviceResult> {
+/** A version string as the app sends it ("2026.09.26-2343"); anything else is ignored. */
+export const cleanVersion = (v: unknown) => (typeof v === "string" && /^[\w.-]{1,40}$/.test(v) ? v : "");
+
+export async function activate(code: string, device: string, label: string, version = ""): Promise<DeviceResult> {
   await ensureTables();
   const r = await queryOne<{ id: string }>(`select id from station_licenses where code_hash = $1`, [hashCode(code)]);
   const row = r ? await getLicense(r.id) : null;
@@ -427,18 +433,21 @@ export async function activate(code: string, device: string, label: string): Pro
   const expires = row.expires_at ?? now + row.duration_days * DAY;
   if (!row.device_id) await logEvent(row.id, row.activated_at ? "moved" : "activated", label.slice(0, 80));
   await query(
-    `update station_licenses set device_id = $2, device_label = $3, activated_at = coalesce(activated_at, $4), expires_at = $5, last_seen_at = $4 where id = $1`,
-    [row.id, device, label.slice(0, 160), now, expires],
+    `update station_licenses set device_id = $2, device_label = $3, activated_at = coalesce(activated_at, $4), expires_at = $5, last_seen_at = $4,
+       app_version = $6 where id = $1`,
+    [row.id, device, label.slice(0, 160), now, expires, cleanVersion(version)],
   );
   return issue((await getLicense(row.id))!, device);
 }
 
 /** Periodic check from an activated device: the current state, re-signed. */
-export async function check(lid: string, device: string): Promise<DeviceResult> {
+export async function check(lid: string, device: string, version = ""): Promise<DeviceResult> {
   const row = await getLicense(lid);
   if (!row) return { ok: false, error: "not_found" };
   if (row.device_id !== device) return { ok: false, error: "other_device", row };
-  await query(`update station_licenses set last_seen_at = $2 where id = $1`, [lid, Date.now()]);
+  const v = cleanVersion(version);
+  if (v) await query(`update station_licenses set last_seen_at = $2, app_version = $3 where id = $1`, [lid, Date.now(), v]);
+  else await query(`update station_licenses set last_seen_at = $2 where id = $1`, [lid, Date.now()]);
   if (row.status === "stopped") return { ok: false, error: "stopped", row };
   if (row.expires_at != null && row.expires_at <= Date.now()) return { ok: false, error: "expired", row };
   return issue(row, device);
@@ -517,7 +526,7 @@ export async function exportCodes(): Promise<CodesBackup> {
   return { app: "lab-codes", version: 1, exported_at: new Date().toISOString(), licenses, events, contact: (await getConfig("contact")) ?? "" };
 }
 const LIC_COLS = ["id", "code_hash", "code_hint", "lab_name", "note", "duration_days", "modules", "status", "device_id", "device_label",
-  "activated_at", "expires_at", "last_seen_at", "created_at", "price", "paid", "paid_at", "message", "device_name", "is_trial"] as const;
+  "activated_at", "expires_at", "last_seen_at", "created_at", "price", "paid", "paid_at", "message", "device_name", "is_trial", "app_version"] as const;
 /** Merge a backup in: codes are added or updated by id (nothing is deleted); history is added once. */
 export async function importCodes(data: unknown): Promise<{ licenses: number; events: number }> {
   const b = data as Partial<CodesBackup>;
@@ -530,7 +539,7 @@ export async function importCodes(data: unknown): Promise<{ licenses: number; ev
       const v = r[c];
       if (c === "paid" || c === "is_trial") return v === true || v === "t" || v === "true";
       if (c === "modules") return typeof v === "string" ? v : JSON.stringify(cleanModules(v));
-      return v ?? (["note", "code_hint", "price", "message", "device_name"].includes(c) ? "" : c === "status" ? "active" : null);
+      return v ?? (["note", "code_hint", "price", "message", "device_name", "app_version"].includes(c) ? "" : c === "status" ? "active" : null);
     });
     await query(
       `insert into station_licenses (${LIC_COLS.join(", ")}) values (${LIC_COLS.map((_, i) => `$${i + 1}`).join(", ")})

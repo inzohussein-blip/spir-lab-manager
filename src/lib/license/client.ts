@@ -14,6 +14,10 @@ const ENABLED_KEY = "local.license.enabled";
 const CONTACT_KEY = "local.license.contact";
 
 const DAY = 86_400_000;
+/** This app's version (set at build, next.config): sent with every check, shown in /licenses. */
+export const APP_VERSION = process.env.LAB_VERSION ?? "";
+/** The errors after which the server really refuses this device (anything else: try again later). */
+const REFUSED = new Set(["not_found", "other_device", "stopped", "expired"]);
 export const GRACE_DAYS = 30;
 export const WARN_DAYS = 14;
 const REFRESH_MS = 6 * 3600_000;
@@ -27,6 +31,8 @@ interface Stored {
   message?: string;
   /** Set when the server said the code no longer works (stopped / deleted / moved / expired). */
   blocked?: { error: string; at: number };
+  /** The app version last reported to the server — a new version reports at once. */
+  version?: string;
 }
 
 export type LicenseState =
@@ -59,13 +65,15 @@ function deviceLabel(): string {
 export const cachedContact = () => read(CONTACT_KEY) ?? "";
 export const cachedEnabled = () => read(ENABLED_KEY) === "1";
 
-/** Ask the server whether lab codes are on (cached for offline opens). */
+/** Ask the server whether lab codes are on (cached for offline opens). A server that is down
+ *  or answers with an error changes nothing: the last answer keeps being used. */
 export async function fetchEnabled(): Promise<boolean> {
   try {
     const r = await fetch("/api/license", { cache: "no-store" });
-    const d = (await r.json()) as { enabled: boolean; contact?: string };
+    const d = r.ok ? ((await r.json()) as { enabled?: unknown; contact?: unknown }) : null;
+    if (!d || typeof d.enabled !== "boolean") return cachedEnabled();
     write(ENABLED_KEY, d.enabled ? "1" : "0");
-    write(CONTACT_KEY, d.contact ?? "");
+    write(CONTACT_KEY, typeof d.contact === "string" ? d.contact : "");
     return d.enabled;
   } catch {
     return cachedEnabled();
@@ -126,7 +134,7 @@ export async function evaluate(module?: LicenseModule): Promise<LicenseState> {
 }
 
 function store(d: { token: string; pub: JsonWebKey; now?: number; message?: string }) {
-  write(LIC_KEY, JSON.stringify({ token: d.token, pub: d.pub, checkedAt: Date.now(), message: d.message || "" } satisfies Stored));
+  write(LIC_KEY, JSON.stringify({ token: d.token, pub: d.pub, checkedAt: Date.now(), message: d.message || "", version: APP_VERSION } satisfies Stored));
   write(ACT_KEY, "activated");
   if (d.now) write(SEEN_KEY, String(d.now)); // the server's clock resets a wrongly set one
 }
@@ -138,7 +146,7 @@ export async function activateCode(code: string): Promise<ActivateResult> {
   try {
     const r = await fetch("/api/license/activate", {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ code, device: deviceId(), label: deviceLabel() }),
+      body: JSON.stringify({ code, device: deviceId(), label: deviceLabel(), version: APP_VERSION }),
     });
     const d = await r.json().catch(() => ({}));
     if (d.ok) { store(d); return { ok: true }; }
@@ -148,20 +156,24 @@ export async function activateCode(code: string): Promise<ActivateResult> {
   }
 }
 
-/** Refresh from the server when online (at most every few hours unless forced). */
+/** Refresh from the server when online (at most every few hours unless forced, or at once after
+ *  an app update so the owner sees the new version). A server that is down, slow or answering
+ *  with an error changes nothing — only a real refusal (stopped, expired, moved, deleted) locks. */
 export async function refreshLicense(force = false): Promise<void> {
   const s = readJson<Stored>(LIC_KEY);
-  if (!s || (!force && Date.now() - s.checkedAt < REFRESH_MS)) return;
+  if (!s || (!force && Date.now() - s.checkedAt < REFRESH_MS && s.version === APP_VERSION)) return;
   const p = await verify(s);
   if (!p) return;
   try {
     const r = await fetch("/api/license/check", {
-      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ lid: p.lid, device: deviceId() }),
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ lid: p.lid, device: deviceId(), version: APP_VERSION }),
     });
     const d = await r.json().catch(() => null);
-    if (!d || d.error === "disabled" || d.error === "bad_request") return;
-    if (d.ok) store(d);
-    else write(LIC_KEY, JSON.stringify({ ...s, checkedAt: Date.now(), blocked: { error: d.error, at: Date.now() } } satisfies Stored));
+    if (!d) return;
+    if (d.ok === true && typeof d.token === "string" && d.pub) store(d);
+    else if ((r.status === 403 || r.status === 404) && REFUSED.has(d.error)) {
+      write(LIC_KEY, JSON.stringify({ ...s, checkedAt: Date.now(), blocked: { error: d.error, at: Date.now() } } satisfies Stored));
+    }
   } catch { /* offline — try again next time */ }
 }
 

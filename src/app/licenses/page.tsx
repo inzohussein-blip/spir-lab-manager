@@ -14,12 +14,13 @@ interface Row {
   status: "active" | "stopped"; device_id: string | null; device_label: string | null;
   activated_at: number | null; expires_at: number | null; last_seen_at: number | null; created_at: number;
   price: string; paid: boolean; paid_at: number | null; message: string; device_name: string; is_trial: boolean;
+  app_version: string;
 }
 interface Ev { license_id: string; at: number; kind: string; detail: string }
 interface Storage { source: "license-db" | "app-db" | "embedded"; ok: boolean; codes?: number; roundTripMs?: number; error?: string; keySealed?: boolean }
 interface SignIn { at: number; ok: boolean; ip: string; agent: string }
 interface TwoFactor { enabled: boolean; broken: boolean; forcedOff: boolean; canSetup: boolean }
-type Data = { enabled: boolean; owner: boolean; needsDb?: boolean; storage?: Storage; licenses?: Row[]; events?: Ev[]; signIns?: SignIn[]; twoFactor?: TwoFactor; contact?: string; now?: number };
+type Data = { enabled: boolean; owner: boolean; needsDb?: boolean; storage?: Storage; licenses?: Row[]; events?: Ev[]; signIns?: SignIn[]; twoFactor?: TwoFactor; contact?: string; version?: string; now?: number };
 const agentLabel = (ua: string) => {
   const os = /Windows/.test(ua) ? "Windows" : /Android/.test(ua) ? "Android" : /iPhone|iPad/.test(ua) ? "iOS" : /Mac OS/.test(ua) ? "Mac" : /Linux/.test(ua) ? "Linux" : "";
   const br = /Edg\//.test(ua) ? "Edge" : /Chrome\//.test(ua) ? "Chrome" : /Firefox\//.test(ua) ? "Firefox" : /Safari\//.test(ua) ? "Safari" : "";
@@ -49,7 +50,7 @@ const EVENT_LABEL: Record<string, string> = {
 };
 const eventDetail = (e: Ev) => (e.kind === "modules" ? e.detail.split(",").filter(Boolean).map(moduleLabel).join("، ") || "لا شيء" : e.detail);
 
-type Filter = "all" | "active" | "soon" | "expired" | "unused" | "stopped" | "unpaid" | "trial";
+type Filter = "all" | "active" | "soon" | "expired" | "unused" | "stopped" | "unpaid" | "trial" | "outdated";
 type Sort = "expiry" | "newest" | "name" | "seen";
 
 async function post(body: unknown) {
@@ -57,7 +58,7 @@ async function post(body: unknown) {
   return r.json().catch(() => ({ ok: false }));
 }
 
-function kindOf(r: Row, now: number): Exclude<Filter, "all" | "unpaid" | "trial" | "soon"> | "soon" {
+function kindOf(r: Row, now: number): Exclude<Filter, "all" | "unpaid" | "trial" | "soon" | "outdated"> | "soon" {
   if (r.status === "stopped") return "stopped";
   if (!r.activated_at) return "unused";
   if (r.expires_at != null && r.expires_at <= now) return "expired";
@@ -102,11 +103,11 @@ function copyText(t: string, done: () => void) { navigator.clipboard?.writeText(
 
 function exportCsv(rows: Row[], now: number) {
   const cell = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-  const head = ["المختبر", "ملاحظة", "آخر 4 خانات", "الحالة", "تجريبي", "المدة (يوم)", "التفعيل", "الانتهاء", "الجهاز", "آخر اتصال", "المحطات", "المبلغ", "مدفوع", "تاريخ الدفع", "رسالة للمختبر", "أُنشئ"];
+  const head = ["المختبر", "ملاحظة", "آخر 4 خانات", "الحالة", "تجريبي", "المدة (يوم)", "التفعيل", "الانتهاء", "الجهاز", "آخر اتصال", "الإصدار", "المحطات", "المبلغ", "مدفوع", "تاريخ الدفع", "رسالة للمختبر", "أُنشئ"];
   const lines = [head.map(cell).join(",")];
   for (const r of rows) {
     lines.push([r.lab_name, r.note, r.code_hint, status(r, now).t, r.is_trial ? "نعم" : "", r.duration_days, fmt(r.activated_at), fmt(r.expires_at), deviceOf(r),
-      fmtTime(r.last_seen_at), r.modules.map(moduleLabel).join("، "), r.price, r.paid ? "نعم" : "لا", fmt(r.paid_at), r.message, fmt(r.created_at)].map(cell).join(","));
+      fmtTime(r.last_seen_at), r.app_version, r.modules.map(moduleLabel).join("، "), r.price, r.paid ? "نعم" : "لا", fmt(r.paid_at), r.message, fmt(r.created_at)].map(cell).join(","));
   }
   const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -169,16 +170,17 @@ export default function LicensesPage() {
   const now = data?.now ?? Date.now();
   const all = useMemo(() => data?.licenses ?? [], [data]);
   const counts = useMemo(() => {
-    const c: Record<Filter, number> = { all: all.length, active: 0, soon: 0, expired: 0, unused: 0, stopped: 0, unpaid: 0, trial: 0 };
+    const c: Record<Filter, number> = { all: all.length, active: 0, soon: 0, expired: 0, unused: 0, stopped: 0, unpaid: 0, trial: 0, outdated: 0 };
     for (const r of all) {
       const k = kindOf(r, now);
       c[k] += 1;
       if (k === "soon") c.active += 1; // "active" counts every working code
       if (!r.paid) c.unpaid += 1;
       if (r.is_trial) c.trial += 1;
+      if (isOutdated(r, data?.version)) c.outdated += 1;
     }
     return c;
-  }, [all, now]);
+  }, [all, now, data?.version]);
   const money = useMemo(() => ({
     paid: all.filter((r) => r.paid).reduce((n, r) => n + amount(r.price), 0),
     due: all.filter((r) => !r.paid).reduce((n, r) => n + amount(r.price), 0),
@@ -191,13 +193,14 @@ export default function LicensesPage() {
       if (filter === "active") return k === "active" || k === "soon";
       if (filter === "unpaid") return !r.paid;
       if (filter === "trial") return r.is_trial;
+      if (filter === "outdated") return isOutdated(r, data?.version);
       return filter === "all" || k === filter;
     });
     const exp = (r: Row) => (r.expires_at ?? Number.MAX_SAFE_INTEGER - (r.activated_at ? 0 : 1));
     return list.sort((a, b) =>
       sort === "expiry" ? exp(a) - exp(b) : sort === "name" ? a.lab_name.localeCompare(b.lab_name, "ar")
       : sort === "seen" ? (b.last_seen_at ?? 0) - (a.last_seen_at ?? 0) : b.created_at - a.created_at);
-  }, [all, q, filter, sort, now]);
+  }, [all, q, filter, sort, now, data?.version]);
   const eventsOf = useMemo(() => {
     const m = new Map<string, Ev[]>();
     for (const e of data?.events ?? []) (m.get(e.license_id) ?? m.set(e.license_id, []).get(e.license_id)!).push(e);
@@ -247,6 +250,7 @@ export default function LicensesPage() {
     { k: "all", l: "الكل" }, { k: "active", l: "فعّال" }, { k: "soon", l: "ينتهي خلال 14 يوماً", tone: "text-amber-700" },
     { k: "expired", l: "منتهٍ", tone: "text-red-700" }, { k: "unused", l: "غير مستخدم" }, { k: "stopped", l: "موقوف", tone: "text-red-700" },
     { k: "unpaid", l: "غير مدفوع", tone: "text-amber-700" }, { k: "trial", l: "تجريبي" },
+    { k: "outdated", l: "نسخة قديمة", tone: "text-amber-700" },
   ];
 
   return shell(
@@ -271,6 +275,7 @@ export default function LicensesPage() {
               {data.storage.ok ? `متصلة ✓ — محفوظ فيها ${data.storage.codes ?? 0} رمز.` : `غير متصلة — ${data.storage.error ?? ""}`}
               {test && (test.ok ? ` · اختبار الحفظ نجح (كتابة وقراءة وحذف في ${test.roundTripMs} ملّي ثانية).` : ` · اختبار الحفظ فشل: ${test.error ?? ""}`)}
             </div>
+            {data.version && <div className="text-xs text-muted" data-testid="site-version">إصدار الموقع الحالي: <b dir="ltr">{data.version}</b> — تتحدّث الأجهزة إليه عند أول اتصال.</div>}
             {data.storage.ok && data.storage.keySealed !== undefined && (
               <div data-testid="key-sealed" className={`text-xs ${data.storage.keySealed ? "text-muted" : "text-amber-700"}`}>
                 {data.storage.keySealed
@@ -287,7 +292,7 @@ export default function LicensesPage() {
       )}
 
       {/* Summary tiles = filters */}
-      <div className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
         {TILES.map((t) => (
           <button key={t.k} onClick={() => setFilter(t.k)} aria-pressed={filter === t.k}
             className={`rounded-xl border bg-surface px-3 py-2 text-right shadow-[var(--shadow-card)] ${filter === t.k ? "border-brand ring-1 ring-brand" : "border-line hover:border-brand/50"}`}>
@@ -401,10 +406,11 @@ export default function LicensesPage() {
                   <button onClick={() => change(r, { action: "delete" }, `حذف رمز «${r.lab_name}» نهائياً؟ تُقفل محطاته عند أول اتصال بالإنترنت.`)} title="حذف" aria-label="حذف" className="grid size-7 place-items-center rounded-lg border border-line text-red-600 hover:bg-red-50"><Trash2 className="size-3.5" /></button>
                 </div>
               </div>
-              <div className="mt-3 grid gap-2 text-xs sm:grid-cols-4">
+              <div className="mt-3 grid gap-2 text-xs sm:grid-cols-5">
                 <Info k="المدة" v={r.activated_at ? `${fmt(r.activated_at)} ← ${fmt(r.expires_at)}` : `${r.duration_days} يوم (تبدأ عند التفعيل)`} />
                 <Info k="الجهاز" v={deviceOf(r) || "لم يُربط بعد"} />
                 <Info k="آخر اتصال" v={fmtTime(r.last_seen_at)} />
+                <VersionInfo r={r} current={data.version} />
                 <Info k="أُنشئ" v={fmt(r.created_at)} />
               </div>
               <div className="mt-2 text-xs text-muted">المحطات — التغيير يصل للجهاز عند اتصاله بالإنترنت:</div>
@@ -540,6 +546,21 @@ function Details({ r, evs, onChange }: { r: Row; evs: Ev[]; onChange: (c: Record
           </ul>
         )}
       </div>
+    </div>
+  );
+}
+
+/** A bound device whose app is not the current version (or too old to say which it is). */
+function isOutdated(r: Row, current?: string): boolean {
+  return !!r.device_id && r.status === "active" && !!current && r.app_version !== current;
+}
+function VersionInfo({ r, current }: { r: Row; current?: string }) {
+  const v = r.app_version;
+  const tone = !r.device_id ? "" : !v || (current && v !== current) ? "bg-amber-50 text-amber-800" : "text-brand-dark";
+  const text = !r.device_id ? "—" : !v ? "⚠️ قديمة (قبل هذا التحديث)" : current && v !== current ? `⚠️ ${v} — أقدم` : `✓ ${v}`;
+  return (
+    <div className={`rounded-lg bg-canvas px-2.5 py-1.5 ${tone}`} data-testid="app-version" title={current ? `أحدث إصدار: ${current}` : undefined}>
+      <div className="text-[10px] text-muted">الإصدار</div><div className="font-medium" dir="auto">{text}</div>
     </div>
   );
 }

@@ -98,6 +98,8 @@ export default function WelcomePage() {
           <a href="tel:07803993585" className="inline-flex items-center gap-2 rounded-full border border-line bg-surface px-4 py-2 text-base font-bold tabular-nums shadow-[var(--shadow-card)] hover:border-brand" dir="ltr">
             <Phone className="size-4 text-brand-dark" /> 07803993585
           </a>
+          {/* The version this device runs (the saved offline copy may be older than the site). */}
+          <div className="mt-2 text-[11px] text-muted" data-testid="app-version">الإصدار: <span dir="ltr" className="tabular-nums">{process.env.LAB_VERSION}</span></div>
         </div>
       </div>
     </div>
