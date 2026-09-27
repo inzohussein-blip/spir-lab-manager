@@ -19,6 +19,8 @@ interface Row {
   app_version: string;
   /** The lab's own database (no secrets). */
   sync: { kind: "supabase" | "postgres"; host: string; by: "owner" | "device"; at: number } | null;
+  /** The device's last report about its sync. */
+  sync_last_at: number | null; sync_pending: number; sync_error: string; sync_reported_at: number | null;
 }
 interface Ev { license_id: string; at: number; kind: string; detail: string }
 interface Storage { source: "license-db" | "app-db" | "embedded"; ok: boolean; codes?: number; roundTripMs?: number; error?: string; keySealed?: boolean }
@@ -134,11 +136,12 @@ function copyText(t: string, done: () => void) { navigator.clipboard?.writeText(
 
 function exportCsv(rows: Row[], now: number) {
   const cell = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-  const head = ["المختبر", "ملاحظة", "آخر 4 خانات", "الحالة", "تجريبي", "المدة (يوم)", "التفعيل", "الانتهاء", "الجهاز", "آخر اتصال", "الإصدار", "المحطات", "المبلغ", "مدفوع", "تاريخ الدفع", "رسالة للمختبر", "أُنشئ"];
+  const head = ["المختبر", "ملاحظة", "آخر 4 خانات", "الحالة", "تجريبي", "المدة (يوم)", "التفعيل", "الانتهاء", "الجهاز", "آخر اتصال", "الإصدار", "المحطات", "المبلغ", "مدفوع", "تاريخ الدفع", "رسالة للمختبر", "أُنشئ", "قاعدة البيانات", "آخر مزامنة"];
   const lines = [head.map(cell).join(",")];
   for (const r of rows) {
     lines.push([r.lab_name, r.note, r.code_hint, status(r, now).t, r.is_trial ? "نعم" : "", r.duration_days, fmt(r.activated_at), fmt(r.expires_at), deviceOf(r),
-      fmtTime(r.last_seen_at), r.app_version, r.modules.map(moduleLabel).join("، "), r.price, r.paid ? "نعم" : "لا", fmt(r.paid_at), r.message, fmt(r.created_at)].map(cell).join(","));
+      fmtTime(r.last_seen_at), r.app_version, r.modules.map(moduleLabel).join("، "), r.price, r.paid ? "نعم" : "لا", fmt(r.paid_at), r.message, fmt(r.created_at),
+      r.sync ? `${r.sync.kind === "postgres" ? "PostgreSQL" : "Supabase"} — ${r.sync.host}` : "", fmtTime(r.sync_last_at)].map(cell).join(","));
   }
   const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -447,9 +450,10 @@ export default function LicensesPage() {
                 <Info k="أُنشئ" v={fmt(r.created_at)} mono />
                 <div data-testid="lab-db" className="min-w-0">
                   <div className="text-[10px] text-muted">قاعدة البيانات</div>
-                  <button onClick={() => setDbFor(r)} className="truncate text-start font-medium hover:underline" title={r.sync ? r.sync.host : "غير مربوط — البيانات على الجهاز فقط"}>
+                  <button onClick={() => setDbFor(r)} className="block max-w-full truncate text-start font-medium hover:underline" title={r.sync ? r.sync.host : "غير مربوط — البيانات على الجهاز فقط"}>
                     {r.sync ? <>{r.sync.kind === "postgres" ? "PostgreSQL" : "Supabase"}{r.sync.by === "device" ? " (من الجهاز)" : ""}</> : <span className="text-muted">على الجهاز فقط</span>}
                   </button>
+                  {r.sync && <SyncHealth r={r} now={now} />}
                 </div>
               </div>
               <div className="mt-3 text-xs text-muted">المحطات — التغيير يصل للجهاز عند اتصاله بالإنترنت:</div>
@@ -581,6 +585,27 @@ function Details({ r, evs, onChange }: { r: Row; evs: Ev[]; onChange: (c: Record
           </ul>
         )}
       </div>
+    </div>
+  );
+}
+
+/** How the device's sync goes, from its last report: an error, a stale sync, or when it last synced. */
+const SYNC_SHORT: Record<string, string> = {
+  auth: "فشل الدخول إلى القاعدة", no_table: "الجدول غير موجود في القاعدة", unreachable: "القاعدة لا ترد", tls: "مشكلة شهادة TLS",
+  needs_join: "بانتظار اختيار طريقة الربط على الجهاز", no_code: "الجهاز بلا رمز صالح", private_host: "عنوان داخلي مرفوض", db: "خطأ في القاعدة",
+};
+const SYNC_STALE = DAY;
+function SyncHealth({ r, now }: { r: Row; now: number }) {
+  if (!r.device_id) return <div className="text-[11px] text-muted">يبدأ بعد التفعيل</div>;
+  if (!r.sync_reported_at) return <div className="text-[11px] text-muted" data-testid="sync-health">لم يُبلّغ الجهاز بعد</div>;
+  if (r.sync_error && r.sync_error !== "offline") {
+    return <div className="truncate text-[11px] text-red-700" data-testid="sync-health" title={fmtShort(r.sync_reported_at)}>⚠️ {SYNC_SHORT[r.sync_error] ?? SYNC_SHORT.db}</div>;
+  }
+  const stale = !r.sync_last_at || now - r.sync_last_at > SYNC_STALE;
+  return (
+    <div className={`truncate text-[11px] ${stale ? "text-amber-700" : "text-teal-700"}`} data-testid="sync-health">
+      {stale ? "⚠️ " : "✓ "}آخر مزامنة <span dir="ltr" className="font-mono tabular-nums">{fmtShort(r.sync_last_at)}</span>
+      {r.sync_pending > 0 && <> · ينتظر <span className="tabular-nums">{r.sync_pending}</span></>}
     </div>
   );
 }

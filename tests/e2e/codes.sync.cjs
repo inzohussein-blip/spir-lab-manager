@@ -82,20 +82,31 @@ const LAB = 'مختبر المزامنة ' + Date.now().toString(36);
   ok(await synced(d1.p), 'device 1 synced');
   ok((await remoteNames()).includes('مراجع الاستقبال'), 'device 1\'s visit is in the lab\'s PostgreSQL');
   ok(!(await d1.p.evaluate(() => localStorage.getItem('local.license.v1') || '')).includes(pgPass), 'the device never holds the connection string');
+  const health = async (card) => { await o.reload(); await o.waitForSelector(`div[data-lab="${LAB} — الاستقبال"]`, { timeout: 15000 }); return card.locator('[data-testid="sync-health"]').innerText().catch(() => ''); };
+  const h1 = await waitFor(async () => { const t = await health(card1); return t.includes('آخر مزامنة') && t; }, 20000, 1500);
+  ok(!!h1 && h1.includes('✓'), `code manager shows device 1's last sync (${h1})`);
 
   // ── Device 2: takes the lab's data; visits go both ways ──
   const d2 = await device(c2.code, 'D2');
   await settings(d2.p);
   await d2.p.waitForSelector('[data-testid="sync-join"]', { timeout: 20000 });
+  const h2 = await waitFor(async () => { const t = await health(card2); return t.includes('بانتظار') && t; }, 20000, 1500);
+  ok(!!h2, `code manager shows device 2 waiting for its choice (${h2})`);
   await d2.p.click('button:has-text("استخدام بيانات المختبر")');
   await synced(d2.p);
   ok((await names(d2.p)).includes('مراجع الاستقبال'), 'device 2 has device 1\'s visit');
+  // Device 2 gets its own letter in sample numbers.
+  await settings(d2.p);
+  await d2.p.fill('input[aria-label="حرف الجهاز"]', 'b');
+  await d2.p.locator('[data-testid="device-tag"] button:has-text("حفظ")').click(); await d2.p.waitForTimeout(300);
   await addVisit(d2.p, 'مراجع المختبر');
   await syncNow(d2.p);
   await syncNow(d1.p);
   ok((await names(d1.p)).includes('مراجع المختبر'), 'device 1 received device 2\'s visit');
   const acc = [...(await kv(d1.p, 'station.visits.v1'))].map((v) => v.accession).filter(Boolean);
   ok(acc.length === 2 && new Set(acc).size === 2, `sample numbers stay unique across the devices (${acc.join(', ')})`);
+  ok(acc.some((a) => /^LAB-\d{8}-B001$/.test(a)), 'device 2\'s numbers carry its letter (…-B001)');
+  ok(!('station.deviceTag.v1' in Object.fromEntries((await db.query(`select coll from lab_sync_records`)).map((r) => [r.coll, 1]))), 'the device letter stays on its device (not synced)');
 
   // ── Only a device holding the lab's code is served ──
   const lab = (body) => o.evaluate(async (body) => { const r = await fetch('/api/labsync', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }); return { status: r.status, ...(await r.json()) }; }, body);

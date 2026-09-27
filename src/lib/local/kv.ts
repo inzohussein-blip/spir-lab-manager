@@ -25,7 +25,7 @@ const isTheme = (k: string) => k.endsWith(".theme.v1");
 const isData = (k: string) => PREFIXES.some((p) => k.startsWith(p)) && !isTheme(k);
 /** Station data that stays on this device when the lab syncs its devices (a session unlock,
  *  this device's last backup / recent items, its own sample counter). */
-const DEVICE_ONLY = new Set(["training.unlocked", "station.backupAt.v1", "station.counter.v1", "training.recent.v1"]);
+const DEVICE_ONLY = new Set(["training.unlocked", "station.backupAt.v1", "station.counter.v1", "training.recent.v1", "station.deviceTag.v1"]);
 /** Keys the lab's devices share through the lab's database (lib/sync). */
 export const isSyncedKey = (k: string) => isData(k) && !DEVICE_ONLY.has(k);
 

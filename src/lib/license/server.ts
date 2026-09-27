@@ -77,6 +77,11 @@ export interface LicenseRow {
   app_version: string;
   /** The lab's own database, when linked (no secrets: kind, where, and who set it). */
   sync: SyncInfo | null;
+  /** What the device last reported about its sync: last success, records waiting, last error. */
+  sync_last_at: number | null;
+  sync_pending: number;
+  sync_error: string;
+  sync_reported_at: number | null;
 }
 export interface SyncInfo { kind: SyncConfig["kind"]; host: string; by: "owner" | "device"; at: number }
 
@@ -108,6 +113,7 @@ function ensureTables() {
       "message text not null default ''", "device_name text not null default ''", "is_trial boolean not null default false",
       "app_version text not null default ''", // 0018
       "sync_config text not null default ''", "sync_info text not null default ''", // 0019
+      "sync_last_at bigint", "sync_pending integer not null default 0", "sync_error text not null default ''", "sync_reported_at bigint", // 0020
     ]) await query(`alter table station_licenses add column if not exists ${col}`);
     await query(`create table if not exists license_events (
       id text primary key, license_id text not null, at bigint not null, kind text not null, detail text not null default '')`);
@@ -281,9 +287,11 @@ function newCode(): string {
 type Raw = Omit<LicenseRow, "modules" | "activated_at" | "expires_at" | "last_seen_at" | "created_at" | "paid_at" | "paid" | "is_trial"> & {
   modules: string; activated_at: string | number | null; expires_at: string | number | null; last_seen_at: string | number | null; created_at: string | number;
   paid_at: string | number | null; paid: boolean | string; is_trial: boolean | string; app_version: string | null; sync_info?: string | null;
+  sync_last_at?: string | number | null; sync_pending?: string | number | null; sync_error?: string | null; sync_reported_at?: string | number | null;
 };
 const COLS = `id, lab_name, note, code_hint, duration_days, modules, status, device_id, device_label,
-  activated_at, expires_at, last_seen_at, created_at, price, paid, paid_at, message, device_name, is_trial, app_version, sync_info`;
+  activated_at, expires_at, last_seen_at, created_at, price, paid, paid_at, message, device_name, is_trial, app_version, sync_info,
+  sync_last_at, sync_pending, sync_error, sync_reported_at`;
 const bool = (v: boolean | string) => v === true || v === "t" || v === "true";
 const num = (v: string | number | null) => (v == null ? null : Number(v));
 function toRow({ sync_info, ...r }: Raw): LicenseRow {
@@ -296,6 +304,7 @@ function toRow({ sync_info, ...r }: Raw): LicenseRow {
     activated_at: num(r.activated_at), expires_at: num(r.expires_at), last_seen_at: num(r.last_seen_at), created_at: Number(r.created_at),
     paid_at: num(r.paid_at), paid: bool(r.paid), is_trial: bool(r.is_trial),
     price: r.price ?? "", message: r.message ?? "", device_name: r.device_name ?? "", app_version: r.app_version ?? "",
+    sync_last_at: num(r.sync_last_at ?? null), sync_pending: Number(r.sync_pending ?? 0), sync_error: r.sync_error ?? "", sync_reported_at: num(r.sync_reported_at ?? null),
   };
 }
 
@@ -496,7 +505,7 @@ export async function setSyncConfig(id: string, cfg: SyncConfig | null, by: "own
   await ensureTables();
   if (!(await getLicense(id))) return "not_found";
   if (!cfg) {
-    await query(`update station_licenses set sync_config = '', sync_info = '' where id = $1`, [id]);
+    await query(`update station_licenses set sync_config = '', sync_info = '', sync_last_at = null, sync_pending = 0, sync_error = '', sync_reported_at = null where id = $1`, [id]);
     await logEvent(id, "sync", "—");
     return null;
   }
@@ -514,6 +523,14 @@ async function deviceSync(id: string): Promise<DeviceSync | null> {
   const s = await getSyncConfig(id).catch(() => null);
   if (!s) return null;
   return s.cfg.kind === "postgres" ? { kind: "postgres", host: connHost(s.cfg.conn) } : s.cfg;
+}
+/** The device's own report about its sync (only the device bound to the code may report). */
+export async function reportSyncStatus(lid: string, device: string, s: { last: number | null; pending: number; error: string }): Promise<boolean> {
+  const row = await getLicense(lid);
+  if (!row || !device || row.device_id !== device) return false;
+  await query(`update station_licenses set sync_last_at = coalesce($2, sync_last_at), sync_pending = $3, sync_error = $4, sync_reported_at = $5 where id = $1`,
+    [lid, s.last, s.pending, s.error, Date.now()]);
+  return true;
 }
 /** A device asking for its lab's database: the code must be bound to it, running and in date. */
 export async function deviceLicense(lid: string, device: string): Promise<{ ok: true; row: LicenseRow } | { ok: false; error: string }> {
@@ -599,7 +616,7 @@ export async function exportCodes(): Promise<CodesBackup> {
 }
 const LIC_COLS = ["id", "code_hash", "code_hint", "lab_name", "note", "duration_days", "modules", "status", "device_id", "device_label",
   "activated_at", "expires_at", "last_seen_at", "created_at", "price", "paid", "paid_at", "message", "device_name", "is_trial", "app_version",
-  "sync_config", "sync_info"] as const;
+  "sync_config", "sync_info", "sync_last_at", "sync_pending", "sync_error", "sync_reported_at"] as const;
 /** Merge a backup in: codes are added or updated by id (nothing is deleted); history is added once. */
 export async function importCodes(data: unknown): Promise<{ licenses: number; events: number }> {
   const b = data as Partial<CodesBackup>;
@@ -612,7 +629,7 @@ export async function importCodes(data: unknown): Promise<{ licenses: number; ev
       const v = r[c];
       if (c === "paid" || c === "is_trial") return v === true || v === "t" || v === "true";
       if (c === "modules") return typeof v === "string" ? v : JSON.stringify(cleanModules(v));
-      return v ?? (["note", "code_hint", "price", "message", "device_name", "app_version", "sync_config", "sync_info"].includes(c) ? "" : c === "status" ? "active" : null);
+      return v ?? (["note", "code_hint", "price", "message", "device_name", "app_version", "sync_config", "sync_info", "sync_error"].includes(c) ? "" : c === "sync_pending" ? 0 : c === "status" ? "active" : null);
     });
     await query(
       `insert into station_licenses (${LIC_COLS.join(", ")}) values (${LIC_COLS.map((_, i) => `$${i + 1}`).join(", ")})

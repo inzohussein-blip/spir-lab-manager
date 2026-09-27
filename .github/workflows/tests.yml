@@ -43,6 +43,9 @@ jobs:
       - name: Type check
         run: npx tsc --noEmit
 
+      - name: Test image for the project image library (not committed)
+        run: node tests/e2e/make-test-image.cjs
+
       - name: Build
         run: npm run build
 

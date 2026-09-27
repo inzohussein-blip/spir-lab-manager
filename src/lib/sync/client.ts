@@ -228,6 +228,44 @@ function setStatus(s: Partial<SyncStatus>) {
 }
 export const syncStatus = () => status;
 
+// ── The clock: «the later change wins» compares corrected times ──────────────
+// A computer whose clock is wrong (ahead, it would always win; behind, always lose) is corrected
+// by the site's clock, measured when online; offline, the last correction is used.
+const CLOCK_KEY = "clock";
+let offset = 0; // server − this device, ms
+let clockAt = 0;
+const now = () => Date.now() + offset;
+async function measureClock() {
+  try {
+    const t0 = Date.now();
+    const r = await fetch("/api/time", { cache: "no-store" });
+    const d = (await r.json()) as { now?: unknown };
+    const t1 = Date.now();
+    if (!r.ok || typeof d.now !== "number" || t1 - t0 > 5000) return;
+    offset = Math.round(d.now + (t1 - t0) / 2 - t1);
+    clockAt = t1;
+    await metaSet(CLOCK_KEY, { offset, at: t1 });
+  } catch { /* offline or site down: keep the last correction */ }
+}
+/** How far this device's clock is from the site's (for the settings panel). */
+export const clockOffset = () => offset;
+
+// ── Telling the code manager how the sync goes (devices activated with a lab code) ──
+let reported = { at: 0, sig: "" };
+async function reportStatus() {
+  const who = await licenseIdentity().catch(() => null);
+  if (!who) return;
+  const sig = `${status.state}|${status.error ?? ""}|${status.pending > 0}`;
+  if (sig === reported.sig && Date.now() - reported.at < 30 * 60_000) return;
+  reported = { at: Date.now(), sig };
+  try {
+    await fetch("/api/license/sync-status", {
+      method: "POST", headers: { "content-type": "application/json" }, cache: "no-store",
+      body: JSON.stringify({ ...who, last: status.lastSync ?? 0, pending: status.pending, error: status.state === "error" || status.state === "needs_join" ? status.error ?? status.state : "" }),
+    });
+  } catch { /* told next time */ }
+}
+
 // ── Tracking this device's changes ───────────────────────────────────────────
 let state: State | null = null;
 let queue: OutEntry[] = [];
@@ -243,10 +281,10 @@ function onChange(k: string, prev: string | null, next: string | null, origin: K
   const neu = recordsOf(next);
   if (origin === "external") { base.set(k, neu); return; }
   const old = base.get(k) ?? recordsOf(prev);
-  const now = Date.now();
+  const t = now();
   const changed: OutEntry[] = [];
-  for (const [id, j] of neu) if (old.get(id) !== j) changed.push({ coll: k, id, mtime: now });
-  for (const id of old.keys()) if (!neu.has(id)) changed.push({ coll: k, id, mtime: now });
+  for (const [id, j] of neu) if (old.get(id) !== j) changed.push({ coll: k, id, mtime: t });
+  for (const id of old.keys()) if (!neu.has(id)) changed.push({ coll: k, id, mtime: t });
   base.set(k, neu);
   if (!changed.length) return;
   queue.push(...changed);
@@ -400,6 +438,7 @@ export function syncNow(): Promise<void> {
     const locks = typeof navigator !== "undefined" ? (navigator as Navigator & { locks?: LockManager }).locks : undefined;
     if (locks) await locks.request("lab-sync", { ifAvailable: true }, async (lock) => { if (lock) await work(); });
     else await work();
+    if (status.link) void reportStatus();
   })().finally(() => { running = null; });
   return running;
 }
@@ -552,13 +591,20 @@ export async function startSync(): Promise<void> {
   started = true;
   if (!(await kvReady()) || typeof indexedDB === "undefined") { setStatus({ state: "unsupported" }); return; }
   try { localCfg = (await metaGet<SupabaseConfig>(LOCAL_KEY)) ?? null; } catch { setStatus({ state: "unsupported" }); return; }
+  const clock = await metaGet<{ offset: number; at: number }>(CLOCK_KEY).catch(() => undefined);
+  if (clock) { offset = clock.offset; clockAt = clock.at; }
+  void measureClock();
   const link = currentLink();
   const st = await loadState(link).catch(() => null);
   if (st?.joined) rebuildBase();
   onKvChange(onChange);
   window.addEventListener("online", () => soon(500));
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") soon(500); });
-  setInterval(() => { if (document.visibilityState === "visible") void syncNow(); }, 30_000);
+  setInterval(() => {
+    if (document.visibilityState !== "visible") return;
+    if (Date.now() - clockAt > 3600_000) void measureClock();
+    void syncNow();
+  }, 30_000);
   // The code manager may have linked (or changed) this lab's database: ask now and then.
   void refreshLicense(false, 30 * 60_000).finally(() => { void syncNow(); });
   if (!link) void syncNow();

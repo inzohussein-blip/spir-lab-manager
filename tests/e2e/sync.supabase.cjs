@@ -13,8 +13,10 @@ const { PG, freshDb, fakeSupabase, waitFor } = require('./pgfake.cjs');
   const b = await launch();
   const errs = [];
 
-  const device = async (name) => {
+  const device = async (name, skew = 0) => {
     const ctx = await b.newContext({ viewport: { width: 1440, height: 950 } });
+    // A computer whose clock is wrong (skew ms): the sync corrects it with the site's clock.
+    if (skew) await ctx.addInitScript((s) => { const n = Date.now; Date.now = () => n() + s; }, skew);
     const p = await ctx.newPage();
     p.on('pageerror', (e) => errs.push(`${name} ${e.message.slice(0, 140)}`)); p.on('dialog', (d) => d.accept());
     await p.goto(B + '/welcome'); await resetLocal(p, { 'local.activation.v1': 'legacy' });
@@ -54,7 +56,7 @@ const { PG, freshDb, fakeSupabase, waitFor } = require('./pgfake.cjs');
   ok((await db.query(`select count(*)::int as n from lab_sync_records where coll = 'station.tests.v1'`))[0].n > 10, 'A\'s test catalog uploaded record by record');
 
   // ── Device B: has its own visit; merges ──
-  const B2 = await device('B');
+  const B2 = await device('B', -2 * 3600_000); // its clock is 2 hours behind
   await addVisit(B2.p, 'مريض سوبابيس 2');
   await settings(B2.p);
   const m2 = await link(B2.p);
@@ -111,10 +113,11 @@ const { PG, freshDb, fakeSupabase, waitFor } = require('./pgfake.cjs');
   await A.p.waitForTimeout(300);
   await setName(B2.p, 'مختبر ب (أحدث)');
   ok(/بانتظار الإرسال/.test(await B2.p.locator('[data-testid="sync-state"]').innerText()), 'offline: the change waits to be sent (the station keeps working)');
+  ok(await B2.p.locator('[data-testid="sync-clock"]').count() === 1, 'B is told its clock is off (and that sync corrects it)');
   await A.ctx.setOffline(false); await B2.ctx.setOffline(false);
   await syncNow(A.p); await syncNow(B2.p); await syncNow(A.p);
   const la = (await kv(A.p, 'station.settings.v1'))?.labName, lb = (await kv(B2.p, 'station.settings.v1'))?.labName;
-  ok(la === 'مختبر ب (أحدث)' && lb === 'مختبر ب (أحدث)', `the later change wins on both (${la} / ${lb})`);
+  ok(la === 'مختبر ب (أحدث)' && lb === 'مختبر ب (أحدث)', `the later change wins on both — even from B, whose clock is 2 hours behind (${la} / ${lb})`);
 
   // ── Text only: a device's logo (an image) stays on it; text changes still arrive ──
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');

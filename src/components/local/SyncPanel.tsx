@@ -97,6 +97,11 @@ export function SyncPanel() {
             {st.pending > 0 && <> · بانتظار الإرسال: <span dir="ltr">{st.pending}</span></>}
             {st.error === "offline" && <> · {SYNC_ERRORS.offline}</>}
           </p>
+          {Math.abs(m?.clockOffset() ?? 0) > 120_000 && (
+            <p className="text-xs text-amber-700" data-testid="sync-clock">
+              ساعة هذا الجهاز تختلف عن الوقت الصحيح بنحو <span dir="ltr">{Math.round(Math.abs(m!.clockOffset()) / 60_000)}</span> دقيقة — تُصحَّح أوقات التعديلات تلقائياً عند المزامنة، ويُفضَّل ضبط الساعة.
+            </p>
+          )}
 
           {st.state === "needs_join" && (
             <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900" data-testid="sync-join">

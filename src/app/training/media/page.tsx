@@ -6,6 +6,7 @@ import { Images, Upload, Trash2, Loader2, X } from "lucide-react";
 import { addImage, deleteImage, listImages, setCaption, type MediaMeta } from "@/lib/training/media";
 import { imageUsage, removeImageRefs } from "@/lib/training/store";
 import { Img } from "@/components/training/Img";
+import { STATIC_IMAGES } from "@/lib/training/staticImages";
 
 const kb = (n: number) => (n > 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 
@@ -79,6 +80,24 @@ function MediaInner() {
           ))}
         </div>
       )}
+
+      {/* The project's own images (public/lab-images): the same on every device, chosen from «صور المشروع» in any image picker */}
+      <div className="mt-8" data-testid="project-images">
+        <h2 className="text-base font-bold">صور المشروع <span className="text-sm font-normal text-muted tabular-nums">({STATIC_IMAGES.length})</span></h2>
+        <p className="mb-3 mt-0.5 text-xs text-muted">
+          الصور الموضوعة في المجلد <span dir="ltr" className="font-mono">public/lab-images</span> داخل المشروع: تظهر على كل الأجهزة وتعمل بدون إنترنت ولا تحتاج قاعدة بيانات. تُختار من «صور المشروع» عند إضافة صورة لفحص.
+        </p>
+        {STATIC_IMAGES.length > 0 && (
+          <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+            {STATIC_IMAGES.map((m) => (
+              <div key={m.path} className="flex flex-col overflow-hidden rounded-xl border border-line bg-surface" title={m.path}>
+                <Img id={m.path} alt={m.caption} className="aspect-square w-full cursor-zoom-in bg-white" onClick={() => setZoom(m.path)} />
+                <span className="truncate px-2 py-1 text-[11px] text-muted">{m.caption}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {zoom && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-6" onClick={() => setZoom(null)}>
