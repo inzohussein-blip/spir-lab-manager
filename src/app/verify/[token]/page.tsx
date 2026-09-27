@@ -1,6 +1,7 @@
 import { ShieldCheck, ShieldX, FlaskConical } from "lucide-react";
 import { getDb } from "@/lib/db";
 import { labDbFor, targetForCode } from "@/lib/db/lab";
+import { DEFAULT_LAB_NAME } from "@/lib/lab-identity";
 
 export const dynamic = "force-dynamic";
 
@@ -40,13 +41,16 @@ export default async function VerifyPage(
     : 0;
 
   const valid = !!report;
+  // The lab's own name, from the same database the report came from.
+  const labTitle = (await db?.query<{ value: string }>(`select value from lab_settings where key = 'lab_name'`)
+    .then((r) => r.rows[0]?.value?.trim()).catch(() => "")) || DEFAULT_LAB_NAME;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-canvas p-4">
       <div className="w-full max-w-md rounded-2xl border border-line bg-surface p-7 shadow-sm">
         <div className="mb-5 flex items-center justify-center gap-2 text-brand-dark">
           <FlaskConical className="size-5" />
-          <span className="font-bold">مختبر التحاليل الطبية</span>
+          <span className="font-bold">{labTitle}</span>
         </div>
 
         {valid ? (

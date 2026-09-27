@@ -5,7 +5,20 @@ import { usePathname } from "next/navigation";
 import { navForRole } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 
-export function Sidebar({ role }: { role: string }) {
+/** The lab's mark: its own logo when it has one, otherwise the first letter of its name. */
+export function LabMark({ lab, className }: { lab: { name: string; logo: string }; className: string }) {
+  if (lab.logo) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={lab.logo} alt="" data-testid="lab-mark" className={cn(className, "bg-white object-contain p-0.5 ring-1 ring-line")} />;
+  }
+  return (
+    <span className={cn(className, "grid place-items-center bg-gradient-to-br from-brand to-brand-dark text-white shadow-sm")}>
+      {lab.name.trim().charAt(0) || "م"}
+    </span>
+  );
+}
+
+export function Sidebar({ role, lab }: { role: string; lab: { name: string; logo: string } }) {
   const pathname = usePathname();
   const groups = navForRole(role);
 
@@ -20,11 +33,9 @@ export function Sidebar({ role }: { role: string }) {
   return (
     <aside className="no-print sticky top-0 hidden h-screen w-60 shrink-0 flex-col overflow-y-auto border-e border-line bg-surface md:flex">
       <div className="flex items-center gap-2.5 px-5 py-4 text-lg font-bold tracking-tight">
-        <span className="grid size-9 place-items-center rounded-xl bg-gradient-to-br from-brand to-brand-dark text-white shadow-sm">
-          م
-        </span>
-        <div className="leading-tight">
-          مختبر التحليلات المرضية
+        <LabMark lab={lab} className="size-9 shrink-0 rounded-xl" />
+        <div className="min-w-0 leading-tight">
+          <span className="line-clamp-2" data-testid="lab-name">{lab.name}</span>
           <div className="text-xs font-normal text-muted">Medical Lab</div>
         </div>
       </div>

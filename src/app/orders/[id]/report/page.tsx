@@ -4,7 +4,7 @@ import QRCode from "qrcode";
 import { query, queryOne } from "@/lib/db";
 import { labTarget } from "@/lib/db/lab";
 import { barcodeSvg } from "@/lib/barcode";
-import { getLabIdentity } from "@/lib/lab-identity";
+import { getLabIdentity, labLogo, labName } from "@/lib/lab-identity";
 import { PrintButton } from "@/components/PrintButton";
 import { WhatsAppButton } from "@/components/WhatsAppButton";
 import { ReportImageButton } from "@/components/ReportImageButton";
@@ -98,16 +98,16 @@ export default async function ReportPage(
         {/* Faint centered logo watermark */}
         <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 flex items-center justify-center">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/lab-logo.png" alt="" className="w-1/2 max-w-[110mm] opacity-[0.06]" />
+          <img src={labLogo(identity)} alt="" className="w-1/2 max-w-[110mm] opacity-[0.06]" />
         </div>
 
         {/* Header — lab letterhead (purple/gold identity) */}
         <div className="flex items-center justify-between gap-4 border-b-4 pb-4" style={{ borderColor: "#c9a227" }}>
           <div className="flex items-center gap-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/lab-logo.png" alt="" width={64} height={64} className="size-16 object-contain" />
+            <img src={labLogo(identity)} alt="" width={64} height={64} className="size-16 object-contain" />
             <div>
-              <h1 className="text-2xl font-extrabold" style={{ color: "#5a2a82" }}>مختبر التحليلات المرضية</h1>
+              <h1 className="text-2xl font-extrabold" style={{ color: "#5a2a82" }}>{labName(identity)}</h1>
               {identity.subtitle && <p className="text-sm font-medium" style={{ color: "#9c7c1e" }}>{identity.subtitle}</p>}
             </div>
           </div>
