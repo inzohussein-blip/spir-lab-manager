@@ -8,11 +8,12 @@ export const dynamic = "force-dynamic";
  * printed report lands here and can confirm the report is authentic and matches
  * the patient/date on paper. No login, minimal data — enough to verify.
  */
-export default async function VerifyPage({
-  params,
-}: {
-  params: { token: string };
-}) {
+export default async function VerifyPage(
+  props: {
+    params: Promise<{ token: string }>;
+  }
+) {
+  const params = await props.params;
   const report = await queryOne<any>(
     `select r.generated_at, r.order_id,
             p.full_name, o.order_date, o.status

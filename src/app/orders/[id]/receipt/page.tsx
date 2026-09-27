@@ -21,7 +21,8 @@ const PAY_METHOD: Record<string, string> = {
 
 /** Reception receipt (وصل) — a compact printable slip listing the ordered
  *  tests, their prices, the total, and the payment status. */
-export default async function ReceiptPage({ params }: { params: { id: string } }) {
+export default async function ReceiptPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const order = await queryOne<any>(
     `select o.accession_no, o.order_date, o.total_amount, o.payment_status,
             o.payment_method, p.full_name, p.gender, p.age_years,

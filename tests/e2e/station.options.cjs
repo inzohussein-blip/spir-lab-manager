@@ -1,10 +1,10 @@
-const { B, OWNER, ok, launch, tmp, pdfPages, done } = require('./lib.cjs');
+const { B, OWNER, ok, launch, tmp, pdfPages, done, kv, resetLocal } = require('./lib.cjs');
 (async () => {
   const b = await launch();
   const p = await b.newPage({ viewport: { width: 1440, height: 950 } });
   const errs = []; p.on('pageerror', e => errs.push(e.message.slice(0, 140))); p.on('dialog', d => d.accept());
-  const ls = (k) => p.evaluate((k) => JSON.parse(localStorage.getItem(k) || 'null'), k);
-  await p.goto(B + '/station'); await p.evaluate(() => { localStorage.clear(); localStorage.setItem('local.activation.v1', 'legacy'); }); await p.reload(); await p.waitForTimeout(1200);
+  const ls = (k) => kv(p, k);
+  await p.goto(B + '/station'); await resetLocal(p, { 'local.activation.v1': 'legacy' }); await p.reload(); await p.waitForTimeout(1200);
   // defaults: all off
   ok(await p.locator('select[aria-label="وحدة العمر"]').count() === 0, 'default: no age-unit selector');
   await p.goto(B + '/station/visits'); await p.waitForTimeout(500);
@@ -79,4 +79,4 @@ const { B, OWNER, ok, launch, tmp, pdfPages, done } = require('./lib.cjs');
   ok(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.join(' | ') : ''));
   await b.close();
   done();
-})().catch((e) => { console.error(e); process.exitCode = 1; });
+})().catch((e) => { console.error(e); process.exit(1); });

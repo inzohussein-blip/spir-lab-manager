@@ -63,7 +63,7 @@ Management)، موجّه بالكامل لإدارة المختبرات فقط،
 ## 4. تحليل مشروع Spir-Margin (الأساس التقني)
 
 - **المستودع:** https://github.com/inzohussein-blip/Spir-Margin
-- **المكدس:** Next.js 14 (App Router) · TypeScript · Tailwind CSS v4 · Radix UI ·
+- **المكدس:** Next.js 16 (App Router) · TypeScript · Tailwind CSS v4 · Radix UI ·
   React Hook Form · TanStack Table · `sonner` · `lucide-react`.
 - **البيانات:** طبقة `src/lib/db` بواجهة موحّدة `query(sql, params)` — خلفيتان
   متبادلتان: PGlite (WASM مدمج، افتراضي) و node-postgres (عند ضبط `DATABASE_URL`).
@@ -129,7 +129,7 @@ Management)، موجّه بالكامل لإدارة المختبرات فقط،
 
 ## 7. المكدس التقني المختار
 
-- **الإطار:** Next.js 14 (App Router) + TypeScript (strict).
+- **الإطار:** Next.js 16 (App Router) + TypeScript (strict).
 - **الواجهة:** Tailwind CSS v4 + Radix UI + `lucide-react` + `sonner`؛ RTL عربي أساسي.
 - **البيانات:** `src/lib/db` بواجهة `query()` — PGlite محلياً / `pg` مع `DATABASE_URL` إنتاجاً.
 - **المصادقة:** `jose` (جلسات موقّعة) — مشاركة `AUTH_SECRET` مع Spir-Margin.

@@ -22,6 +22,6 @@ export async function loginAction(
 }
 
 export async function logoutAction(): Promise<void> {
-  destroySession();
+  await destroySession();
   redirect("/login");
 }

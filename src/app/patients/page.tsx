@@ -23,11 +23,12 @@ function GenderChip({ gender }: { gender: string | null }) {
   return <span className="text-muted">—</span>;
 }
 
-export default async function PatientsPage({
-  searchParams,
-}: {
-  searchParams: { q?: string };
-}) {
+export default async function PatientsPage(
+  props: {
+    searchParams: Promise<{ q?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const q = (searchParams.q || "").trim();
   const patients = await query<Row>(
     `select p.id, p.full_name, p.gender, p.age_years, p.phone,

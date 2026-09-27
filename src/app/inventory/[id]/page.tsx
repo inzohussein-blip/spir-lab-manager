@@ -14,7 +14,8 @@ const reasonLabel: Record<string, string> = {
   expiry: "إتلاف صلاحية",
 };
 
-export default async function ProductDetailPage({ params }: { params: { id: string } }) {
+export default async function ProductDetailPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const p = await queryOne<any>(`select * from products where id = $1`, [params.id]);
   if (!p) notFound();
 

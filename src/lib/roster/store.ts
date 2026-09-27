@@ -2,7 +2,7 @@
 
 /**
  * Standalone Staff & Shifts station — weekly roster, attendance, leaves,
- * advances and a monthly payroll sheet. localStorage under "roster.*";
+ * advances and a monthly payroll sheet. browser store (lib/local/kv) under "roster.*";
  * nothing is shared with any other station.
  */
 

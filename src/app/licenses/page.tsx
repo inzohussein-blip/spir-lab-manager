@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   KeyRound, LogOut, Plus, Copy, Check, Ban, Play, MonitorSmartphone, RefreshCw, Trash2, Pencil, ShieldAlert,
-  FlaskConical, Download, ChevronDown, MessageSquare, History, Wallet, MessageSquareText, Database, Upload, ShieldCheck,
+  FlaskConical, Download, ChevronDown, MessageSquare, History, Wallet, MessageSquareText, Database, Upload, ShieldCheck, Smartphone, Phone,
 } from "lucide-react";
 import { LICENSE_MODULES, DEFAULT_MODULES, moduleLabel, type LicenseModule } from "@/lib/license/modules";
 
@@ -14,11 +14,13 @@ interface Row {
   status: "active" | "stopped"; device_id: string | null; device_label: string | null;
   activated_at: number | null; expires_at: number | null; last_seen_at: number | null; created_at: number;
   price: string; paid: boolean; paid_at: number | null; message: string; device_name: string; is_trial: boolean;
+  app_version: string;
 }
 interface Ev { license_id: string; at: number; kind: string; detail: string }
-interface Storage { source: "license-db" | "app-db" | "embedded"; ok: boolean; codes?: number; roundTripMs?: number; error?: string }
+interface Storage { source: "license-db" | "app-db" | "embedded"; ok: boolean; codes?: number; roundTripMs?: number; error?: string; keySealed?: boolean }
 interface SignIn { at: number; ok: boolean; ip: string; agent: string }
-type Data = { enabled: boolean; owner: boolean; needsDb?: boolean; storage?: Storage; licenses?: Row[]; events?: Ev[]; signIns?: SignIn[]; contact?: string; now?: number };
+interface TwoFactor { enabled: boolean; broken: boolean; forcedOff: boolean; canSetup: boolean }
+type Data = { enabled: boolean; owner: boolean; needsDb?: boolean; storage?: Storage; licenses?: Row[]; events?: Ev[]; signIns?: SignIn[]; twoFactor?: TwoFactor; contact?: string; version?: string; now?: number };
 const agentLabel = (ua: string) => {
   const os = /Windows/.test(ua) ? "Windows" : /Android/.test(ua) ? "Android" : /iPhone|iPad/.test(ua) ? "iOS" : /Mac OS/.test(ua) ? "Mac" : /Linux/.test(ua) ? "Linux" : "";
   const br = /Edg\//.test(ua) ? "Edge" : /Chrome\//.test(ua) ? "Chrome" : /Firefox\//.test(ua) ? "Firefox" : /Safari\//.test(ua) ? "Safari" : "";
@@ -48,7 +50,7 @@ const EVENT_LABEL: Record<string, string> = {
 };
 const eventDetail = (e: Ev) => (e.kind === "modules" ? e.detail.split(",").filter(Boolean).map(moduleLabel).join("، ") || "لا شيء" : e.detail);
 
-type Filter = "all" | "active" | "soon" | "expired" | "unused" | "stopped" | "unpaid" | "trial";
+type Filter = "all" | "active" | "soon" | "expired" | "unused" | "stopped" | "unpaid" | "trial" | "outdated";
 type Sort = "expiry" | "newest" | "name" | "seen";
 
 async function post(body: unknown) {
@@ -56,20 +58,47 @@ async function post(body: unknown) {
   return r.json().catch(() => ({ ok: false }));
 }
 
-function kindOf(r: Row, now: number): Exclude<Filter, "all" | "unpaid" | "trial" | "soon"> | "soon" {
+function kindOf(r: Row, now: number): Exclude<Filter, "all" | "unpaid" | "trial" | "soon" | "outdated"> | "soon" {
   if (r.status === "stopped") return "stopped";
   if (!r.activated_at) return "unused";
   if (r.expires_at != null && r.expires_at <= now) return "expired";
   return (r.expires_at ?? now) - now <= 14 * DAY ? "soon" : "active";
 }
+/** State of a code: its pill, the stripe on the card's edge and the colour of its time bar. */
 function status(r: Row, now: number) {
   const k = kindOf(r, now);
-  if (k === "stopped") return { t: "موقوف", c: "bg-red-50 text-red-700" };
-  if (k === "unused") return { t: "غير مستخدم", c: "bg-gray-100 text-gray-600" };
-  if (k === "expired") return { t: "منتهٍ", c: "bg-red-50 text-red-700" };
-  const left = Math.ceil(((r.expires_at ?? now) - now) / DAY);
-  return { t: `فعّال — باقٍ ${left} يوم`, c: k === "soon" ? "bg-amber-50 text-amber-700" : "bg-teal-50 text-brand-dark" };
+  if (k === "stopped") return { t: "موقوف", c: "bg-red-50 text-red-700", stripe: "border-s-red-500", bar: "bg-red-400" };
+  if (k === "unused") return { t: "غير مستخدم", c: "bg-slate-100 text-slate-600", stripe: "border-s-slate-300", bar: "bg-slate-300" };
+  if (k === "expired") return { t: "منتهٍ", c: "bg-red-50 text-red-700", stripe: "border-s-red-500", bar: "bg-red-400" };
+  if (k === "soon") return { t: "فعّال — ينتهي قريباً", c: "bg-amber-50 text-amber-700", stripe: "border-s-amber-500", bar: "bg-amber-500" };
+  return { t: "فعّال", c: "bg-teal-50 text-teal-800", stripe: "border-s-teal-500", bar: "bg-teal-500" };
 }
+/** Each station in the colour it has on the welcome page. */
+const MOD_TONE: Record<LicenseModule, string> = {
+  station: "border-teal-300 bg-teal-50 text-teal-800",
+  purchasing: "border-amber-300 bg-amber-50 text-amber-800",
+  training: "border-indigo-300 bg-indigo-50 text-indigo-700",
+  qc: "border-rose-300 bg-rose-50 text-rose-700",
+  roster: "border-sky-300 bg-sky-50 text-sky-700",
+  admin: "border-violet-300 bg-violet-50 text-violet-700",
+};
+/** Filter tiles: a dot in their colour, filled with it when chosen. */
+const TILE_TONE: Record<Filter, { dot: string; on: string }> = {
+  all: { dot: "bg-slate-400", on: "bg-slate-700 text-white border-slate-700" },
+  active: { dot: "bg-teal-500", on: "bg-teal-600 text-white border-teal-600" },
+  soon: { dot: "bg-amber-500", on: "bg-amber-500 text-white border-amber-500" },
+  expired: { dot: "bg-red-500", on: "bg-red-600 text-white border-red-600" },
+  unused: { dot: "bg-slate-300", on: "bg-slate-500 text-white border-slate-500" },
+  stopped: { dot: "bg-red-400", on: "bg-red-500 text-white border-red-500" },
+  unpaid: { dot: "bg-orange-500", on: "bg-orange-500 text-white border-orange-500" },
+  trial: { dot: "bg-violet-500", on: "bg-violet-600 text-white border-violet-600" },
+  outdated: { dot: "bg-yellow-500", on: "bg-yellow-500 text-white border-yellow-500" },
+};
+const fmtShort = (ms: number | null) => {
+  if (!ms) return "—";
+  const d = new Date(ms);
+  return `${d.toLocaleDateString("en-CA")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+};
 
 function activationMessage(r: Row, code: string, origin: string) {
   return [
@@ -101,11 +130,11 @@ function copyText(t: string, done: () => void) { navigator.clipboard?.writeText(
 
 function exportCsv(rows: Row[], now: number) {
   const cell = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-  const head = ["المختبر", "ملاحظة", "آخر 4 خانات", "الحالة", "تجريبي", "المدة (يوم)", "التفعيل", "الانتهاء", "الجهاز", "آخر اتصال", "المحطات", "المبلغ", "مدفوع", "تاريخ الدفع", "رسالة للمختبر", "أُنشئ"];
+  const head = ["المختبر", "ملاحظة", "آخر 4 خانات", "الحالة", "تجريبي", "المدة (يوم)", "التفعيل", "الانتهاء", "الجهاز", "آخر اتصال", "الإصدار", "المحطات", "المبلغ", "مدفوع", "تاريخ الدفع", "رسالة للمختبر", "أُنشئ"];
   const lines = [head.map(cell).join(",")];
   for (const r of rows) {
     lines.push([r.lab_name, r.note, r.code_hint, status(r, now).t, r.is_trial ? "نعم" : "", r.duration_days, fmt(r.activated_at), fmt(r.expires_at), deviceOf(r),
-      fmtTime(r.last_seen_at), r.modules.map(moduleLabel).join("، "), r.price, r.paid ? "نعم" : "لا", fmt(r.paid_at), r.message, fmt(r.created_at)].map(cell).join(","));
+      fmtTime(r.last_seen_at), r.app_version, r.modules.map(moduleLabel).join("، "), r.price, r.paid ? "نعم" : "لا", fmt(r.paid_at), r.message, fmt(r.created_at)].map(cell).join(","));
   }
   const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -118,6 +147,8 @@ function exportCsv(rows: Row[], now: number) {
 export default function LicensesPage() {
   const [data, setData] = useState<Data | null>(null);
   const [pw, setPw] = useState("");
+  const [code, setCode] = useState("");
+  const [needCode, setNeedCode] = useState(false);
   const [err, setErr] = useState("");
   const [shown, setShown] = useState<{ row: Row; code: string } | null>(null);
   const [copied, setCopied] = useState("");
@@ -143,8 +174,11 @@ export default function LicensesPage() {
   async function login(e: React.FormEvent) {
     e.preventDefault();
     setErr("");
-    const d = await post({ op: "login", password: pw });
-    if (d.ok) { setPw(""); load(); } else setErr(d.error === "too_many" ? "محاولات كثيرة — حاول بعد قليل." : "كلمة المرور غير صحيحة.");
+    const d = await post({ op: "login", password: pw, code: needCode ? code : undefined });
+    if (d.ok) { setPw(""); setCode(""); setNeedCode(false); load(); return; }
+    if (d.error === "need_code") { setNeedCode(true); return; }
+    setCode("");
+    setErr(d.error === "too_many" ? "محاولات كثيرة — حاول بعد قليل." : d.error === "wrong_code" ? "رمز التحقق غير صحيح أو مستعمل — اكتب الرمز الظاهر الآن." : "كلمة المرور غير صحيحة.");
   }
   async function create(trial: boolean) {
     const days = trial ? TRIAL_DAYS : f.days === -1 ? Number(f.custom) : f.days;
@@ -163,16 +197,17 @@ export default function LicensesPage() {
   const now = data?.now ?? Date.now();
   const all = useMemo(() => data?.licenses ?? [], [data]);
   const counts = useMemo(() => {
-    const c: Record<Filter, number> = { all: all.length, active: 0, soon: 0, expired: 0, unused: 0, stopped: 0, unpaid: 0, trial: 0 };
+    const c: Record<Filter, number> = { all: all.length, active: 0, soon: 0, expired: 0, unused: 0, stopped: 0, unpaid: 0, trial: 0, outdated: 0 };
     for (const r of all) {
       const k = kindOf(r, now);
       c[k] += 1;
       if (k === "soon") c.active += 1; // "active" counts every working code
       if (!r.paid) c.unpaid += 1;
       if (r.is_trial) c.trial += 1;
+      if (isOutdated(r, data?.version)) c.outdated += 1;
     }
     return c;
-  }, [all, now]);
+  }, [all, now, data?.version]);
   const money = useMemo(() => ({
     paid: all.filter((r) => r.paid).reduce((n, r) => n + amount(r.price), 0),
     due: all.filter((r) => !r.paid).reduce((n, r) => n + amount(r.price), 0),
@@ -185,13 +220,14 @@ export default function LicensesPage() {
       if (filter === "active") return k === "active" || k === "soon";
       if (filter === "unpaid") return !r.paid;
       if (filter === "trial") return r.is_trial;
+      if (filter === "outdated") return isOutdated(r, data?.version);
       return filter === "all" || k === filter;
     });
     const exp = (r: Row) => (r.expires_at ?? Number.MAX_SAFE_INTEGER - (r.activated_at ? 0 : 1));
     return list.sort((a, b) =>
       sort === "expiry" ? exp(a) - exp(b) : sort === "name" ? a.lab_name.localeCompare(b.lab_name, "ar")
       : sort === "seen" ? (b.last_seen_at ?? 0) - (a.last_seen_at ?? 0) : b.created_at - a.created_at);
-  }, [all, q, filter, sort, now]);
+  }, [all, q, filter, sort, now, data?.version]);
   const eventsOf = useMemo(() => {
     const m = new Map<string, Ev[]>();
     for (const e of data?.events ?? []) (m.get(e.license_id) ?? m.set(e.license_id, []).get(e.license_id)!).push(e);
@@ -223,7 +259,14 @@ export default function LicensesPage() {
       <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-brand-light text-brand-dark"><KeyRound className="size-6" /></span>
       <div className="mt-3 text-lg font-bold">إدارة الرموز</div>
       <p className="mb-4 mt-1 text-sm text-muted">صفحة المالك فقط.</p>
-      <input type="password" value={pw} onChange={(e) => { setPw(e.target.value); setErr(""); }} placeholder="كلمة المرور" autoFocus aria-label="كلمة المرور" className={`${inp} text-center`} />
+      <input type="password" value={pw} onChange={(e) => { setPw(e.target.value); setErr(""); }} placeholder="كلمة المرور" autoFocus={!needCode} readOnly={needCode} aria-label="كلمة المرور" className={`${inp} text-center`} />
+      {needCode && (
+        <div className="mt-3">
+          <label className="mb-1 flex items-center justify-center gap-1 text-xs text-muted"><Smartphone className="size-3.5" /> رمز التحقق من تطبيق الهاتف (6 أرقام)</label>
+          <input value={code} onChange={(e) => { setCode(e.target.value.replace(/\D/g, "").slice(0, 6)); setErr(""); }} inputMode="numeric" autoComplete="one-time-code" autoFocus
+            dir="ltr" placeholder="000000" aria-label="رمز التحقق" className={`${inp} text-center font-mono text-lg tracking-[0.4em]`} />
+        </div>
+      )}
       <button className="mt-3 w-full rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-dark">دخول</button>
       {err && <p className="mt-2 text-xs text-red-600">{err}</p>}
     </form>,
@@ -234,45 +277,53 @@ export default function LicensesPage() {
     { k: "all", l: "الكل" }, { k: "active", l: "فعّال" }, { k: "soon", l: "ينتهي خلال 14 يوماً", tone: "text-amber-700" },
     { k: "expired", l: "منتهٍ", tone: "text-red-700" }, { k: "unused", l: "غير مستخدم" }, { k: "stopped", l: "موقوف", tone: "text-red-700" },
     { k: "unpaid", l: "غير مدفوع", tone: "text-amber-700" }, { k: "trial", l: "تجريبي" },
+    { k: "outdated", l: "نسخة قديمة", tone: "text-amber-700" },
   ];
 
   return shell(
     <>
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold"><KeyRound className="size-6" /> إدارة الرموز</h1>
-          <p className="mt-1 text-sm text-muted">رمز لكل مختبر، يعمل على جهاز واحد، وتبدأ مدته من يوم التفعيل.</p>
-        </div>
-        <button onClick={async () => { await post({ op: "logout" }); load(); }} className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-surface">
-          <LogOut className="size-4" /> خروج
-        </button>
-      </div>
-
-      {/* Where the codes are stored + a save test */}
-      {data.storage && (
-        <div className={`mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4 py-3 text-sm ${data.storage.ok ? "border-teal-200 bg-teal-50/60" : "border-red-300 bg-red-50"}`}>
-          <Database className={`size-5 shrink-0 ${data.storage.ok ? "text-brand-dark" : "text-red-600"}`} />
-          <div className="min-w-0 flex-1">
-            <div className="font-semibold">التخزين: {SOURCE[data.storage.source]}</div>
-            <div className="text-xs text-muted">
-              {data.storage.ok ? `متصلة ✓ — محفوظ فيها ${data.storage.codes ?? 0} رمز.` : `غير متصلة — ${data.storage.error ?? ""}`}
-              {test && (test.ok ? ` · اختبار الحفظ نجح (كتابة وقراءة وحذف في ${test.roundTripMs} ملّي ثانية).` : ` · اختبار الحفظ فشل: ${test.error ?? ""}`)}
-            </div>
+      <header className="mb-5 overflow-hidden rounded-2xl text-white shadow-[var(--shadow-card)]" style={{ background: "linear-gradient(135deg, #134e4a 0%, #0f2f3a 100%)" }}>
+        <div className="flex flex-wrap items-start justify-between gap-3 px-5 pt-5">
+          <div>
+            <h1 className="flex items-center gap-2 text-2xl font-bold"><KeyRound className="size-6 text-teal-300" /> إدارة الرموز</h1>
+            <p className="mt-1 text-sm text-white/70">رمز لكل مختبر، يعمل على جهاز واحد، وتبدأ مدته من يوم التفعيل.</p>
           </div>
-          <button onClick={async () => { setTesting(true); const d = await post({ op: "selftest" }); setTest(d.storage ?? { source: data.storage!.source, ok: false, error: "no reply" }); setTesting(false); }}
-            disabled={testing} className="rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-semibold hover:bg-canvas disabled:opacity-60">
-            {testing ? "جارٍ الاختبار…" : "اختبار الحفظ"}
+          <button onClick={async () => { await post({ op: "logout" }); load(); }} className="inline-flex items-center gap-1.5 rounded-lg border border-white/25 px-3 py-2 text-sm text-white hover:bg-white/10">
+            <LogOut className="size-4" /> خروج
           </button>
         </div>
-      )}
+        {/* Where the codes are stored, the signing key, the site version — small status indicators */}
+        {data.storage && (
+          <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-white/10 bg-black/15 px-5 py-3 text-xs text-white/80">
+            <span className="inline-flex items-center gap-1.5">
+              <span className={`size-2 rounded-full ${data.storage.ok ? "bg-emerald-400 shadow-[0_0_0_3px_rgba(52,211,153,.25)]" : "bg-red-400 shadow-[0_0_0_3px_rgba(248,113,113,.3)]"}`} />
+              <Database className="size-3.5" /> {SOURCE[data.storage.source]} — {data.storage.ok ? <>متصلة · <b className="font-mono tabular-nums text-white">{data.storage.codes ?? 0}</b> رمز</> : <>غير متصلة {data.storage.error ?? ""}</>}
+            </span>
+            {data.storage.ok && data.storage.keySealed !== undefined && (
+              <span data-testid="key-sealed" className={`inline-flex items-center gap-1.5 ${data.storage.keySealed ? "" : "text-amber-300"}`}>
+                <span className={`size-2 rounded-full ${data.storage.keySealed ? "bg-emerald-400" : "bg-amber-400"}`} />
+                {data.storage.keySealed ? "مفتاح التوقيع مشفّر بـ AUTH_SECRET ✓" : "مفتاح التوقيع غير مشفّر — أضف AUTH_SECRET في Vercel ثم أعد النشر"}
+              </span>
+            )}
+            {data.version && <span data-testid="site-version" className="inline-flex items-center gap-1.5">الإصدار <b className="font-mono tabular-nums text-white" dir="ltr">{data.version}</b></span>}
+            <button onClick={async () => { setTesting(true); const d = await post({ op: "selftest" }); setTest(d.storage ?? { source: data.storage!.source, ok: false, error: "no reply" }); setTesting(false); }}
+              disabled={testing} className="ms-auto rounded-md border border-white/25 px-2.5 py-1 font-semibold text-white hover:bg-white/10 disabled:opacity-60">
+              {testing ? "جارٍ الاختبار…" : "اختبار الحفظ"}
+            </button>
+            {test && <span className={`basis-full ${test.ok ? "text-emerald-300" : "text-red-300"}`}>{test.ok ? `اختبار الحفظ نجح — كتابة وقراءة وحذف في ${test.roundTripMs} ملّي ثانية.` : `اختبار الحفظ فشل: ${test.error ?? ""}`}</span>}
+          </div>
+        )}
+      </header>
 
       {/* Summary tiles = filters */}
-      <div className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="mb-2 grid grid-cols-3 gap-2">
         {TILES.map((t) => (
           <button key={t.k} onClick={() => setFilter(t.k)} aria-pressed={filter === t.k}
-            className={`rounded-xl border bg-surface px-3 py-2 text-right shadow-[var(--shadow-card)] ${filter === t.k ? "border-brand ring-1 ring-brand" : "border-line hover:border-brand/50"}`}>
-            <div className={`text-xl font-extrabold tabular-nums ${t.tone ?? ""}`}>{counts[t.k]}</div>
-            <div className="text-xs text-muted">{t.l}</div>
+            className={`rounded-xl border px-2.5 py-2 text-right shadow-[var(--shadow-card)] transition-colors sm:px-3.5 sm:py-2.5 ${filter === t.k ? TILE_TONE[t.k].on : "border-line bg-surface hover:border-slate-300"}`}>
+            <div className={`font-mono text-2xl font-extrabold leading-tight tabular-nums ${filter === t.k ? "" : t.tone ?? ""}`}>{counts[t.k]}</div>
+            <div className={`mt-0.5 flex items-center gap-1.5 text-xs ${filter === t.k ? "text-white/85" : "text-muted"}`}>
+              <span className={`size-2 shrink-0 rounded-full ${filter === t.k ? "bg-white/80" : TILE_TONE[t.k].dot}`} />{t.l}
+            </div>
           </button>
         ))}
       </div>
@@ -350,16 +401,15 @@ export default function LicensesPage() {
           const isOpen = open.has(r.id);
           const evs = eventsOf.get(r.id) ?? [];
           return (
-            <div key={r.id} className="rounded-2xl border border-line bg-surface p-4 shadow-[var(--shadow-card)]" data-lab={r.lab_name}>
+            <div key={r.id} className={`rounded-2xl border border-s-4 border-line bg-surface p-4 shadow-[var(--shadow-card)] ${st.stripe}`} data-lab={r.lab_name}>
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-base font-bold">{r.lab_name}</span>
+                    <span className="text-lg font-bold">{r.lab_name}</span>
                     <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${st.c}`}>{st.t}</span>
                     {r.is_trial && <span className="rounded-full bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-700">تجريبي</span>}
                     {r.price.trim() && <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${r.paid ? "bg-teal-50 text-brand-dark" : "bg-amber-50 text-amber-700"}`}>{r.paid ? "مدفوع" : "غير مدفوع"} · <span className="tabular-nums">{r.price}</span></span>}
                     {r.message && <span title={r.message} className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-xs text-sky-700"><MessageSquare className="size-3" /> رسالة</span>}
-                    <span className="font-mono text-xs text-muted" dir="ltr">…{r.code_hint}</span>
                   </div>
                   {r.note && <div className="mt-0.5 text-xs text-muted">{r.note}</div>}
                 </div>
@@ -369,25 +419,28 @@ export default function LicensesPage() {
                     <option value="" disabled>+ تمديد</option>
                     {PERIODS.map((p) => <option key={p.d} value={p.d}>+ {p.l}</option>)}
                   </select>
-                  {r.status === "active"
-                    ? <button onClick={() => change(r, { action: "stop" }, `إيقاف رمز «${r.lab_name}»؟ تُقفل محطاته عند أول اتصال بالإنترنت.`)} className={`${small} text-red-600 hover:bg-red-50`}><Ban className="size-3.5" /> إيقاف</button>
-                    : <button onClick={() => change(r, { action: "resume" })} className={`${small} text-brand-dark hover:bg-teal-50`}><Play className="size-3.5" /> إعادة تفعيل</button>}
-                  {r.device_id && <button onClick={() => change(r, { action: "reset_device" }, "فك ربط الجهاز؟ يستطيع المختبر بعدها إدخال نفس الرمز على جهاز جديد، والمدة تستمر كما هي.")} className={small}><MonitorSmartphone className="size-3.5" /> نقل لجهاز جديد</button>}
-                  <button onClick={() => change(r, { action: "new_code" }, "إنشاء رمز جديد لهذا المختبر؟ الرمز القديم لا يعمل بعدها لتفعيل جهاز، والجهاز الحالي يستمر.")} className={small}><KeyRound className="size-3.5" /> رمز جديد</button>
                   <button onClick={() => copyText(statusMessage(r, now), () => flash(r.id))} title="نسخ رسالة الحالة (المدة والمحطات) لإرسالها للمختبر" className={small}>
                     {copied === r.id ? <Check className="size-3.5" /> : <Copy className="size-3.5" />} رسالة الحالة
                   </button>
-                  <button onClick={() => { const lab = window.prompt("اسم المختبر:", r.lab_name); if (lab == null) return; const note = window.prompt("ملاحظة:", r.note) ?? r.note; change(r, { action: "rename", lab, note }); }} title="تعديل الاسم والملاحظة" aria-label="تعديل الاسم" className="grid size-7 place-items-center rounded-lg border border-line hover:bg-canvas"><Pencil className="size-3.5" /></button>
-                  <button onClick={() => change(r, { action: "delete" }, `حذف رمز «${r.lab_name}» نهائياً؟ تُقفل محطاته عند أول اتصال بالإنترنت.`)} title="حذف" aria-label="حذف" className="grid size-7 place-items-center rounded-lg border border-line text-red-600 hover:bg-red-50"><Trash2 className="size-3.5" /></button>
+                  {/* Less frequent actions: one size of square icon buttons, named by their tooltip */}
+                  {r.device_id && <IconBtn label="نقل لجهاز جديد" onClick={() => change(r, { action: "reset_device" }, "فك ربط الجهاز؟ يستطيع المختبر بعدها إدخال نفس الرمز على جهاز جديد، والمدة تستمر كما هي.")}><MonitorSmartphone className="size-4" /></IconBtn>}
+                  <IconBtn label="رمز جديد" onClick={() => change(r, { action: "new_code" }, "إنشاء رمز جديد لهذا المختبر؟ الرمز القديم لا يعمل بعدها لتفعيل جهاز، والجهاز الحالي يستمر.")}><KeyRound className="size-4" /></IconBtn>
+                  <IconBtn label="تعديل الاسم" onClick={() => { const lab = window.prompt("اسم المختبر:", r.lab_name); if (lab == null) return; const note = window.prompt("ملاحظة:", r.note) ?? r.note; change(r, { action: "rename", lab, note }); }}><Pencil className="size-4" /></IconBtn>
+                  {r.status === "active"
+                    ? <IconBtn label="إيقاف" danger onClick={() => change(r, { action: "stop" }, `إيقاف رمز «${r.lab_name}»؟ تُقفل محطاته عند أول اتصال بالإنترنت.`)}><Ban className="size-4" /></IconBtn>
+                    : <IconBtn label="إعادة تفعيل" onClick={() => change(r, { action: "resume" })}><Play className="size-4" /></IconBtn>}
+                  <IconBtn label="حذف" danger onClick={() => change(r, { action: "delete" }, `حذف رمز «${r.lab_name}» نهائياً؟ تُقفل محطاته عند أول اتصال بالإنترنت.`)}><Trash2 className="size-4" /></IconBtn>
                 </div>
               </div>
-              <div className="mt-3 grid gap-2 text-xs sm:grid-cols-4">
-                <Info k="المدة" v={r.activated_at ? `${fmt(r.activated_at)} ← ${fmt(r.expires_at)}` : `${r.duration_days} يوم (تبدأ عند التفعيل)`} />
+              <TimeLeft r={r} now={now} bar={st.bar} />
+              <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 border-t border-line pt-3 text-xs sm:grid-cols-5">
                 <Info k="الجهاز" v={deviceOf(r) || "لم يُربط بعد"} />
-                <Info k="آخر اتصال" v={fmtTime(r.last_seen_at)} />
-                <Info k="أُنشئ" v={fmt(r.created_at)} />
+                <Info k="آخر اتصال" v={fmtShort(r.last_seen_at)} mono />
+                <VersionInfo r={r} current={data.version} />
+                <Info k="الرمز" v={`…${r.code_hint}`} mono />
+                <Info k="أُنشئ" v={fmt(r.created_at)} mono />
               </div>
-              <div className="mt-2 text-xs text-muted">المحطات — التغيير يصل للجهاز عند اتصاله بالإنترنت:</div>
+              <div className="mt-3 text-xs text-muted">المحطات — التغيير يصل للجهاز عند اتصاله بالإنترنت:</div>
               <ModuleChips value={r.modules} onChange={(m) => change(r, { action: "modules", modules: m })} />
 
               <button onClick={() => setOpen((s) => { const n = new Set(s); if (n.has(r.id)) n.delete(r.id); else n.add(r.id); return n; })}
@@ -401,12 +454,8 @@ export default function LicensesPage() {
       </div>
 
       {/* Backup of the codes */}
-      <div className="mt-6 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
-        <div className="flex items-center gap-2 text-sm font-semibold"><Database className="size-4" /> نسخة احتياطية للرموز</div>
-        <p className="mb-3 mt-1 text-xs text-muted">
-          ملف يحفظ كل الرموز (مشفّرة كما هي في القاعدة — لا تظهر فيه الرموز نفسها) وسجلها وسطر التواصل. الاسترجاع يضيف ويحدّث ولا يحذف شيئاً.
-          احفظ الملف في مكان آمن ولا تشاركه.
-        </p>
+      <Panel tone="sky" icon={<Database className="size-5" />} title="نسخة احتياطية للرموز"
+        desc="ملف يحفظ كل الرموز (مشفّرة كما هي في القاعدة — لا تظهر فيه الرموز نفسها) وسجلها وسطر التواصل. الاسترجاع يضيف ويحدّث ولا يحذف شيئاً. احفظ الملف في مكان آمن ولا تشاركه.">
         <div className="flex flex-wrap items-center gap-2">
           <button onClick={async () => {
             const d = await post({ op: "backup" });
@@ -435,12 +484,13 @@ export default function LicensesPage() {
           </label>
           {backupMsg && <span className="text-xs text-brand-dark">{backupMsg}</span>}
         </div>
-      </div>
+      </Panel>
+
+      <TwoFactorCard tf={data.twoFactor} reload={load} />
 
       {/* Owner sign-in log */}
-      <div className="mt-6 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
-        <div className="flex items-center gap-2 text-sm font-semibold"><ShieldCheck className="size-4" /> سجل الدخول لهذه الصفحة</div>
-        <p className="mb-2 mt-1 text-xs text-muted">آخر محاولات الدخول الناجحة والفاشلة. بعد 8 محاولات خاطئة من نفس العنوان يُمنع الدخول 10 دقائق.</p>
+      <Panel tone="teal" icon={<ShieldCheck className="size-5" />} title="سجل الدخول لهذه الصفحة"
+        desc="آخر محاولات الدخول الناجحة والفاشلة. بعد 8 محاولات خاطئة من نفس العنوان يُمنع الدخول 10 دقائق.">
         {(data.signIns ?? []).length === 0 ? <p className="text-xs text-muted">لا شيء بعد.</p> : (
           <ul className="max-h-64 overflow-y-auto rounded-lg border border-line text-xs">
             {data.signIns!.map((x, i) => (
@@ -448,22 +498,21 @@ export default function LicensesPage() {
                 <span className={`font-semibold ${x.ok ? "text-brand-dark" : "text-red-700"}`}>{x.ok ? "✓ دخول ناجح" : "✗ محاولة فاشلة"}</span>
                 <span className="text-muted" dir="ltr">{x.ip}</span>
                 <span className="text-muted">{agentLabel(x.agent)}</span>
-                <span className="tabular-nums text-muted">{fmtTime(x.at)}</span>
+                <span className="font-mono tabular-nums text-muted" dir="ltr">{fmtShort(x.at)}</span>
               </li>
             ))}
           </ul>
         )}
-      </div>
+      </Panel>
 
       {/* Contact line */}
-      <div className="mt-6 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
-        <div className="text-sm font-semibold">سطر التواصل</div>
-        <p className="mb-2 text-xs text-muted">يظهر في نافذة التفعيل وشاشة القفل. إذا تُرك فارغاً يظهر رقمك: {OWNER_PHONE}.</p>
+      <Panel tone="amber" icon={<Phone className="size-5" />} title="سطر التواصل"
+        desc={<>يظهر في نافذة التفعيل وشاشة القفل. إذا تُرك فارغاً يظهر رقمك: <span className="font-mono" dir="ltr">{OWNER_PHONE}</span>.</>}>
         <div className="flex gap-2">
           <input value={contact} onChange={(e) => setContact(e.target.value)} className={inp} placeholder="للتفعيل أو التجديد تواصل مع: …" aria-label="سطر التواصل" />
           <button onClick={async () => { await post({ op: "contact", contact }); load(); flash("contact"); }} className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark">{copied === "contact" ? "حُفظ" : "حفظ"}</button>
         </div>
-      </div>
+      </Panel>
     </>,
   );
 }
@@ -522,8 +571,60 @@ function Details({ r, evs, onChange }: { r: Row; evs: Ev[]; onChange: (c: Record
   );
 }
 
-function Info({ k, v }: { k: string; v: string }) {
-  return <div className="rounded-lg bg-canvas px-2.5 py-1.5"><div className="text-[10px] text-muted">{k}</div><div className="font-medium">{v}</div></div>;
+/** A bound device whose app is not the current version (or too old to say which it is). */
+function isOutdated(r: Row, current?: string): boolean {
+  return !!r.device_id && r.status === "active" && !!current && r.app_version !== current;
+}
+function VersionInfo({ r, current }: { r: Row; current?: string }) {
+  const v = r.app_version;
+  const tone = !r.device_id ? "" : !v || (current && v !== current) ? "text-amber-700" : "text-teal-700";
+  const text = !r.device_id ? "—" : !v ? "⚠️ قديمة (قبل هذا التحديث)" : current && v !== current ? `⚠️ ${v} — أقدم` : `✓ ${v}`;
+  return (
+    <div data-testid="app-version" title={current ? `أحدث إصدار: ${current}` : undefined}>
+      <div className="text-[10px] text-muted">الإصدار</div><div className={`text-right font-mono font-medium tabular-nums ${tone}`} dir="ltr">{text}</div>
+    </div>
+  );
+}
+
+function Info({ k, v, mono }: { k: string; v: string; mono?: boolean }) {
+  return (
+    <div className="min-w-0">
+      <div className="text-[10px] text-muted">{k}</div>
+      <div className={`truncate font-medium ${mono ? "text-right font-mono tabular-nums" : ""}`} dir={mono ? "ltr" : undefined} title={v}>{v}</div>
+    </div>
+  );
+}
+
+/** How much of the period is left, as words, dates and a bar. */
+function TimeLeft({ r, now, bar }: { r: Row; now: number; bar: string }) {
+  if (!r.activated_at || !r.expires_at) {
+    return <div className="mt-3 text-xs text-muted" data-testid="time-left">المدة <b className="font-mono tabular-nums text-ink">{r.duration_days}</b> يوم — تبدأ عند التفعيل</div>;
+  }
+  const total = Math.max(1, r.expires_at - r.activated_at);
+  const left = r.expires_at - now;
+  const days = Math.ceil(left / DAY);
+  const pct = Math.max(0, Math.min(100, (left / total) * 100));
+  return (
+    <div className="mt-3" data-testid="time-left">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 text-xs text-muted">
+        <span>{days > 0 ? <>باقٍ <b className="font-mono text-sm tabular-nums text-ink">{days}</b> يوماً</> : <>انتهت المدة</>}</span>
+        <span className="font-mono tabular-nums" dir="ltr">{fmt(r.activated_at)} → {fmt(r.expires_at)}</span>
+      </div>
+      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-200/70" role="progressbar" aria-label="المدة المتبقية" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100}>
+        <span className={`block h-full rounded-full ${bar}`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+/** A square icon button (one size for every less-used action), named by its tooltip. */
+function IconBtn({ label, onClick, danger, children }: { label: string; onClick: () => void; danger?: boolean; children: React.ReactNode }) {
+  return (
+    <button onClick={onClick} title={label} aria-label={label}
+      className={`grid size-8 place-items-center rounded-lg border border-line bg-surface transition-colors ${danger ? "text-red-600 hover:border-red-200 hover:bg-red-50" : "text-slate-600 hover:bg-canvas hover:text-ink"}`}>
+      {children}
+    </button>
+  );
 }
 
 function ModuleChips({ value, onChange }: { value: LicenseModule[]; onChange: (m: LicenseModule[]) => void }) {
@@ -534,11 +635,108 @@ function ModuleChips({ value, onChange }: { value: LicenseModule[]; onChange: (m
         return (
           <button key={m.id} type="button" aria-pressed={on}
             onClick={() => onChange(on ? value.filter((x) => x !== m.id) : [...value, m.id])}
-            className={`rounded-full border px-2.5 py-1 text-xs ${on ? (m.id === "admin" ? "border-violet-500 bg-violet-50 font-semibold text-violet-700" : "border-brand bg-brand-light font-semibold text-brand-dark") : "border-line text-muted line-through hover:bg-canvas"}`}>
+            className={`rounded-full border px-2.5 py-1 text-xs ${on ? `${MOD_TONE[m.id]} font-semibold` : "border-line text-muted line-through hover:bg-canvas"}`}>
             {on ? "✓ " : ""}{m.label}
           </button>
         );
       })}
     </div>
+  );
+}
+
+/** A settings card: a large coloured icon, a clear title and what the card is for. */
+const PANEL_TONE = {
+  sky: "bg-sky-100 text-sky-700",
+  violet: "bg-violet-100 text-violet-700",
+  teal: "bg-teal-100 text-teal-700",
+  amber: "bg-amber-100 text-amber-700",
+} as const;
+function Panel({ tone, icon, title, desc, testid, children }: {
+  tone: keyof typeof PANEL_TONE; icon: React.ReactNode; title: string; desc: React.ReactNode; testid?: string; children: React.ReactNode;
+}) {
+  return (
+    <div className="mt-6 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]" data-testid={testid}>
+      <div className="mb-4 flex items-start gap-3">
+        <span className={`grid size-11 shrink-0 place-items-center rounded-xl ${PANEL_TONE[tone]}`}>{icon}</span>
+        <div className="min-w-0">
+          <h2 className="text-base font-bold">{title}</h2>
+          <p className="mt-0.5 text-xs leading-relaxed text-muted">{desc}</p>
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/** «التحقق بخطوتين»: a 6-digit code from an authenticator app on the owner's phone, with the password. */
+function TwoFactorCard({ tf, reload }: { tf?: TwoFactor; reload: () => void }) {
+  const [setup, setSetup] = useState<{ secret: string; qr: string } | null>(null);
+  const [code, setCode] = useState("");
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  if (!tf) return null;
+  const codeInput = (
+    <input value={code} onChange={(e) => { setCode(e.target.value.replace(/\D/g, "").slice(0, 6)); setMsg(""); }} inputMode="numeric" autoComplete="one-time-code"
+      dir="ltr" placeholder="000000" aria-label="رمز التحقق" className="w-36 rounded-lg border border-line bg-surface px-3 py-2 text-center font-mono text-sm tracking-[0.3em] outline-none focus:border-brand" />
+  );
+  async function run(op: string, ok: string) {
+    setBusy(true);
+    const d = await post({ op, code });
+    setBusy(false); setCode("");
+    if (d.ok) { setSetup(null); setMsg(ok); reload(); } else setMsg("الرمز غير صحيح أو مستعمل — اكتب الرمز الظاهر الآن في التطبيق.");
+  }
+  async function begin() {
+    setBusy(true); setMsg("");
+    const d = await post({ op: "totp_setup" });
+    setBusy(false);
+    if (d.ok) setSetup({ secret: d.secret, qr: d.qr }); else setMsg("يحتاج المتغير AUTH_SECRET في Vercel.");
+  }
+  return (
+    <Panel tone="violet" icon={<Smartphone className="size-5" />} title="التحقق بخطوتين" testid="two-factor"
+      desc="مع كلمة المرور يُطلب رمز من 6 أرقام يتغيّر كل 30 ثانية في تطبيق على هاتفك (Google Authenticator أو Microsoft Authenticator). لو تسرّبت كلمة المرور لا يدخل أحد بدون هاتفك.">
+      {tf.forcedOff && (
+        <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">التحقق بخطوتين موقوف الآن من Vercel (المتغير <b dir="ltr">LICENSE_2FA_OFF</b>). فعّله من جديد بهاتفك، ثم احذف المتغير وأعد النشر.</p>
+      )}
+      {tf.broken && !setup && (
+        <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">تغيّر AUTH_SECRET بعد التفعيل فلم يعد الرمز القديم يعمل — التحقق متوقف الآن. فعّله من جديد.</p>
+      )}
+      {tf.enabled && !tf.forcedOff ? (
+        <div className="space-y-2">
+          <p className="text-sm font-medium text-brand-dark">✓ مفعّل — يُطلب رمز الهاتف عند كل دخول.</p>
+          <div className="flex flex-wrap items-center gap-2">
+            {codeInput}
+            <button disabled={busy || code.length !== 6} onClick={() => { if (window.confirm("إيقاف التحقق بخطوتين؟ سيكفي بعدها كلمة المرور وحدها.")) run("totp_disable", "أُوقف التحقق بخطوتين."); }}
+              className="rounded-lg border border-red-300 px-3 py-2 text-sm text-red-700 hover:bg-red-50 disabled:opacity-50">إيقاف</button>
+          </div>
+          <p className="text-xs text-muted">إذا فقدت هاتفك: أضف في Vercel المتغير <b dir="ltr">LICENSE_2FA_OFF</b> بقيمة <b dir="ltr">1</b> وأعد النشر، ادخل بكلمة المرور وفعّله بالهاتف الجديد، ثم احذف المتغير.</p>
+        </div>
+      ) : setup ? (
+        <div className="flex flex-wrap items-start gap-4">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={setup.qr} alt="رمز QR لتطبيق التحقق" className="size-44 rounded-lg border border-line bg-white p-1" />
+          <ol className="min-w-0 flex-1 list-decimal space-y-2 ps-5 text-sm">
+            <li>ثبّت على هاتفك <b>Google Authenticator</b> أو <b>Microsoft Authenticator</b>.</li>
+            <li>في التطبيق اختر «إضافة» ← «مسح رمز QR» وامسح الرمز. أو اكتب هذا المفتاح يدوياً:
+              <div data-testid="totp-secret" dir="ltr" className="mt-1 select-all break-all rounded-md bg-canvas px-2 py-1 font-mono text-xs">{setup.secret.match(/.{1,4}/g)!.join(" ")}</div>
+            </li>
+            <li>اكتب الرمز الظاهر في التطبيق:
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                {codeInput}
+                <button disabled={busy || code.length !== 6} onClick={() => run("totp_enable", "✓ فُعّل التحقق بخطوتين.")}
+                  className="rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-50">تأكيد التفعيل</button>
+                <button onClick={() => { setSetup(null); setCode(""); setMsg(""); }} className="rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas">إلغاء</button>
+              </div>
+            </li>
+          </ol>
+        </div>
+      ) : tf.canSetup ? (
+        <button disabled={busy} onClick={begin} className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-50">
+          <Smartphone className="size-4" /> تفعيل التحقق بخطوتين
+        </button>
+      ) : (
+        <p className="text-xs text-amber-700">يحتاج المتغير AUTH_SECRET في Vercel أولاً.</p>
+      )}
+      {msg && <p className="mt-2 text-xs text-brand-dark">{msg}</p>}
+    </Panel>
   );
 }

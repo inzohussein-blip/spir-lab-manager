@@ -3,7 +3,7 @@
 /**
  * Standalone Quality & Devices station — daily QC with Westgard rules,
  * temperature logs, and equipment maintenance / calibration. Everything lives
- * in localStorage under "qc.*". Nothing here is shared with any other station.
+ * in the browser store (lib/local/kv) under "qc.*". Nothing here is shared with any other station.
  */
 
 import { readLS, writeLS, newId, todayYmd, addDays, addMonthsYmd, daysUntil, clearOldDefault } from "@/lib/local/util";

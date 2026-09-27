@@ -1,9 +1,10 @@
 import "server-only";
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "node:crypto";
 import { SignJWT, exportJWK, generateKeyPair, importJWK, type JWK, type KeyLike } from "jose";
 import { query as appQuery } from "@/lib/db";
 import { cleanModules, type LicenseModule, type LicensePayload } from "./modules";
 import { licenseDbUrl } from "./env";
+import { newTotpSecret, totpMatch, totpUri } from "./totp";
 export { licenseDbUrl, durableStorage, passwordSet, licensingEnabled, licenseStorage } from "./env";
 
 /**
@@ -11,16 +12,28 @@ export { licenseDbUrl, durableStorage, passwordSet, licensingEnabled, licenseSto
  * number of days counted from that activation, with the stations (and the full admin panel)
  * it may open. The code itself is stored only as a hash.
  *
- * A device gets a license signed with an ES256 key kept in the database; the stations verify it
- * offline and refresh it from the server when online (extension, station changes, stop).
+ * A device gets a license signed with an ES256 key kept in the database, sealed with AUTH_SECRET;
+ * the stations verify it offline and refresh it from the server when online (extension, station changes, stop).
  * Switched on by setting LICENSE_ADMIN_PASSWORD (the owner's password for /licenses).
  */
 
+// TLS is set below (always verified); the URL's own sslmode (Neon adds "require") would only
+// change meaning in pg v9, so it is dropped here.
+function withoutSslMode(url: string): string {
+  try {
+    const u = new URL(url);
+    u.searchParams.delete("sslmode");
+    u.searchParams.delete("uselibpqcompat");
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
 type Pool = { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> };
 const g = globalThis as unknown as { __licensePool?: Promise<Pool> };
 function licensePool(url: string): Promise<Pool> {
   g.__licensePool ??= import("pg").then(({ Pool }) => new Pool({
-    connectionString: url,
+    connectionString: withoutSslMode(url),
     max: Number(process.env.LICENSE_PGPOOL_MAX || 3),
     ssl: process.env.PGSSL === "disable" ? false : { rejectUnauthorized: true },
   }) as unknown as Pool);
@@ -59,6 +72,8 @@ export interface LicenseRow {
   /** Owner's name for the device (e.g. «حاسوب الاستقبال»). */
   device_name: string;
   is_trial: boolean;
+  /** The app version the device last reported (empty: a version from before this was sent). */
+  app_version: string;
 }
 
 export interface LicenseEvent { license_id: string; at: number; kind: string; detail: string }
@@ -87,6 +102,7 @@ function ensureTables() {
     for (const col of [
       "price text not null default ''", "paid boolean not null default false", "paid_at bigint",
       "message text not null default ''", "device_name text not null default ''", "is_trial boolean not null default false",
+      "app_version text not null default ''", // 0018
     ]) await query(`alter table station_licenses add column if not exists ${col}`);
     await query(`create table if not exists license_events (
       id text primary key, license_id text not null, at bigint not null, kind text not null, detail text not null default '')`);
@@ -117,29 +133,134 @@ export async function getContact(): Promise<string> {
 }
 export async function setContact(v: string) { await setConfig("contact", v.trim().slice(0, 300)); }
 
-// ── Signing key (generated once, kept server-side in the database) ────────────
+// ── Signing key (generated once, kept in the database encrypted with AUTH_SECRET) ─────
+// A copy of the database alone cannot sign licenses: the private key is sealed with AES-256-GCM
+// under a key derived from AUTH_SECRET, which lives only in the server's environment.
+// A key found stored in the clear (older versions), or one that no longer opens (AUTH_SECRET
+// changed), is replaced by a new one; devices keep their current license offline and receive
+// the new public key with their next online check.
+type SealedKey = { v: 1; pub: JWK; iv: string; tag: string; data: string };
+type PlainKey = { priv: JWK; pub: JWK };
+const sealSecret = () => (process.env.AUTH_SECRET ?? "").trim();
+const sealKey = (secret: string) => createHash("sha256").update(`lic-signing-key:${secret}`).digest();
+type Sealed = { iv: string; tag: string; data: string };
+function sealText(text: string, secret: string, aad: string): Sealed {
+  const iv = randomBytes(12);
+  const c = createCipheriv("aes-256-gcm", sealKey(secret), iv);
+  c.setAAD(Buffer.from(aad));
+  const data = Buffer.concat([c.update(text, "utf8"), c.final()]);
+  return { iv: iv.toString("base64"), tag: c.getAuthTag().toString("base64"), data: data.toString("base64") };
+}
+function unsealText(s: Sealed, secret: string, aad: string): string | null {
+  try {
+    const d = createDecipheriv("aes-256-gcm", sealKey(secret), Buffer.from(s.iv, "base64"));
+    d.setAAD(Buffer.from(aad));
+    d.setAuthTag(Buffer.from(s.tag, "base64"));
+    return Buffer.concat([d.update(Buffer.from(s.data, "base64")), d.final()]).toString("utf8");
+  } catch { return null; }
+}
+const seal = (priv: JWK, pub: JWK, secret: string): SealedKey => ({ v: 1, pub, ...sealText(JSON.stringify(priv), secret, JSON.stringify(pub)) });
+function unseal(s: SealedKey, secret: string): JWK | null {
+  const t = unsealText(s, secret, JSON.stringify(s.pub));
+  try { return t ? (JSON.parse(t) as JWK) : null; } catch { return null; }
+}
+/** Read the stored key: the private key when usable, and whether it is sealed. */
+function openStored(raw: string, secret: string): { priv: JWK | null; pub: JWK; sealed: boolean } | null {
+  try {
+    const v = JSON.parse(raw) as SealedKey | PlainKey;
+    if ("data" in v) return { priv: secret ? unseal(v, secret) : null, pub: v.pub, sealed: true };
+    // A key stored in the clear is only kept while there is nothing to seal it with.
+    return { priv: secret ? null : v.priv, pub: v.pub, sealed: false };
+  } catch { return null; }
+}
 let keys: Promise<{ priv: KeyLike | Uint8Array; pub: JWK }> | null = null;
 function signingKeys() {
   keys ??= (async () => {
+    const secret = sealSecret();
     const saved = await getConfig("signing_key");
-    if (saved) {
-      const { priv, pub } = JSON.parse(saved) as { priv: JWK; pub: JWK };
-      return { priv: await importJWK(priv, "ES256"), pub };
-    }
+    const cur = saved ? openStored(saved, secret) : null;
+    if (cur?.priv) return { priv: await importJWK(cur.priv, "ES256"), pub: cur.pub };
     const kp = await generateKeyPair("ES256", { extractable: true });
     const priv = await exportJWK(kp.privateKey), pub = await exportJWK(kp.publicKey);
-    await query(`insert into license_config (key, value) values ('signing_key', $1) on conflict (key) do nothing`, [JSON.stringify({ priv, pub })]);
-    // Another instance may have won the race — always use what is stored.
-    const stored = JSON.parse((await getConfig("signing_key"))!) as { priv: JWK; pub: JWK };
+    const value = JSON.stringify(secret ? seal(priv, pub, secret) : { priv, pub });
+    // Replace only what was read, so parallel server instances settle on one key.
+    if (saved == null) await query(`insert into license_config (key, value) values ('signing_key', $1) on conflict (key) do nothing`, [value]);
+    else await query(`update license_config set value = $1 where key = 'signing_key' and value = $2`, [value, saved]);
+    const stored = openStored((await getConfig("signing_key"))!, secret);
+    if (!stored?.priv) throw new Error("signing key unavailable");
     return { priv: await importJWK(stored.priv, "ES256"), pub: stored.pub };
   })().catch((e) => { keys = null; throw e; });
   return keys;
+}
+/** For the owner's page: is the stored signing key sealed with AUTH_SECRET? */
+export async function signingKeySealed(): Promise<boolean> {
+  try {
+    await signingKeys();
+    const raw = await getConfig("signing_key");
+    return !!raw && !!openStored(raw, sealSecret())?.sealed;
+  } catch { return false; }
 }
 export async function publicKey(): Promise<JWK> { return (await signingKeys()!).pub; }
 
 async function signLicense(p: Omit<LicensePayload, "iat">): Promise<string> {
   const { priv } = await signingKeys()!;
   return new SignJWT({ ...p }).setProtectedHeader({ alg: "ES256" }).setIssuedAt().sign(priv);
+}
+
+// ── Two-step sign-in for the owner (authenticator app) ────────────────────────
+// The shared secret is kept sealed with AUTH_SECRET like the signing key. LICENSE_2FA_OFF=1 in the
+// server's environment switches the second step off (lost phone); set it up again, then remove it.
+const TOTP_AAD = "owner-totp";
+export const twoFactorForcedOff = () => process.env.LICENSE_2FA_OFF === "1";
+async function readTotp(key: "owner_totp" | "owner_totp_pending"): Promise<string | null> {
+  const raw = await getConfig(key).catch(() => null);
+  const secret = sealSecret();
+  if (!raw || !secret) return null;
+  try { return unsealText(JSON.parse(raw) as Sealed, secret, TOTP_AAD); } catch { return null; }
+}
+/** enabled: set up and readable; broken: set up, but AUTH_SECRET changed since (it no longer opens — set up again). */
+export async function twoFactorStatus(): Promise<{ enabled: boolean; broken: boolean; forcedOff: boolean; canSetup: boolean }> {
+  const stored = !!(await getConfig("owner_totp").catch(() => null));
+  const enabled = stored && (await readTotp("owner_totp")) != null;
+  return { enabled, broken: stored && !enabled, forcedOff: twoFactorForcedOff(), canSetup: !!sealSecret() };
+}
+/** Is a second step needed to sign in now? */
+export async function twoFactorRequired(): Promise<boolean> {
+  return !twoFactorForcedOff() && (await readTotp("owner_totp")) != null;
+}
+/** A code is accepted once: a step already used (or older) is refused. */
+async function consumeCode(secret: string, code: string): Promise<boolean> {
+  const step = totpMatch(secret, code);
+  if (step == null) return false;
+  const last = Number((await getConfig("owner_totp_last")) ?? 0);
+  if (step <= last) return false;
+  await setConfig("owner_totp_last", String(step));
+  return true;
+}
+export async function checkOwnerCode(code: string): Promise<boolean> {
+  const secret = await readTotp("owner_totp");
+  return !!secret && (await consumeCode(secret, code));
+}
+/** Start setting up: a new secret, kept aside until a first code from the phone confirms it. */
+export async function startTwoFactorSetup(): Promise<{ secret: string; uri: string } | null> {
+  const key = sealSecret();
+  if (!key) return null;
+  const secret = newTotpSecret();
+  await setConfig("owner_totp_pending", JSON.stringify(sealText(secret, key, TOTP_AAD)));
+  return { secret, uri: totpUri(secret, "owner", "Lab codes") };
+}
+export async function confirmTwoFactor(code: string): Promise<boolean> {
+  const secret = await readTotp("owner_totp_pending");
+  if (!secret || !(await consumeCode(secret, code))) return false;
+  await setConfig("owner_totp", (await getConfig("owner_totp_pending"))!);
+  await query(`delete from license_config where key = 'owner_totp_pending'`);
+  return true;
+}
+/** Turn it off: needs a current code, unless it was switched off from the environment. */
+export async function disableTwoFactor(code: string): Promise<boolean> {
+  if (!twoFactorForcedOff() && !(await checkOwnerCode(code))) return false;
+  await query(`delete from license_config where key in ('owner_totp', 'owner_totp_pending')`);
+  return true;
 }
 
 // ── Codes ─────────────────────────────────────────────────────────────────────
@@ -154,10 +275,10 @@ function newCode(): string {
 
 type Raw = Omit<LicenseRow, "modules" | "activated_at" | "expires_at" | "last_seen_at" | "created_at" | "paid_at" | "paid" | "is_trial"> & {
   modules: string; activated_at: string | number | null; expires_at: string | number | null; last_seen_at: string | number | null; created_at: string | number;
-  paid_at: string | number | null; paid: boolean | string; is_trial: boolean | string;
+  paid_at: string | number | null; paid: boolean | string; is_trial: boolean | string; app_version: string | null;
 };
 const COLS = `id, lab_name, note, code_hint, duration_days, modules, status, device_id, device_label,
-  activated_at, expires_at, last_seen_at, created_at, price, paid, paid_at, message, device_name, is_trial`;
+  activated_at, expires_at, last_seen_at, created_at, price, paid, paid_at, message, device_name, is_trial, app_version`;
 const bool = (v: boolean | string) => v === true || v === "t" || v === "true";
 const num = (v: string | number | null) => (v == null ? null : Number(v));
 function toRow(r: Raw): LicenseRow {
@@ -167,7 +288,7 @@ function toRow(r: Raw): LicenseRow {
     ...r, duration_days: Number(r.duration_days), modules: cleanModules(mods),
     activated_at: num(r.activated_at), expires_at: num(r.expires_at), last_seen_at: num(r.last_seen_at), created_at: Number(r.created_at),
     paid_at: num(r.paid_at), paid: bool(r.paid), is_trial: bool(r.is_trial),
-    price: r.price ?? "", message: r.message ?? "", device_name: r.device_name ?? "",
+    price: r.price ?? "", message: r.message ?? "", device_name: r.device_name ?? "", app_version: r.app_version ?? "",
   };
 }
 
@@ -297,7 +418,10 @@ async function issue(row: LicenseRow, device: string): Promise<DeviceResult> {
 }
 
 /** A lab enters its code on a device: bind on first use (starting the period), refuse other devices. */
-export async function activate(code: string, device: string, label: string): Promise<DeviceResult> {
+/** A version string as the app sends it ("2026.09.26-2343"); anything else is ignored. */
+export const cleanVersion = (v: unknown) => (typeof v === "string" && /^[\w.-]{1,40}$/.test(v) ? v : "");
+
+export async function activate(code: string, device: string, label: string, version = ""): Promise<DeviceResult> {
   await ensureTables();
   const r = await queryOne<{ id: string }>(`select id from station_licenses where code_hash = $1`, [hashCode(code)]);
   const row = r ? await getLicense(r.id) : null;
@@ -309,18 +433,21 @@ export async function activate(code: string, device: string, label: string): Pro
   const expires = row.expires_at ?? now + row.duration_days * DAY;
   if (!row.device_id) await logEvent(row.id, row.activated_at ? "moved" : "activated", label.slice(0, 80));
   await query(
-    `update station_licenses set device_id = $2, device_label = $3, activated_at = coalesce(activated_at, $4), expires_at = $5, last_seen_at = $4 where id = $1`,
-    [row.id, device, label.slice(0, 160), now, expires],
+    `update station_licenses set device_id = $2, device_label = $3, activated_at = coalesce(activated_at, $4), expires_at = $5, last_seen_at = $4,
+       app_version = $6 where id = $1`,
+    [row.id, device, label.slice(0, 160), now, expires, cleanVersion(version)],
   );
   return issue((await getLicense(row.id))!, device);
 }
 
 /** Periodic check from an activated device: the current state, re-signed. */
-export async function check(lid: string, device: string): Promise<DeviceResult> {
+export async function check(lid: string, device: string, version = ""): Promise<DeviceResult> {
   const row = await getLicense(lid);
   if (!row) return { ok: false, error: "not_found" };
   if (row.device_id !== device) return { ok: false, error: "other_device", row };
-  await query(`update station_licenses set last_seen_at = $2 where id = $1`, [lid, Date.now()]);
+  const v = cleanVersion(version);
+  if (v) await query(`update station_licenses set last_seen_at = $2, app_version = $3 where id = $1`, [lid, Date.now(), v]);
+  else await query(`update station_licenses set last_seen_at = $2 where id = $1`, [lid, Date.now()]);
   if (row.status === "stopped") return { ok: false, error: "stopped", row };
   if (row.expires_at != null && row.expires_at <= Date.now()) return { ok: false, error: "expired", row };
   return issue(row, device);
@@ -399,7 +526,7 @@ export async function exportCodes(): Promise<CodesBackup> {
   return { app: "lab-codes", version: 1, exported_at: new Date().toISOString(), licenses, events, contact: (await getConfig("contact")) ?? "" };
 }
 const LIC_COLS = ["id", "code_hash", "code_hint", "lab_name", "note", "duration_days", "modules", "status", "device_id", "device_label",
-  "activated_at", "expires_at", "last_seen_at", "created_at", "price", "paid", "paid_at", "message", "device_name", "is_trial"] as const;
+  "activated_at", "expires_at", "last_seen_at", "created_at", "price", "paid", "paid_at", "message", "device_name", "is_trial", "app_version"] as const;
 /** Merge a backup in: codes are added or updated by id (nothing is deleted); history is added once. */
 export async function importCodes(data: unknown): Promise<{ licenses: number; events: number }> {
   const b = data as Partial<CodesBackup>;
@@ -412,7 +539,7 @@ export async function importCodes(data: unknown): Promise<{ licenses: number; ev
       const v = r[c];
       if (c === "paid" || c === "is_trial") return v === true || v === "t" || v === "true";
       if (c === "modules") return typeof v === "string" ? v : JSON.stringify(cleanModules(v));
-      return v ?? (["note", "code_hint", "price", "message", "device_name"].includes(c) ? "" : c === "status" ? "active" : null);
+      return v ?? (["note", "code_hint", "price", "message", "device_name", "app_version"].includes(c) ? "" : c === "status" ? "active" : null);
     });
     await query(
       `insert into station_licenses (${LIC_COLS.join(", ")}) values (${LIC_COLS.map((_, i) => `$${i + 1}`).join(", ")})

@@ -10,6 +10,7 @@ import {
   type StationTest, type Gender, type StationVisit, type StationSettings, type StationPanel, type StationPatient, type NoteEntry, type StationDoctor,
 } from "@/lib/station/store";
 import { ReportSheet } from "@/components/station/ReportSheet";
+import { loadBarcode } from "@/components/station/Barcode";
 import { TubeLabels } from "@/components/station/TubeLabel";
 import { FormDialog, fillNormals } from "@/components/station/ReportForms";
 import { isFormCode, decodeForm, encodeForm, formProgress, formOptionsOf, type FormCode } from "@/lib/station/templates";
@@ -367,7 +368,9 @@ function StationEntryPage() {
     setAccession(acc);
     if (!saveVisit(acc)) return;
     toast.show("تم الحفظ — جارٍ فتح نافذة الطباعة");
-    setTimeout(() => window.print(), 80);
+    // The new sample number's barcode must be on the sheet before the print window opens
+    // (the library normally loaded with the page; never wait more than 3 s for it).
+    Promise.race([loadBarcode(), new Promise((r) => setTimeout(r, 3000))]).then(() => setTimeout(() => window.print(), 80));
   }
 
   // Local date (not UTC); an edited visit keeps its original date on reprint.

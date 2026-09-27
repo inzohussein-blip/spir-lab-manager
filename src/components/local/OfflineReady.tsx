@@ -11,9 +11,14 @@ import { CloudOff, CheckCircle2, RefreshCw, X } from "lucide-react";
  */
 const SCOPES = ["/welcome", "/station", "/store", "/training", "/qc", "/roster"];
 const RECHECK_EVERY = 30 * 60 * 1000; // while a page stays open
+/** After a failed or unanswered attempt, try again sooner (then back to RECHECK_EVERY). */
+const RETRY_AFTER = [15_000, 60_000, 5 * 60_000];
+const NO_ANSWER = 60_000; // the worker says nothing for this long → treat as failed
 
-/** Build id of the code running in this page (from Next's inline data). */
+/** Build id of the code running in this page (<meta name="lab-build">, else Next 14's inline data). */
 function pageBuild(): string | null {
+  const meta = document.querySelector<HTMLMetaElement>('meta[name="lab-build"]')?.content;
+  if (meta) return meta;
   for (const s of Array.from(document.scripts)) {
     const m = /buildId\\?"\s*:\s*\\?"([^"\\]+)/.exec(s.textContent ?? "");
     if (m) return m[1];
@@ -57,10 +62,19 @@ export function OfflineReady() {
     let alive = true;
     const timers: ReturnType<typeof setTimeout>[] = [];
     const later = (fn: () => void, ms: number) => timers.push(setTimeout(() => alive && fn(), ms));
+    // A download that failed once (a dropped connection, the worker stopped) is retried a few
+    // times while the page stays open, instead of waiting for the next page open.
+    let tries = 0;
+    let watchdog: ReturnType<typeof setTimeout> | undefined;
+    const retry = () => { clearTimeout(watchdog); if (tries < RETRY_AFTER.length) later(() => void check(), RETRY_AFTER[tries++]); };
+    const waitAnswer = () => { clearTimeout(watchdog); watchdog = setTimeout(() => alive && retry(), NO_ANSWER); };
 
     const onMsg = (e: MessageEvent) => {
       const d = e.data;
       if (!alive || !d || d.type !== "local-offline") return;
+      if (d.status === "progress") waitAnswer();
+      else if (d.status === "error" || d.status === "update-failed" || d.status === "offline") retry();
+      else { clearTimeout(watchdog); tries = 0; }
       if (d.status === "progress") setSt({ kind: "progress", done: d.done, total: d.total });
       else if (d.status === "installed") {
         setSt({ kind: "installed" });
@@ -87,8 +101,9 @@ export function OfflineReady() {
       try {
         reg?.update().catch(() => {}); // also refresh the worker script itself
         const sw = await activeWorker(reg);
-        if (sw && alive) sw.postMessage({ type: "local-prepare" });
-      } catch { /* ignore */ }
+        if (!alive) return;
+        if (sw) { sw.postMessage({ type: "local-prepare" }); waitAnswer(); } else retry();
+      } catch { retry(); }
     };
     (async () => {
       try {
@@ -104,6 +119,7 @@ export function OfflineReady() {
 
     return () => {
       alive = false;
+      clearTimeout(watchdog);
       timers.forEach(clearTimeout);
       clearInterval(every);
       window.removeEventListener("online", check);

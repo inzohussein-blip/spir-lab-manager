@@ -1,10 +1,12 @@
 "use client";
 
+import { kvGet, kvSet, kvBytes } from "./kv";
+
 /** Small helpers shared by the standalone local stations (no data sharing). */
 
 export function readLS<T>(key: string, fallback: T): T {
   try {
-    const raw = localStorage.getItem(key);
+    const raw = kvGet(key);
     return raw ? (JSON.parse(raw) as T) : fallback;
   } catch {
     return fallback;
@@ -12,8 +14,7 @@ export function readLS<T>(key: string, fallback: T): T {
 }
 export function writeLS<T>(key: string, value: T): boolean {
   try {
-    localStorage.setItem(key, JSON.stringify(value));
-    return true;
+    return kvSet(key, JSON.stringify(value));
   } catch {
     return false;
   }
@@ -65,14 +66,5 @@ export function downloadJson(filename: string, data: unknown): void {
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
 
-/** Bytes used in localStorage by keys with this prefix. */
-export function usageBytes(prefix: string): number {
-  let bytes = 0;
-  try {
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (k && k.startsWith(prefix)) bytes += (k.length + (localStorage.getItem(k) ?? "").length) * 2;
-    }
-  } catch { /* ignore */ }
-  return bytes;
-}
+/** Bytes this station keeps under the prefix (see ./kv). */
+export const usageBytes = (prefix: string): number => kvBytes(prefix);

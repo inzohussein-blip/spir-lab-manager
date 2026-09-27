@@ -4,7 +4,7 @@
 البرنامج المحاسبي [Spir-Margin](https://github.com/inzohussein-blip/Spir-Margin)
 ليشاركه قاعدة بيانات واحدة لاحقاً.
 
-- **الإطار:** Next.js 14 (App Router) + TypeScript
+- **الإطار:** Next.js 16 (App Router) + React 19 + TypeScript
 - **الواجهة:** Tailwind CSS v4 + Radix UI (عربي RTL)
 - **قاعدة البيانات:** Postgres — PGlite مدمج محلياً / Supabase عبر `DATABASE_URL`
 - **الاستضافة:** Vercel

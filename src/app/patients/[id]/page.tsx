@@ -15,11 +15,12 @@ const statusLabel: Record<string, string> = {
   delivered: "مُسلّم",
 };
 
-export default async function PatientDetailPage({
-  params,
-}: {
-  params: { id: string };
-}) {
+export default async function PatientDetailPage(
+  props: {
+    params: Promise<{ id: string }>;
+  }
+) {
+  const params = await props.params;
   const patient = await queryOne<any>(
     `select * from patients where id = $1`,
     [params.id]

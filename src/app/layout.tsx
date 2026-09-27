@@ -29,7 +29,7 @@ export default async function RootLayout({
 }: {
   children: ReactNode;
 }) {
-  const pathname = headers().get("x-pathname") ?? "";
+  const pathname = (await headers()).get("x-pathname") ?? "";
   // The login screen and the standalone Lab Station render without the main
   // app chrome (the station brings its own sidebar and needs no session).
   const isBare =
@@ -50,6 +50,8 @@ export default async function RootLayout({
         <link rel="manifest" href="/manifest.webmanifest" />
         <meta name="theme-color" content="#5a2a82" />
         <link rel="apple-touch-icon" href="/icon-192.png" />
+        {/* Build id for the stations' offline copy (public/local-sw.js). */}
+        <meta name="lab-build" content={process.env.LAB_BUILD} />
         {/* No-flash theme: apply the saved (or system) theme before paint. */}
         <script
           dangerouslySetInnerHTML={{

@@ -24,11 +24,12 @@ async function getReportToken(orderId: string, patientId: string) {
   return created!.qr_token;
 }
 
-export default async function ReportPage({
-  params,
-}: {
-  params: { id: string };
-}) {
+export default async function ReportPage(
+  props: {
+    params: Promise<{ id: string }>;
+  }
+) {
+  const params = await props.params;
   const order = await queryOne<any>(
     `select o.*, p.full_name, p.gender, p.age_years, p.phone, r.name as referrer_name
        from test_orders o join patients p on p.id = o.patient_id
@@ -67,7 +68,7 @@ export default async function ReportPage({
   const token = await getReportToken(order.id, order.patient_id);
   // Encode the absolute verification URL so scanning the QR opens the public
   // /verify page (section 8: online report authenticity check).
-  const h = headers();
+  const h = await headers();
   const base =
     process.env.NEXT_PUBLIC_BASE_URL ||
     (h.get("x-forwarded-host") || h.get("host")

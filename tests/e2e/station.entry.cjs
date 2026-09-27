@@ -1,4 +1,4 @@
-const { B, OWNER, ok, launch, tmp, pdfPages, done } = require('./lib.cjs');
+const { B, OWNER, ok, launch, tmp, pdfPages, done, kv, kvPut, resetLocal } = require('./lib.cjs');
 const fs = require('node:fs');
 (async () => {
   const b = await launch();
@@ -6,12 +6,12 @@ const fs = require('node:fs');
   const p = await ctx.newPage();
   const errs = []; p.on('pageerror', e => errs.push(e.message.slice(0, 140)));
   p.on('dialog', d => d.accept());
-  const ls = (k) => p.evaluate((k) => JSON.parse(localStorage.getItem(k) || 'null'), k);
-  await p.goto(B + '/station'); await p.evaluate(() => { localStorage.clear(); localStorage.setItem('local.activation.v1', 'legacy'); }); await p.reload(); await p.waitForTimeout(1200);
+  const ls = (k) => kv(p, k);
+  await p.goto(B + '/station'); await resetLocal(p, { 'local.activation.v1': 'legacy' }); await p.reload(); await p.waitForTimeout(1200);
   const tests = await ls('station.tests.v1');
   const hb = tests.find(t => /hemoglobin/i.test(t.name_en || '')), glu = tests.find(t => /glucose/i.test(t.name_en || ''));
   // stock linked to Hb
-  await p.evaluate((id) => localStorage.setItem('station.stock.v1', JSON.stringify([{ id: 's1', name: 'Hb reagent', qty: 5, minQty: 1, linkedTestId: id }])), hb.id);
+  await kvPut(p, 'station.stock.v1', [{ id: 's1', name: 'Hb reagent', qty: 5, minQty: 1, linkedTestId: hb.id }]);
   await p.reload(); await p.waitForTimeout(800);
   const pick = async (q) => { await p.fill('input[placeholder="ابحث عن فحص…"]', q); await p.waitForTimeout(100); await p.locator('div.grid button:has(span.flex-1)').first().click(); };
   await p.locator('label:has-text("الاسم الثلاثي") input').fill('مريض التدقيق');
@@ -78,7 +78,7 @@ const fs = require('node:fs');
   await p.locator('text=مريض التدقيق').first().click(); await p.waitForTimeout(300);
   ok(await p.locator('text=سجل الزيارات والفحوصات (2)').count() === 1, 'patient history shows both visits');
   // custom form edit then backup round trip
-  await p.evaluate(() => localStorage.setItem('station.formTemplates.v1', JSON.stringify({ CS: { title: 'MY CULTURE', specimens: [], colony: [], organisms: [], antibiotics: [{ group: 'x', items: ['Abc'] }] } })));
+  await kvPut(p, 'station.formTemplates.v1', { CS: { title: 'MY CULTURE', specimens: [], colony: [], organisms: [], antibiotics: [{ group: 'x', items: ['Abc'] }] } });
   await p.goto(B + '/station/settings'); await p.waitForTimeout(600);
   const [bk] = await Promise.all([p.waitForEvent('download'), p.click('button:has-text("تصدير نسخة احتياطية")')]);
   const backup = JSON.parse(fs.readFileSync(await bk.path(), 'utf8'));
@@ -86,12 +86,27 @@ const fs = require('node:fs');
   ok(!!backup.forms, 'backup includes edited report forms');
   // restore into a clean browser
   const ctx2 = await b.newContext(); const q = await ctx2.newPage(); q.on('dialog', d => d.accept());
-  await q.goto(B + '/station/settings'); await q.evaluate(() => { localStorage.clear(); localStorage.setItem('local.activation.v1', 'legacy'); }); await q.reload(); await q.waitForTimeout(800);
+  await q.goto(B + '/station/settings'); await resetLocal(q, { 'local.activation.v1': 'legacy' }); await q.reload(); await q.waitForTimeout(800);
   await q.setInputFiles('input[type=file][accept*="json"]', await bk.path()); await q.waitForTimeout(1500);
-  const r = await q.evaluate(() => ({ v: JSON.parse(localStorage.getItem('station.visits.v1') || '[]').length, f: localStorage.getItem('station.formTemplates.v1') }));
+  const r = { v: ((await kv(q, 'station.visits.v1')) || []).length, f: JSON.stringify(await kv(q, 'station.formTemplates.v1')) };
   ok(r.v === 2, 'restore brings back visits');
   ok(!!r.f && r.f.includes('MY CULTURE'), 'restore brings back edited forms');
+  // Slow network: the barcode library arrives late, yet the first print already has the barcode.
+  const ctxS = await b.newContext({ viewport: { width: 1440, height: 950 }, serviceWorkers: 'block' });
+  const sl = await ctxS.newPage(); sl.on('pageerror', e => errs.push(e.message.slice(0, 140)));
+  await sl.goto(B + '/welcome'); await resetLocal(sl, { 'local.activation.v1': 'legacy' });
+  await sl.route('**/_next/static/chunks/**', async (route) => { await new Promise((r) => setTimeout(r, 1500)); await route.continue(); });
+  await sl.goto(B + '/station'); await sl.waitForSelector('input[placeholder="ابحث عن فحص…"]', { timeout: 60000 });
+  await sl.locator('label:has-text("الاسم الثلاثي") input').fill('مريض الشبكة البطيئة');
+  await sl.fill('input[placeholder="ابحث عن فحص…"]', 'Glucose'); await sl.waitForTimeout(100);
+  await sl.locator('div.grid button:has(span.flex-1)').first().click();
+  await sl.fill('input[placeholder="ابحث عن فحص…"]', ''); await sl.locator('[data-result-idx="0"]').fill('95');
+  await sl.evaluate(() => { window.print = () => { window.__barcodeAtPrint = document.querySelectorAll('.report-pbc svg').length; }; });
+  await sl.click('button:has-text("طباعة")');
+  await sl.waitForFunction(() => window.__barcodeAtPrint !== undefined, null, { timeout: 15000 }).catch(() => {});
+  ok(await sl.evaluate(() => window.__barcodeAtPrint) === 1, 'slow network: patient barcode is on the sheet when the print window opens');
+  await ctxS.close();
   ok(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.join(' | ') : ''));
   await b.close();
   done();
-})().catch((e) => { console.error(e); process.exitCode = 1; });
+})().catch((e) => { console.error(e); process.exit(1); });

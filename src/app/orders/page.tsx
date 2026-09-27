@@ -26,11 +26,12 @@ const PAYMENTS = ["", "unpaid", "partial", "paid"];
 const field =
   "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
 
-export default async function OrdersPage({
-  searchParams,
-}: {
-  searchParams: { q?: string; status?: string; payment?: string; from?: string; to?: string };
-}) {
+export default async function OrdersPage(
+  props: {
+    searchParams: Promise<{ q?: string; status?: string; payment?: string; from?: string; to?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const q = (searchParams.q || "").trim();
   const status = searchParams.status || "";
   const payment = searchParams.payment || "";

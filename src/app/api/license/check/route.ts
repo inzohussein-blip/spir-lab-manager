@@ -7,8 +7,8 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   if (!licensingEnabled()) return NextResponse.json({ ok: false, error: "disabled" }, { status: 400 });
-  let lid = "", device = "";
-  try { const b = await req.json(); lid = String(b?.lid ?? ""); device = String(b?.device ?? ""); } catch { /* empty */ }
+  let lid = "", device = "", version = "";
+  try { const b = await req.json(); lid = String(b?.lid ?? ""); device = String(b?.device ?? ""); version = String(b?.version ?? ""); } catch { /* empty */ }
   if (!lid || !device) return NextResponse.json({ ok: false, error: "bad_request" }, { status: 400 });
-  return deviceReply(await check(lid, device));
+  return deviceReply(await check(lid, device, version));
 }

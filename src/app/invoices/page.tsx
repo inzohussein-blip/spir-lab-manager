@@ -19,11 +19,12 @@ const statusTone: Record<string, string> = {
   void: "bg-gray-100 text-gray-500",
 };
 
-export default async function InvoicesPage({
-  searchParams,
-}: {
-  searchParams: { q?: string; status?: string };
-}) {
+export default async function InvoicesPage(
+  props: {
+    searchParams: Promise<{ q?: string; status?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const q = (searchParams.q || "").trim();
   const status = searchParams.status || "";
 
