@@ -3,6 +3,7 @@ import { ActivationGate } from "@/components/local/ActivationGate";
 import { ACTIVATION_SCRIPT } from "@/lib/local/activation";
 import { Beaker, ShoppingCart, GraduationCap, ShieldCheck, Users, ArrowLeft, Phone } from "lucide-react";
 import { LicensedLink, AdminPanelCard } from "@/components/local/WelcomeLicense";
+import { WelcomeAccount } from "@/components/local/WelcomeAccount";
 
 export const metadata = { title: "مختبر التحليلات المرضية — اختيار النسخة" };
 
@@ -12,7 +13,11 @@ export default function WelcomePage() {
       <script dangerouslySetInnerHTML={{ __html: ACTIVATION_SCRIPT }} />
       <ActivationGate />
       <OfflineReady />
-      <div className="mx-auto max-w-5xl px-4 py-10">
+      <div className="relative mx-auto max-w-5xl px-4 py-10">
+        {/* This device's lab and subscription (top left; above the header on phones) */}
+        <div className="mb-4 flex justify-end md:absolute md:left-4 md:top-4 md:mb-0">
+          <WelcomeAccount />
+        </div>
         {/* Header */}
         <div className="mb-10 flex flex-col items-center text-center">
           {/* eslint-disable-next-line @next/next/no-img-element */}

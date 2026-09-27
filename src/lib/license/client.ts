@@ -185,6 +185,12 @@ export function providerMessage(): string {
   return readJson<Stored>(LIC_KEY)?.message?.trim() ?? "";
 }
 
+/** When this device last heard from the server about its code (null: never / no code). */
+export function licenseCheckedAt(): number | null {
+  const s = readJson<Stored>(LIC_KEY);
+  return s?.checkedAt ?? null;
+}
+
 /** The lab's database this code is linked to (set in /licenses, or by the lab from its settings). */
 export function licenseSync(): DeviceSync | null {
   const s = readJson<Stored>(LIC_KEY);

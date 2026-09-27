@@ -48,6 +48,21 @@ const DAY = 86400000;
   await a.goto(B + '/login'); await a.waitForTimeout(800);
   ok(new URL(a.url()).pathname === '/welcome', 'admin panel redirects without admin in code');
   ok(await a.locator('text=غير مفعّلة في رمزك').count() >= 1, 'admin card shows «غير مفعّلة في رمزك»');
+  // Account box (top left of Welcome): the lab, its end date and days left; details on opening.
+  const chip = a.locator('[data-testid="account-chip"]');
+  await chip.waitFor({ timeout: 10000 });
+  const until = new Date(Date.now() + 30 * 86400000).toLocaleDateString('en-CA');
+  const chipText = await chip.innerText();
+  ok(chipText.includes('مختبر الأمل') && chipText.includes(until) && /30 يوماً/.test(chipText), `account box: lab, end date and days left (${chipText.replace(/\s+/g, ' ')})`);
+  const box = await chip.boundingBox();
+  ok(box && box.x < 400 && box.y < 120, 'account box sits at the top left');
+  await chip.click();
+  const panel = a.locator('[data-testid="account-panel"]');
+  const mods = await panel.locator('[data-testid="account-mods"]').innerText();
+  ok(mods.includes('محطة المختبر') && !mods.includes('لوحة الإدارة الكاملة'), 'account details: the stations in the code');
+  ok((await panel.innerText()).includes('آخر تحقق من الخادم') && (await panel.innerText()).includes('رقم الجهاز'), 'account details: last check and device id');
+  await a.keyboard.press('Escape');
+  ok(await panel.count() === 0, 'Escape closes the details');
   // ── device B: same code refused ──
   const { p: bdev } = await newDev();
   await bdev.goto(B + '/welcome'); await bdev.waitForTimeout(1500);
