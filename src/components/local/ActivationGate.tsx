@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { KeyRound, Lock, WifiOff, Clock, ArrowRight, RefreshCw, X, MessageSquare } from "lucide-react";
 import {
-  evaluate, fetchEnabled, refreshLicense, activateCode, cachedContact, providerMessage, WARN_DAYS, type LicenseState,
+  evaluate, fetchEnabled, refreshLicense, activateCode, cachedContact, providerMessage, WARN_DAYS, cachedSignup, type LicenseState,
 } from "@/lib/license/client";
 import { moduleLabel, type LicenseModule } from "@/lib/license/modules";
 
@@ -74,6 +74,11 @@ function CodeForm({ onDone, cta = "تفعيل" }: { onDone: () => void; cta?: st
         <KeyRound className="size-4" /> {busy ? "جارٍ التحقق…" : cta}
       </button>
       {err && <p className="mt-2 text-xs text-red-600">{err}</p>}
+      {cta === "تفعيل" && cachedSignup() && (
+        <a href="/signup" data-testid="signup-link" className="mt-3 block text-center text-xs font-semibold text-brand-dark hover:underline">
+          ليس لديك رمز؟ سجّل مختبرك وجرّب مجاناً
+        </a>
+      )}
     </form>
   );
 }

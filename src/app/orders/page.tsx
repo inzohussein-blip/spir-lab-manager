@@ -4,6 +4,7 @@ import { query } from "@/lib/db";
 import { PageHeader, Card } from "@/components/ui/primitives";
 import { PaymentBadge } from "@/components/PaymentBadge";
 import { money } from "@/lib/utils";
+import { Pager, pageOf } from "@/components/Pager";
 
 export const dynamic = "force-dynamic";
 
@@ -26,9 +27,11 @@ const PAYMENTS = ["", "unpaid", "partial", "paid"];
 const field =
   "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
 
+const PAGE = 200;
+
 export default async function OrdersPage(
   props: {
-    searchParams: Promise<{ q?: string; status?: string; payment?: string; from?: string; to?: string }>;
+    searchParams: Promise<{ q?: string; status?: string; payment?: string; from?: string; to?: string; page?: string }>;
   }
 ) {
   const searchParams = await props.searchParams;
@@ -70,7 +73,8 @@ export default async function OrdersPage(
     )
   ).toString();
 
-  const orders = await query<any>(
+  const page = pageOf(searchParams.page);
+  const rows = await query<any>(
     `select o.id, o.order_date, o.status, o.payment_status, o.total_amount, o.accession_no,
             p.full_name, count(i.id)::int as tests
        from test_orders o
@@ -79,9 +83,10 @@ export default async function OrdersPage(
        ${whereSql}
       group by o.id, p.full_name
       order by o.order_date desc, o.created_at desc
-      limit 200`,
+      limit ${PAGE + 1} offset ${(page - 1) * PAGE}`,
     params
   );
+  const orders = rows.slice(0, PAGE);
 
   return (
     <div>
@@ -179,6 +184,7 @@ export default async function OrdersPage(
           </tbody>
         </table>
       </Card>
+      <Pager page={page} hasMore={rows.length > PAGE} path="/orders" params={{ q, status, payment, from, to }} />
     </div>
   );
 }

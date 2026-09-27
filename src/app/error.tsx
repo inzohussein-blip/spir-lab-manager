@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { adminDbError } from "@/lib/db/labErrors";
+import { reportError } from "@/components/ErrorReporter";
 
 export default function Error({
   error,
@@ -14,6 +15,7 @@ export default function Error({
   const [db, setDb] = useState<{ problem: string; host: string } | null>(null);
   useEffect(() => {
     let alive = true;
+    reportError(error?.message || "page error", error?.digest ?? "");
     fetch("/api/labdb/status", { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => { if (alive && d?.problem) setDb({ problem: d.problem, host: d.host ?? "" }); })

@@ -3,12 +3,12 @@ import {
   licensingEnabled, passwordSet, durableStorage, storageStatus, attemptsBlocked, noteAttempt, clearAttempts,
   logOwnerSignIn, ownerSignIns, signingKeySealed,
   twoFactorStatus, twoFactorRequired, checkOwnerCode, startTwoFactorSetup, confirmTwoFactor, disableTwoFactor, exportCodes, importCodes, listLicenses, listEvents, createLicense, updateLicense, getContact, setContact, type LicenseAction,
-  getSyncConfig, setSyncConfig, cleanSyncConfig, getAdminDb, getPrefs, setPrefs,
+  getSyncConfig, setSyncConfig, cleanSyncConfig, getAdminDb, getPrefs, setPrefs, listErrors, clearErrors,
 } from "@/lib/license/server";
 import { LabDbError, probe } from "@/lib/sync/pg";
 import { SupaError, supaProbe, supaSignIn } from "@/lib/sync/supabase";
 import { connHost, type SyncConfig } from "@/lib/sync/protocol";
-import { checkSavedAdminDb, cleanFirstAdmin, importShared, linkAdminDb, resetAdminPassword, resolveAdminConn, testAdminDb } from "@/lib/license/adminDb";
+import { checkSavedAdminDb, cleanFirstAdmin, exportLabData, importShared, linkAdminDb, resetAdminPassword, resolveAdminConn, testAdminDb } from "@/lib/license/adminDb";
 import { forgetAdminDb } from "@/lib/db/lab";
 import { passwordMatches, startOwnerSession, endOwnerSession, isOwner, ipOf } from "@/lib/license/owner";
 
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
     const lab = String(b.lab ?? "").trim();
     const days = Number(b.days);
     if (!lab || !Number.isFinite(days) || days < 1) return json({ ok: false, error: "bad_request" }, 400);
-    const { row, code } = await createLicense({ lab, days, modules: b.modules, note: String(b.note ?? ""), trial: b.trial === true });
+    const { row, code } = await createLicense({ lab, days, modules: b.modules, note: String(b.note ?? ""), trial: b.trial === true, maxDevices: Number(b.maxDevices) || 1 });
     return json({ ok: true, row, code });
   }
   if (b.op === "update") {
@@ -138,6 +138,22 @@ export async function POST(req: NextRequest) {
     if (first === "bad") return json({ ok: false, error: "bad_account" }, 400);
     const r = await linkAdminDb(id, conn, "owner", first, b.copy === true);
     return json(r, r.ok ? 200 : r.error === "no_admin" ? 409 : 502);
+  }
+  if (b.op === "errors") return json({ ok: true, errors: await listErrors() });
+  if (b.op === "errors_clear") { await clearErrors(); return json({ ok: true }); }
+  // The hidden export of a lab's admin-panel data: only while switched on, and with the owner's
+  // password (and phone code when two-step sign-in is on) typed again.
+  if (b.op === "export") {
+    const prefs = await getPrefs();
+    if (!prefs.dataExport) return json({ ok: false, error: "off" }, 403);
+    const ip = ipOf(req.headers);
+    if (await attemptsBlocked("owner", ip, 8)) return json({ ok: false, error: "too_many" }, 429);
+    if (!passwordMatches(String(b.password ?? "")) || ((await twoFactorRequired()) && !(await checkOwnerCode(String(b.code ?? ""))))) {
+      await noteAttempt("owner", ip);
+      return json({ ok: false, error: "wrong" }, 401);
+    }
+    const r = await exportLabData(String(b.id ?? ""));
+    return json(r, r.ok ? 200 : 400);
   }
   if (b.op === "admin_db_import_shared") {
     const r = await importShared(String(b.id ?? ""));
