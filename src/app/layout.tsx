@@ -1,12 +1,15 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { Toaster } from "sonner";
 import { Sidebar } from "@/components/Sidebar";
 import { Topbar } from "@/components/Topbar";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canAccess } from "@/lib/permissions";
 import { OfflineProvider } from "@/components/offline/OfflineProvider";
+import { labDbProblem } from "@/lib/db/lab";
+import { LabDbProblem } from "@/components/LabDbProblem";
 // Arabic UI font bundled with the app (no Google Fonts request) — works offline.
 import "@fontsource/ibm-plex-sans-arabic/arabic-400.css";
 import "@fontsource/ibm-plex-sans-arabic/arabic-500.css";
@@ -42,7 +45,14 @@ export default async function RootLayout({
     pathname.startsWith("/qc") ||
     pathname.startsWith("/roster") ||
     pathname.startsWith("/licenses");
-  const user = isBare ? null : await getCurrentUser();
+  const isLogin = pathname === "/login" || pathname.startsWith("/login/");
+  // The lab's own database (when its code has one) must answer before the panel can open.
+  const dbProblem = !isBare || isLogin ? await labDbProblem() : null;
+  const user = isBare || dbProblem ? null : await getCurrentUser();
+  // A sign-in that no longer holds here (expired, or made on the lab's previous database).
+  if (!isBare && !dbProblem && !user && !pathname.startsWith("/verify") && (await cookies()).has("lab_session")) {
+    redirect("/api/auth/reset");
+  }
 
   return (
     <html lang="ar" dir="rtl" suppressHydrationWarning>
@@ -61,7 +71,9 @@ export default async function RootLayout({
       </head>
       <body className="min-h-screen">
         <Toaster position="top-center" richColors />
-        {isBare || !user ? (
+        {dbProblem ? (
+          <LabDbProblem code={dbProblem.code} host={dbProblem.host} />
+        ) : isBare || !user ? (
           children
         ) : (
           <OfflineProvider>

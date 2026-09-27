@@ -1,10 +1,11 @@
 import "server-only";
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "node:crypto";
 import { SignJWT, exportJWK, generateKeyPair, importJWK, type JWK, type KeyLike } from "jose";
-import { query as appQuery } from "@/lib/db";
-import { cleanModules, type LicenseModule, type LicensePayload } from "./modules";
+import { mainQuery as appQuery } from "@/lib/db";
+import { cleanModules, DEFAULT_MODULES, type LicenseModule, type LicensePayload } from "./modules";
 import { licenseDbUrl } from "./env";
 import { newTotpSecret, totpMatch, totpUri } from "./totp";
+import { providerOf, type ProviderId } from "@/lib/db/providers";
 import { connHost, isPostgresUrl, isSupabaseUrl, type DeviceSync, type SyncConfig } from "@/lib/sync/protocol";
 export { licenseDbUrl, durableStorage, passwordSet, licensingEnabled, licenseStorage } from "./env";
 
@@ -82,7 +83,12 @@ export interface LicenseRow {
   sync_pending: number;
   sync_error: string;
   sync_reported_at: number | null;
+  /** The full admin panel's own database, when set (no secrets: where, who set it, when). */
+  admin_db: AdminDbInfo | null;
+  /** The last check of that database (by the owner, or the lab's panel in use). */
+  admin_db_check: { at: number; ok: boolean; error: string } | null;
 }
+export interface AdminDbInfo { host: string; by: "owner" | "lab"; at: number; provider?: ProviderId }
 export interface SyncInfo { kind: SyncConfig["kind"]; host: string; by: "owner" | "device"; at: number }
 
 export interface LicenseEvent { license_id: string; at: number; kind: string; detail: string }
@@ -114,6 +120,8 @@ function ensureTables() {
       "app_version text not null default ''", // 0018
       "sync_config text not null default ''", "sync_info text not null default ''", // 0019
       "sync_last_at bigint", "sync_pending integer not null default 0", "sync_error text not null default ''", "sync_reported_at bigint", // 0020
+      "admin_db text not null default ''", "admin_db_info text not null default ''", // 0021
+      "admin_db_check_at bigint", "admin_db_ok boolean", "admin_db_error text not null default ''", // 0022
     ]) await query(`alter table station_licenses add column if not exists ${col}`);
     await query(`create table if not exists license_events (
       id text primary key, license_id text not null, at bigint not null, kind text not null, detail text not null default '')`);
@@ -134,6 +142,43 @@ async function getConfig(key: string): Promise<string | null> {
 async function setConfig(key: string, value: string) {
   await ensureTables();
   await query(`insert into license_config (key, value) values ($1, $2) on conflict (key) do update set value = excluded.value`, [key, value]);
+}
+
+// ── The owner's settings («الإعدادات العامة» in /licenses) ─────────────────────────
+export interface OwnerPrefs {
+  /** What a new code starts with in «رمز جديد». */
+  defaultDays: number;
+  defaultModules: LicenseModule[];
+  /** Length of a trial code. */
+  trialDays: number;
+  /** A code is «قارب على الانتهاء» this many days before its end. */
+  soonDays: number;
+  /** The full admin panel opens for a paid code only once it has a database of its own
+   *  (trial codes work in their own section of the site's database). */
+  adminNeedsOwnDb: boolean;
+}
+export const DEFAULT_PREFS: OwnerPrefs = { defaultDays: 365, defaultModules: [...DEFAULT_MODULES], trialDays: 7, soonDays: 14, adminNeedsOwnDb: true };
+const within = (v: unknown, min: number, max: number, dflt: number) => {
+  const n = Math.round(Number(v));
+  return Number.isFinite(n) && n >= min && n <= max ? n : dflt;
+};
+export function cleanPrefs(v: unknown): OwnerPrefs {
+  const p = (v && typeof v === "object" ? v : {}) as Record<string, unknown>;
+  return {
+    defaultDays: within(p.defaultDays, 1, 3650, DEFAULT_PREFS.defaultDays),
+    defaultModules: Array.isArray(p.defaultModules) ? cleanModules(p.defaultModules) : [...DEFAULT_PREFS.defaultModules],
+    trialDays: within(p.trialDays, 1, 60, DEFAULT_PREFS.trialDays),
+    soonDays: within(p.soonDays, 1, 90, DEFAULT_PREFS.soonDays),
+    adminNeedsOwnDb: typeof p.adminNeedsOwnDb === "boolean" ? p.adminNeedsOwnDb : DEFAULT_PREFS.adminNeedsOwnDb,
+  };
+}
+export async function getPrefs(): Promise<OwnerPrefs> {
+  try { return cleanPrefs(JSON.parse((await getConfig("owner_prefs")) || "{}")); } catch { return cleanPrefs({}); }
+}
+export async function setPrefs(v: unknown): Promise<OwnerPrefs> {
+  const p = cleanPrefs(v);
+  await setConfig("owner_prefs", JSON.stringify(p));
+  return p;
 }
 
 /** Shown on the activation / lock screens when the owner has not written a contact line. */
@@ -286,21 +331,25 @@ function newCode(): string {
 
 type Raw = Omit<LicenseRow, "modules" | "activated_at" | "expires_at" | "last_seen_at" | "created_at" | "paid_at" | "paid" | "is_trial"> & {
   modules: string; activated_at: string | number | null; expires_at: string | number | null; last_seen_at: string | number | null; created_at: string | number;
-  paid_at: string | number | null; paid: boolean | string; is_trial: boolean | string; app_version: string | null; sync_info?: string | null;
+  paid_at: string | number | null; paid: boolean | string; is_trial: boolean | string; app_version: string | null; sync_info?: string | null; admin_db_info?: string | null;
+  admin_db_check_at?: string | number | null; admin_db_ok?: boolean | string | null; admin_db_error?: string | null;
   sync_last_at?: string | number | null; sync_pending?: string | number | null; sync_error?: string | null; sync_reported_at?: string | number | null;
 };
 const COLS = `id, lab_name, note, code_hint, duration_days, modules, status, device_id, device_label,
   activated_at, expires_at, last_seen_at, created_at, price, paid, paid_at, message, device_name, is_trial, app_version, sync_info,
-  sync_last_at, sync_pending, sync_error, sync_reported_at`;
+  sync_last_at, sync_pending, sync_error, sync_reported_at, admin_db_info, admin_db_check_at, admin_db_ok, admin_db_error`;
 const bool = (v: boolean | string) => v === true || v === "t" || v === "true";
 const num = (v: string | number | null) => (v == null ? null : Number(v));
-function toRow({ sync_info, ...r }: Raw): LicenseRow {
+function toRow({ sync_info, admin_db_info, admin_db_check_at, admin_db_ok, admin_db_error, ...r }: Raw): LicenseRow {
   let mods: unknown = [];
   try { mods = JSON.parse(r.modules); } catch { /* keep empty */ }
   let sync: SyncInfo | null = null;
   try { sync = sync_info ? (JSON.parse(sync_info) as SyncInfo) : null; } catch { /* none */ }
+  let admin_db: AdminDbInfo | null = null;
+  try { admin_db = admin_db_info ? (JSON.parse(admin_db_info) as AdminDbInfo) : null; } catch { /* none */ }
   return {
-    ...r, sync, duration_days: Number(r.duration_days), modules: cleanModules(mods),
+    ...r, sync, admin_db,
+    admin_db_check: admin_db && admin_db_check_at != null ? { at: Number(admin_db_check_at), ok: bool(admin_db_ok ?? false), error: admin_db_error ?? "" } : null, duration_days: Number(r.duration_days), modules: cleanModules(mods),
     activated_at: num(r.activated_at), expires_at: num(r.expires_at), last_seen_at: num(r.last_seen_at), created_at: Number(r.created_at),
     paid_at: num(r.paid_at), paid: bool(r.paid), is_trial: bool(r.is_trial),
     price: r.price ?? "", message: r.message ?? "", device_name: r.device_name ?? "", app_version: r.app_version ?? "",
@@ -532,6 +581,55 @@ export async function reportSyncStatus(lid: string, device: string, s: { last: n
     [lid, s.last, s.pending, s.error, Date.now()]);
   return true;
 }
+// ── The full admin panel's own database («قاعدة لوحة الإدارة») ──────────────────────
+// A PostgreSQL connection string kept sealed like the sync link; requests from the lab's admin
+// panel are routed to it (src/lib/db/lab.ts). Set by the owner here, or by the lab's admin.
+const adminDbAad = (id: string) => `lab-admin-db:${id}`;
+export async function getAdminDb(id: string): Promise<{ conn: string; by: "owner" | "lab" } | null> {
+  await ensureTables();
+  const r = await queryOne<{ admin_db: string }>(`select admin_db from station_licenses where id = $1`, [id]);
+  const secret = sealSecret();
+  if (!r?.admin_db || !secret) return null;
+  try {
+    const t = unsealText(JSON.parse(r.admin_db) as Sealed, secret, adminDbAad(id));
+    return t ? (JSON.parse(t) as { conn: string; by: "owner" | "lab" }) : null;
+  } catch { return null; }
+}
+/** Give a code's admin panel its own database (or back to the site's with null). */
+export async function setAdminDb(id: string, conn: string | null, by: "owner" | "lab"): Promise<SyncSetError | null> {
+  await ensureTables();
+  if (!(await getLicense(id))) return "not_found";
+  if (!conn) {
+    await query(`update station_licenses set admin_db = '', admin_db_info = '', admin_db_check_at = null, admin_db_ok = null, admin_db_error = '' where id = $1`, [id]);
+    await logEvent(id, "admin_db", "—");
+    return null;
+  }
+  conn = conn.trim();
+  if (!isPostgresUrl(conn) || conn.length > 1000) return "bad_config";
+  const secret = sealSecret();
+  if (!secret) return "no_secret";
+  const info: AdminDbInfo = { host: connHost(conn), by, at: Date.now(), provider: providerOf(conn) };
+  // Saved only after it was opened, so it starts as a successful check.
+  await query(`update station_licenses set admin_db = $2, admin_db_info = $3, admin_db_check_at = ${Date.now()}, admin_db_ok = true, admin_db_error = '' where id = $1`,
+    [id, JSON.stringify(sealText(JSON.stringify({ conn, by }), secret, adminDbAad(id))), JSON.stringify(info)]);
+  await logEvent(id, "admin_db", `${info.host}${by === "lab" ? " (من المختبر)" : ""}`);
+  return null;
+}
+
+/** Where a code's admin panel works (see lib/db/lab.ts): its own database, or — unless the owner
+ *  requires one for paid codes — its own section of the site's. */
+export async function adminDbRoute(id: string): Promise<{ conn: string | null; trial: boolean; requireOwn: boolean }> {
+  const [own, row, prefs] = await Promise.all([getAdminDb(id), getLicense(id), getPrefs()]);
+  return { conn: own?.conn ?? null, trial: !!row?.is_trial, requireOwn: prefs.adminNeedsOwnDb };
+}
+
+/** The last check of a code's admin-panel database (the owner's «فحص», or the panel in use). */
+export async function recordAdminDbCheck(id: string, ok: boolean, error: string) {
+  await ensureTables();
+  await query(`update station_licenses set admin_db_check_at = $2, admin_db_ok = $3, admin_db_error = $4 where id = $1 and admin_db <> ''`,
+    [id, Date.now(), ok, ok ? "" : error.slice(0, 40)]);
+}
+
 /** A device asking for its lab's database: the code must be bound to it, running and in date. */
 export async function deviceLicense(lid: string, device: string): Promise<{ ok: true; row: LicenseRow } | { ok: false; error: string }> {
   const row = await getLicense(lid);
@@ -607,16 +705,19 @@ export async function ownerSignIns(limit = 30): Promise<OwnerSignIn[]> {
 export interface CodesBackup {
   app: "lab-codes"; version: 1; exported_at: string;
   licenses: Record<string, unknown>[]; events: Record<string, unknown>[]; contact: string;
+  /** The owner's settings (added later; older files have none). */
+  prefs?: OwnerPrefs;
 }
 export async function exportCodes(): Promise<CodesBackup> {
   await ensureTables();
   const licenses = await query<Record<string, unknown>>(`select * from station_licenses order by created_at`);
   const events = await query<Record<string, unknown>>(`select * from license_events order by at`);
-  return { app: "lab-codes", version: 1, exported_at: new Date().toISOString(), licenses, events, contact: (await getConfig("contact")) ?? "" };
+  return { app: "lab-codes", version: 1, exported_at: new Date().toISOString(), licenses, events, contact: (await getConfig("contact")) ?? "", prefs: await getPrefs() };
 }
 const LIC_COLS = ["id", "code_hash", "code_hint", "lab_name", "note", "duration_days", "modules", "status", "device_id", "device_label",
   "activated_at", "expires_at", "last_seen_at", "created_at", "price", "paid", "paid_at", "message", "device_name", "is_trial", "app_version",
-  "sync_config", "sync_info", "sync_last_at", "sync_pending", "sync_error", "sync_reported_at"] as const;
+  "sync_config", "sync_info", "sync_last_at", "sync_pending", "sync_error", "sync_reported_at", "admin_db", "admin_db_info",
+  "admin_db_check_at", "admin_db_ok", "admin_db_error"] as const;
 /** Merge a backup in: codes are added or updated by id (nothing is deleted); history is added once. */
 export async function importCodes(data: unknown): Promise<{ licenses: number; events: number }> {
   const b = data as Partial<CodesBackup>;
@@ -629,7 +730,7 @@ export async function importCodes(data: unknown): Promise<{ licenses: number; ev
       const v = r[c];
       if (c === "paid" || c === "is_trial") return v === true || v === "t" || v === "true";
       if (c === "modules") return typeof v === "string" ? v : JSON.stringify(cleanModules(v));
-      return v ?? (["note", "code_hint", "price", "message", "device_name", "app_version", "sync_config", "sync_info", "sync_error"].includes(c) ? "" : c === "sync_pending" ? 0 : c === "status" ? "active" : null);
+      return v ?? (["note", "code_hint", "price", "message", "device_name", "app_version", "sync_config", "sync_info", "sync_error", "admin_db", "admin_db_info", "admin_db_error"].includes(c) ? "" : c === "sync_pending" ? 0 : c === "status" ? "active" : null);
     });
     await query(
       `insert into station_licenses (${LIC_COLS.join(", ")}) values (${LIC_COLS.map((_, i) => `$${i + 1}`).join(", ")})
@@ -645,5 +746,6 @@ export async function importCodes(data: unknown): Promise<{ licenses: number; ev
     ne++;
   }
   if (typeof b.contact === "string" && b.contact.trim()) await setConfig("contact", b.contact.trim().slice(0, 300));
+  if (b.prefs && typeof b.prefs === "object") await setPrefs(b.prefs);
   return { licenses: nl, events: ne };
 }

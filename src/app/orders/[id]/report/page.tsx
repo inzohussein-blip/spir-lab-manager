@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import QRCode from "qrcode";
 import { query, queryOne } from "@/lib/db";
+import { labTarget } from "@/lib/db/lab";
 import { barcodeSvg } from "@/lib/barcode";
 import { getLabIdentity } from "@/lib/lab-identity";
 import { PrintButton } from "@/components/PrintButton";
@@ -74,7 +75,9 @@ export default async function ReportPage(
     (h.get("x-forwarded-host") || h.get("host")
       ? `${h.get("x-forwarded-proto") || "https"}://${h.get("x-forwarded-host") || h.get("host")}`
       : "");
-  const verifyUrl = `${base}/verify/${token}`;
+  // A lab on its own database: the code tells /verify where to look.
+  const lab = await labTarget();
+  const verifyUrl = `${base}/verify/${token}${lab ? `?l=${encodeURIComponent(lab.lid)}` : ""}`;
   const qr = await QRCode.toDataURL(verifyUrl, { margin: 1, width: 120 });
   const barcode = order.accession_no ? await barcodeSvg(order.accession_no) : "";
 

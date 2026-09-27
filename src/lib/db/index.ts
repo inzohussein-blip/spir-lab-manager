@@ -57,12 +57,21 @@ const DATE_OIDS = [1082, 1083, 1114, 1184, 1266];
 // can load this module more than once (RSC + server-action bundles, dev HMR),
 // and a per-module handle would open a second PGlite instance against the same
 // data dir, making writes on one invisible to reads on the other.
+/** One statement (`query`, with parameters) or a script (`exec`, several statements), inside a transaction. */
+export interface TxConn {
+  query(sql: string, params?: unknown[]): Promise<{ rows: Record<string, unknown>[]; rowCount: number | null }>;
+  exec(sql: string): Promise<void>;
+}
+type Tx = <T>(fn: (c: TxConn) => Promise<T>) => Promise<T>;
+
 interface DbSingleton {
   dbRef: Db | null;
   initPromise: Promise<Db> | null;
+  tx: Tx | null;
+  embedded: boolean;
 }
 const g = globalThis as unknown as { __labDb?: DbSingleton };
-const store: DbSingleton = (g.__labDb ??= { dbRef: null, initPromise: null });
+const store: DbSingleton = (g.__labDb ??= { dbRef: null, initPromise: null, tx: null, embedded: false });
 
 async function initPg(url: string): Promise<Db> {
   const { Pool, types } = await import("pg");
@@ -75,6 +84,23 @@ async function initPg(url: string): Promise<Db> {
         ? false
         : { rejectUnauthorized: false },
   });
+  store.tx = async (fn) => {
+    const c = await pool.connect();
+    try {
+      await c.query("begin");
+      const r = await fn({
+        query: async (sql, params) => { const x = await c.query(sql, params as unknown[]); return { rows: x.rows, rowCount: x.rowCount }; },
+        exec: async (sql) => { await c.query(sql); },
+      });
+      await c.query("commit");
+      return r;
+    } catch (err) {
+      await c.query("rollback").catch(() => undefined);
+      throw err;
+    } finally {
+      c.release();
+    }
+  };
   return {
     async query(sql, params) {
       const r = await pool.query(sql, params as any[]);
@@ -109,6 +135,14 @@ async function initPglite(): Promise<Db> {
     }
   }
 
+  store.embedded = true;
+  store.tx = (fn) =>
+    pg.transaction((t) =>
+      fn({
+        query: async (sql, params) => { const x = await t.query<Record<string, unknown>>(sql, params as unknown[]); return { rows: x.rows, rowCount: x.affectedRows ?? null }; },
+        exec: async (sql) => { await t.exec(sql); },
+      })
+    );
   return {
     async query(sql, params) {
       const r = await pg.query(sql, params as any[]);
@@ -117,7 +151,16 @@ async function initPglite(): Promise<Db> {
   };
 }
 
-export async function getDb(): Promise<Db> {
+/** A transaction on the site's own database (a lab's section of it runs inside one, see ./lab.ts). */
+export async function mainTx<T>(fn: (c: TxConn) => Promise<T>): Promise<T> {
+  await getMainDb();
+  return store.tx!(fn);
+}
+/** The embedded database (one connection in this process, no other server to share it with). */
+export const mainIsEmbedded = () => store.embedded;
+
+/** The site's own database (DATABASE_URL or the embedded one) — never a lab's. */
+export async function getMainDb(): Promise<Db> {
   if (store.dbRef) return store.dbRef;
   if (!store.initPromise) {
     const url = process.env.DATABASE_URL;
@@ -127,6 +170,21 @@ export async function getDb(): Promise<Db> {
     });
   }
   return store.initPromise;
+}
+
+/**
+ * The database this request works on: for a lab code, the lab's own database or its own
+ * section of the site's (see ./lab.ts); otherwise the site's.
+ */
+export async function getDb(): Promise<Db> {
+  const { labTarget, labDbFor } = await import("./lab");
+  const t = await labTarget();
+  return t ? labDbFor(t) : getMainDb();
+}
+
+/** Convenience: run a query on the site's own database (the lab codes live there). */
+export async function mainQuery<T = any>(sql: string, params?: unknown[]): Promise<T[]> {
+  return (await (await getMainDb()).query<T>(sql, params)).rows;
 }
 
 /** Convenience: run a query and return rows. */

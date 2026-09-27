@@ -1,14 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   KeyRound, LogOut, Plus, Copy, Check, Ban, Play, MonitorSmartphone, RefreshCw, Trash2, Pencil, ShieldAlert,
   FlaskConical, Download, ChevronDown, MessageSquare, History, Wallet, MessageSquareText, Database, Upload, ShieldCheck, Smartphone, Phone,
-  Server, Menu, X, ChevronLeft, type LucideIcon,
+  Server, Menu, X, ChevronLeft, HardDrive, Settings, Search, type LucideIcon,
 } from "lucide-react";
 import { LICENSE_MODULES, DEFAULT_MODULES, moduleLabel, type LicenseModule } from "@/lib/license/modules";
-import { SUPABASE_SQL } from "@/lib/sync/protocol";
+import { STATION_SYNC, SUPABASE_SQL } from "@/lib/sync/protocol";
 import { SYNC_ERRORS } from "@/components/local/SyncPanel";
+import { adminDbError } from "@/lib/db/labErrors";
+import { PROVIDERS, providerById, providerOf, type ProviderId } from "@/lib/db/providers";
+import { ConnInput, ProviderGuide, ProviderMark, ProviderPicker } from "@/components/DbProviders";
 
 /** «إدارة الرموز» — the owner's page: one code per lab, bound to one device, with a period and stations. */
 
@@ -22,12 +25,17 @@ interface Row {
   sync: { kind: "supabase" | "postgres"; host: string; by: "owner" | "device"; at: number } | null;
   /** The device's last report about its sync. */
   sync_last_at: number | null; sync_pending: number; sync_error: string; sync_reported_at: number | null;
+  /** The full admin panel's own database (no secrets). */
+  admin_db: { host: string; by: "owner" | "lab"; at: number; provider?: ProviderId } | null;
+  admin_db_check: { at: number; ok: boolean; error: string } | null;
 }
 interface Ev { license_id: string; at: number; kind: string; detail: string }
 interface Storage { source: "license-db" | "app-db" | "embedded"; ok: boolean; codes?: number; roundTripMs?: number; error?: string; keySealed?: boolean }
 interface SignIn { at: number; ok: boolean; ip: string; agent: string }
 interface TwoFactor { enabled: boolean; broken: boolean; forcedOff: boolean; canSetup: boolean }
-type Data = { enabled: boolean; owner: boolean; needsDb?: boolean; storage?: Storage; licenses?: Row[]; events?: Ev[]; signIns?: SignIn[]; twoFactor?: TwoFactor; contact?: string; version?: string; now?: number };
+type Prefs = { defaultDays: number; defaultModules: LicenseModule[]; trialDays: number; soonDays: number; adminNeedsOwnDb: boolean };
+const DEFAULT_PREFS: Prefs = { defaultDays: 365, defaultModules: [...DEFAULT_MODULES], trialDays: 7, soonDays: 14, adminNeedsOwnDb: true };
+type Data = { enabled: boolean; owner: boolean; needsDb?: boolean; storage?: Storage; licenses?: Row[]; events?: Ev[]; signIns?: SignIn[]; twoFactor?: TwoFactor; contact?: string; prefs?: Prefs; version?: string; now?: number };
 const agentLabel = (ua: string) => {
   const os = /Windows/.test(ua) ? "Windows" : /Android/.test(ua) ? "Android" : /iPhone|iPad/.test(ua) ? "iOS" : /Mac OS/.test(ua) ? "Mac" : /Linux/.test(ua) ? "Linux" : "";
   const br = /Edg\//.test(ua) ? "Edge" : /Chrome\//.test(ua) ? "Chrome" : /Firefox\//.test(ua) ? "Firefox" : /Safari\//.test(ua) ? "Safari" : "";
@@ -43,35 +51,42 @@ const inp = "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm o
 const small = "inline-flex items-center gap-1 rounded-lg border border-line px-2 py-1 text-xs hover:bg-canvas";
 const DAY = 86_400_000;
 const OWNER_PHONE = "07803993585";
-const TRIAL_DAYS = 7;
 const PERIODS = [{ d: 30, l: "شهر" }, { d: 90, l: "3 أشهر" }, { d: 180, l: "6 أشهر" }, { d: 365, l: "سنة" }];
 const fmt = (ms: number | null) => (ms ? new Date(ms).toLocaleDateString("en-CA") : "—");
 const fmtTime = (ms: number | null) => (ms ? new Date(ms).toLocaleString("ar-IQ-u-nu-latn") : "—");
 const deviceOf = (r: Row) => r.device_name || r.device_label || (r.device_id ? "مربوط" : "");
+/** Where a code's full admin panel keeps its data (see lib/db/lab.ts). */
+type Place = "own" | "site" | "waiting" | "none";
+const placeOf = (r: Row, needsOwn: boolean): Place =>
+  r.admin_db ? "own" : !r.modules.includes("admin") ? "none" : needsOwn && !r.is_trial ? "waiting" : "site";
+const PLACE_LABEL: Record<Place, string> = { own: "قاعدة خاصة", site: "قسم مستقل في قاعدة الموقع", waiting: "بانتظار قاعدة خاصة", none: "" };
 const amount = (p: string) => { const n = Number(p.replace(/[^\d.]/g, "")); return p.trim() && Number.isFinite(n) ? n : 0; };
 
 const EVENT_LABEL: Record<string, string> = {
   created: "إنشاء الرمز", activated: "تفعيل على جهاز", moved: "تفعيل على جهاز جديد", extended: "تمديد", stopped: "إيقاف",
   resumed: "إعادة تفعيل", device_reset: "فك ربط الجهاز", modules: "تغيير المحطات", renamed: "تعديل الاسم",
   paid: "تسجيل الدفع", unpaid: "إلغاء الدفع", message: "رسالة للمختبر", new_code: "رمز جديد", sync: "قاعدة بيانات المختبر",
+  admin_db: "قاعدة لوحة الإدارة",
 };
 const eventDetail = (e: Ev) => (e.kind === "modules" ? e.detail.split(",").filter(Boolean).map(moduleLabel).join("، ") || "لا شيء" : e.detail);
 
-type Section = "codes" | "new" | "security" | "backup" | "contact" | "system";
+type Section = "codes" | "new" | "databases" | "settings" | "security" | "backup" | "system";
 const SECTIONS: { title: string; items: { id: Section; label: string; hint: string; icon: LucideIcon }[] }[] = [
   { title: "الرموز", items: [
     { id: "codes", label: "الرموز", hint: "المختبرات وأجهزتها", icon: KeyRound },
     { id: "new", label: "رمز جديد", hint: "إنشاء رمز أو رمز تجريبي", icon: Plus },
+    { id: "databases", label: "قواعد البيانات", hint: "قاعدة لوحة الإدارة لكل عميل", icon: HardDrive },
   ] },
   { title: "الإعدادات", items: [
+    { id: "settings", label: "الإعدادات العامة", hint: "المدد والمحطات الافتراضية والتواصل", icon: Settings },
     { id: "security", label: "الأمان", hint: "التحقق بخطوتين وسجل الدخول", icon: ShieldCheck },
     { id: "backup", label: "النسخ الاحتياطي", hint: "تنزيل واسترجاع الرموز", icon: Database },
-    { id: "contact", label: "سطر التواصل", hint: "يظهر للمختبرات", icon: Phone },
     { id: "system", label: "حالة النظام", hint: "التخزين والمفتاح والإصدار", icon: Server },
   ] },
 ];
 const sectionOf = (hash: string): Section => {
   const h = hash.replace(/^#/, "");
+  if (h === "contact") return "settings"; // the contact line moved into the general settings
   return SECTIONS.some((g) => g.items.some((i) => i.id === h)) ? (h as Section) : "codes";
 };
 
@@ -83,15 +98,15 @@ async function post(body: unknown) {
   return r.json().catch(() => ({ ok: false }));
 }
 
-function kindOf(r: Row, now: number): Exclude<Filter, "all" | "unpaid" | "trial" | "soon" | "outdated"> | "soon" {
+function kindOf(r: Row, now: number, soonMs = 14 * DAY): Exclude<Filter, "all" | "unpaid" | "trial" | "soon" | "outdated"> | "soon" {
   if (r.status === "stopped") return "stopped";
   if (!r.activated_at) return "unused";
   if (r.expires_at != null && r.expires_at <= now) return "expired";
-  return (r.expires_at ?? now) - now <= 14 * DAY ? "soon" : "active";
+  return (r.expires_at ?? now) - now <= soonMs ? "soon" : "active";
 }
 /** State of a code: its pill, the stripe on the card's edge and the colour of its time bar. */
-function status(r: Row, now: number) {
-  const k = kindOf(r, now);
+function status(r: Row, now: number, soonMs?: number) {
+  const k = kindOf(r, now, soonMs);
   if (k === "stopped") return { t: "موقوف", c: "bg-red-50 text-red-700", stripe: "border-s-red-500", bar: "bg-red-400" };
   if (k === "unused") return { t: "غير مستخدم", c: "bg-slate-100 text-slate-600", stripe: "border-s-slate-300", bar: "bg-slate-300" };
   if (k === "expired") return { t: "منتهٍ", c: "bg-red-50 text-red-700", stripe: "border-s-red-500", bar: "bg-red-400" };
@@ -153,14 +168,15 @@ function statusMessage(r: Row, now: number) {
 
 function copyText(t: string, done: () => void) { navigator.clipboard?.writeText(t).then(done).catch(() => window.prompt("انسخ النص:", t)); }
 
-function exportCsv(rows: Row[], now: number) {
+function exportCsv(rows: Row[], now: number, soonMs?: number, needsOwn = true) {
   const cell = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-  const head = ["المختبر", "ملاحظة", "آخر 4 خانات", "الحالة", "تجريبي", "المدة (يوم)", "التفعيل", "الانتهاء", "الجهاز", "آخر اتصال", "الإصدار", "المحطات", "المبلغ", "مدفوع", "تاريخ الدفع", "رسالة للمختبر", "أُنشئ", "قاعدة البيانات", "آخر مزامنة"];
+  const head = ["المختبر", "ملاحظة", "آخر 4 خانات", "الحالة", "تجريبي", "المدة (يوم)", "التفعيل", "الانتهاء", "الجهاز", "آخر اتصال", "الإصدار", "المحطات", "المبلغ", "مدفوع", "تاريخ الدفع", "رسالة للمختبر", "أُنشئ", "قاعدة لوحة الإدارة", ...(STATION_SYNC ? ["قاعدة المزامنة", "آخر مزامنة"] : [])];
   const lines = [head.map(cell).join(",")];
   for (const r of rows) {
-    lines.push([r.lab_name, r.note, r.code_hint, status(r, now).t, r.is_trial ? "نعم" : "", r.duration_days, fmt(r.activated_at), fmt(r.expires_at), deviceOf(r),
+    lines.push([r.lab_name, r.note, r.code_hint, status(r, now, soonMs).t, r.is_trial ? "نعم" : "", r.duration_days, fmt(r.activated_at), fmt(r.expires_at), deviceOf(r),
       fmtTime(r.last_seen_at), r.app_version, r.modules.map(moduleLabel).join("، "), r.price, r.paid ? "نعم" : "لا", fmt(r.paid_at), r.message, fmt(r.created_at),
-      r.sync ? `${r.sync.kind === "postgres" ? "PostgreSQL" : "Supabase"} — ${r.sync.host}` : "", fmtTime(r.sync_last_at)].map(cell).join(","));
+      r.admin_db ? r.admin_db.host : PLACE_LABEL[placeOf(r, needsOwn)],
+      ...(STATION_SYNC ? [r.sync ? `${r.sync.kind === "postgres" ? "PostgreSQL" : "Supabase"} — ${r.sync.host}` : "", fmtTime(r.sync_last_at)] : [])].map(cell).join(","));
   }
   const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -180,6 +196,7 @@ export default function LicensesPage() {
   const [copied, setCopied] = useState("");
   const [f, setF] = useState({ lab: "", days: 365, custom: "", note: "", modules: [...DEFAULT_MODULES] as LicenseModule[] });
   const [contact, setContact] = useState("");
+  const prefsSeen = useRef(false);
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [sort, setSort] = useState<Sort>("expiry");
@@ -188,6 +205,8 @@ export default function LicensesPage() {
   const [backupMsg, setBackupMsg] = useState("");
   const [testing, setTesting] = useState(false);
   const [dbFor, setDbFor] = useState<Row | null>(null);
+  const [adminDbFor, setAdminDbFor] = useState<{ row: Row; provider?: ProviderId } | null>(null);
+  const [resetFor, setResetFor] = useState<Row | null>(null);
   // The page's sections (like the lab station's pages), kept in the address (#codes, #new…) so a reload stays.
   const [section, setSection] = useState<Section>(() => (typeof window !== "undefined" ? sectionOf(window.location.hash) : "codes"));
   const [menu, setMenu] = useState(false);
@@ -207,6 +226,11 @@ export default function LicensesPage() {
     const d = (await r.json()) as Data;
     setData(d);
     if (d.contact != null) setContact(d.contact);
+    if (d.prefs && !prefsSeen.current) {
+      // A new code starts from the owner's defaults (once, so a half-filled form is kept).
+      prefsSeen.current = true;
+      setF((x) => ({ ...x, days: d.prefs!.defaultDays, modules: [...d.prefs!.defaultModules] }));
+    }
   }, []);
   useEffect(() => { load(); }, [load]);
   const flash = (k: string) => { setCopied(k); setTimeout(() => setCopied(""), 1500); };
@@ -221,11 +245,11 @@ export default function LicensesPage() {
     setErr(d.error === "too_many" ? "محاولات كثيرة — حاول بعد قليل." : d.error === "wrong_code" ? "رمز التحقق غير صحيح أو مستعمل — اكتب الرمز الظاهر الآن." : "كلمة المرور غير صحيحة.");
   }
   async function create(trial: boolean) {
-    const days = trial ? TRIAL_DAYS : f.days === -1 ? Number(f.custom) : f.days;
+    const days = trial ? prefs.trialDays : f.days === -1 ? Number(f.custom) : f.days;
     if (!f.lab.trim() || !days || days < 1) { setErr(f.lab.trim() ? "حدّد المدة." : "اكتب اسم المختبر."); return; }
     setErr("");
     const d = await post({ op: "create", lab: f.lab, days, note: f.note, modules: f.modules, trial });
-    if (d.ok) { setShown({ row: d.row, code: d.code }); setF({ lab: "", days: 365, custom: "", note: "", modules: [...DEFAULT_MODULES] }); load(); }
+    if (d.ok) { setShown({ row: d.row, code: d.code }); setF({ lab: "", days: prefs.defaultDays, custom: "", note: "", modules: [...prefs.defaultModules] }); load(); }
   }
   async function change(r: Row, c: Record<string, unknown>, confirmText?: string) {
     if (confirmText && !window.confirm(confirmText)) return;
@@ -235,11 +259,13 @@ export default function LicensesPage() {
   }
 
   const now = data?.now ?? Date.now();
+  const prefs = data?.prefs ?? DEFAULT_PREFS;
+  const soonMs = prefs.soonDays * DAY;
   const all = useMemo(() => data?.licenses ?? [], [data]);
   const counts = useMemo(() => {
     const c: Record<Filter, number> = { all: all.length, active: 0, soon: 0, expired: 0, unused: 0, stopped: 0, unpaid: 0, trial: 0, outdated: 0 };
     for (const r of all) {
-      const k = kindOf(r, now);
+      const k = kindOf(r, now, soonMs);
       c[k] += 1;
       if (k === "soon") c.active += 1; // "active" counts every working code
       if (!r.paid) c.unpaid += 1;
@@ -247,7 +273,7 @@ export default function LicensesPage() {
       if (isOutdated(r, data?.version)) c.outdated += 1;
     }
     return c;
-  }, [all, now, data?.version]);
+  }, [all, now, soonMs, data?.version]);
   const money = useMemo(() => ({
     paid: all.filter((r) => r.paid).reduce((n, r) => n + amount(r.price), 0),
     due: all.filter((r) => !r.paid).reduce((n, r) => n + amount(r.price), 0),
@@ -256,7 +282,7 @@ export default function LicensesPage() {
     const t = q.trim();
     const list = all.filter((r) => {
       if (t && !(r.lab_name.includes(t) || r.note.includes(t) || r.code_hint.includes(t.toUpperCase()) || deviceOf(r).includes(t))) return false;
-      const k = kindOf(r, now);
+      const k = kindOf(r, now, soonMs);
       if (filter === "active") return k === "active" || k === "soon";
       if (filter === "unpaid") return !r.paid;
       if (filter === "trial") return r.is_trial;
@@ -267,7 +293,7 @@ export default function LicensesPage() {
     return list.sort((a, b) =>
       sort === "expiry" ? exp(a) - exp(b) : sort === "name" ? a.lab_name.localeCompare(b.lab_name, "ar")
       : sort === "seen" ? (b.last_seen_at ?? 0) - (a.last_seen_at ?? 0) : b.created_at - a.created_at);
-  }, [all, q, filter, sort, now, data?.version]);
+  }, [all, q, filter, sort, now, soonMs, data?.version]);
   const eventsOf = useMemo(() => {
     const m = new Map<string, Ev[]>();
     for (const e of data?.events ?? []) (m.get(e.license_id) ?? m.set(e.license_id, []).get(e.license_id)!).push(e);
@@ -314,7 +340,7 @@ export default function LicensesPage() {
 
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const TILES: { k: Filter; l: string; tone?: string }[] = [
-    { k: "all", l: "الكل" }, { k: "active", l: "فعّال" }, { k: "soon", l: "ينتهي خلال 14 يوماً", tone: "text-amber-700" },
+    { k: "all", l: "الكل" }, { k: "active", l: "فعّال" }, { k: "soon", l: `ينتهي خلال ${prefs.soonDays} يوماً`, tone: "text-amber-700" },
     { k: "expired", l: "منتهٍ", tone: "text-red-700" }, { k: "unused", l: "غير مستخدم" }, { k: "stopped", l: "موقوف", tone: "text-red-700" },
     { k: "unpaid", l: "غير مدفوع", tone: "text-amber-700" }, { k: "trial", l: "تجريبي" },
     { k: "outdated", l: "نسخة قديمة", tone: "text-amber-700" },
@@ -377,7 +403,7 @@ export default function LicensesPage() {
           <option value="seen">آخر اتصال</option>
           <option value="name">الاسم</option>
         </select>
-        <button onClick={() => exportCsv(rows, now)} disabled={!rows.length} className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-surface disabled:opacity-50">
+        <button onClick={() => exportCsv(rows, now, soonMs, prefs.adminNeedsOwnDb)} disabled={!rows.length} className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-surface disabled:opacity-50">
           <Download className="size-4" /> تصدير CSV
         </button>
         <button onClick={load} title="تحديث" className="grid size-9 shrink-0 place-items-center rounded-lg border border-line hover:bg-surface"><RefreshCw className="size-4" /></button>
@@ -387,7 +413,7 @@ export default function LicensesPage() {
       <div className="flex flex-col gap-3">
         {rows.length === 0 && <p className="rounded-2xl border border-dashed border-line p-8 text-center text-sm text-muted">{all.length ? "لا رموز مطابقة." : "لا رموز بعد."}</p>}
         {rows.map((r) => {
-          const st = status(r, now);
+          const st = status(r, now, soonMs);
           const isOpen = open.has(r.id);
           const evs = eventsOf.get(r.id) ?? [];
           return (
@@ -414,7 +440,7 @@ export default function LicensesPage() {
                   </button>
                   {/* Less frequent actions: one size of square icon buttons, named by their tooltip */}
                   {r.device_id && <IconBtn label="نقل لجهاز جديد" onClick={() => change(r, { action: "reset_device" }, "فك ربط الجهاز؟ يستطيع المختبر بعدها إدخال نفس الرمز على جهاز جديد، والمدة تستمر كما هي.")}><MonitorSmartphone className="size-4" /></IconBtn>}
-                  <IconBtn label="قاعدة بيانات المختبر" onClick={() => setDbFor(r)}><Database className="size-4" /></IconBtn>
+                  {STATION_SYNC && <IconBtn label="قاعدة بيانات المختبر" onClick={() => setDbFor(r)}><Database className="size-4" /></IconBtn>}
                   <IconBtn label="رمز جديد" onClick={() => change(r, { action: "new_code" }, "إنشاء رمز جديد لهذا المختبر؟ الرمز القديم لا يعمل بعدها لتفعيل جهاز، والجهاز الحالي يستمر.")}><KeyRound className="size-4" /></IconBtn>
                   <IconBtn label="تعديل الاسم" onClick={() => { const lab = window.prompt("اسم المختبر:", r.lab_name); if (lab == null) return; const note = window.prompt("ملاحظة:", r.note) ?? r.note; change(r, { action: "rename", lab, note }); }}><Pencil className="size-4" /></IconBtn>
                   {r.status === "active"
@@ -430,13 +456,23 @@ export default function LicensesPage() {
                 <VersionInfo r={r} current={data.version} />
                 <Info k="الرمز" v={`…${r.code_hint}`} mono />
                 <Info k="أُنشئ" v={fmt(r.created_at)} mono />
-                <div data-testid="lab-db" className="min-w-0">
-                  <div className="text-[10px] text-muted">قاعدة البيانات</div>
+                {STATION_SYNC && <div data-testid="lab-db" className="min-w-0">
+                  <div className="text-[10px] text-muted">مزامنة المحطة</div>
                   <button onClick={() => setDbFor(r)} className="block max-w-full truncate text-start font-medium hover:underline" title={r.sync ? r.sync.host : "غير مربوط — البيانات على الجهاز فقط"}>
                     {r.sync ? <>{r.sync.kind === "postgres" ? "PostgreSQL" : "Supabase"}{r.sync.by === "device" ? " (من الجهاز)" : ""}</> : <span className="text-muted">على الجهاز فقط</span>}
                   </button>
                   {r.sync && <SyncHealth r={r} now={now} />}
-                </div>
+                </div>}
+                {(r.modules.includes("admin") || r.admin_db) && (
+                  <div data-testid="admin-db" className="min-w-0">
+                    <div className="text-[10px] text-muted">قاعدة البيانات</div>
+                    <button onClick={() => setAdminDbFor({ row: r })} aria-label="قاعدة لوحة الإدارة" className="block max-w-full truncate text-start font-medium hover:underline" title={r.admin_db ? r.admin_db.host : PLACE_LABEL[placeOf(r, prefs.adminNeedsOwnDb)]}>
+                      {r.admin_db ? <>قاعدة خاصة{r.admin_db.by === "lab" ? " (من المختبر)" : ""}</>
+                        : placeOf(r, prefs.adminNeedsOwnDb) === "waiting" ? <span className="text-amber-700">بانتظار قاعدة خاصة</span>
+                        : <span className="text-muted">قسم في قاعدة الموقع</span>}
+                    </button>
+                  </div>
+                )}
               </div>
               <div className="mt-3 text-xs text-muted">المحطات — التغيير يصل للجهاز عند اتصاله بالإنترنت:</div>
               <ModuleChips value={r.modules} onChange={(m) => change(r, { action: "modules", modules: m })} />
@@ -477,7 +513,7 @@ export default function LicensesPage() {
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <button className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark"><KeyRound className="size-4" /> إنشاء الرمز</button>
           <button type="button" onClick={() => create(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-violet-300 bg-violet-50 px-4 py-2 text-sm font-semibold text-violet-700 hover:bg-violet-100">
-            <FlaskConical className="size-4" /> رمز تجريبي {TRIAL_DAYS} أيام
+            <FlaskConical className="size-4" /> رمز تجريبي {prefs.trialDays} {prefs.trialDays <= 10 ? "أيام" : "يوماً"}
           </button>
           {err && <span className="text-xs text-red-600">{err}</span>}
         </div>
@@ -549,9 +585,18 @@ export default function LicensesPage() {
         </>
       )}
 
-      {section === "contact" && (
+      {section === "databases" && (
         <>
-          <SectionTitle icon={<Phone className="size-6" />} title="سطر التواصل" desc="ما يراه المختبر للتواصل معك عند التفعيل أو انتهاء المدة." />
+          <SectionTitle icon={<HardDrive className="size-6" />} title="قواعد البيانات"
+            desc="قاعدة لوحة الإدارة الكاملة لكل عميل: اربطها أو غيّرها أو افحصها من هنا. المحطات تعمل على أجهزتها ولا تحتاج قاعدة." />
+          <Databases rows={all} now={now} needsOwn={prefs.adminNeedsOwnDb} onOpen={(row, provider) => setAdminDbFor({ row, provider })} onReset={setResetFor} onChecked={load} />
+        </>
+      )}
+
+      {section === "settings" && (
+        <>
+          <SectionTitle icon={<Settings className="size-6" />} title="الإعدادات العامة" desc="القيم التي يبدأ بها كل رمز جديد، والتنبيه قبل الانتهاء، وسطر التواصل الذي تراه المختبرات." />
+          <PrefsCard prefs={prefs} onSaved={load} />
       {/* Contact line */}
       <Panel tone="amber" icon={<Phone className="size-5" />} title="سطر التواصل"
         desc={<>يظهر في نافذة التفعيل وشاشة القفل. إذا تُرك فارغاً يظهر رقمك: <span className="font-mono" dir="ltr">{OWNER_PHONE}</span>.</>}>
@@ -575,12 +620,15 @@ export default function LicensesPage() {
 
   return (
     <div className="min-h-screen bg-canvas md:flex">
-      <OwnerNav section={section} go={go} total={counts.all} soon={soon} open={menu} setOpen={setMenu}
+      <OwnerNav section={section} go={go} total={counts.all} soon={soon} soonDays={prefs.soonDays}
+        dbDown={all.filter((r) => r.admin_db && r.admin_db_check && !r.admin_db_check.ok).length} open={menu} setOpen={setMenu}
         onLogout={async () => { await post({ op: "logout" }); load(); }} />
       <main className="min-w-0 flex-1 p-4 md:p-7">
         <div className="mx-auto max-w-5xl">{main}</div>
       </main>
       {dbFor && <DbModal row={dbFor} rows={all} onClose={() => setDbFor(null)} onSaved={() => { setDbFor(null); load(); }} />}
+      {adminDbFor && <AdminDbModal row={adminDbFor.row} provider={adminDbFor.provider} needsOwn={prefs.adminNeedsOwnDb} rows={all} onClose={() => setAdminDbFor(null)} onSaved={() => { setAdminDbFor(null); load(); }} />}
+      {resetFor && <ResetAdminModal row={resetFor} onClose={() => setResetFor(null)} />}
     </div>
   );
 }
@@ -934,9 +982,364 @@ function DbModal({ row, rows, onClose, onSaved }: { row: Row; rows: Row[]; onClo
   );
 }
 
+/** «قواعد البيانات»: every client with the full admin panel, where its panel keeps its data — one
+ *  tab per provider (Neon, Supabase, Railway, any other PostgreSQL) with its own steps to link. */
+type DbTab = "all" | ProviderId;
+const providerOfRow = (r: Row): ProviderId | null => (r.admin_db ? r.admin_db.provider ?? providerOf(r.admin_db.host) : null);
+/** A saved database is checked again when the owner opens the list and its last check is older than this. */
+const RECHECK_MS = 30 * 60_000;
+
+function Databases({ rows, now, needsOwn, onOpen, onReset, onChecked }: {
+  rows: Row[]; now: number; needsOwn: boolean; onOpen: (r: Row, p?: ProviderId) => void; onReset: (r: Row) => void; onChecked: () => void;
+}) {
+  const [tab, setTab] = useState<DbTab>("all");
+  const [q, setQ] = useState("");
+  const [pick, setPick] = useState("");
+  const [checks, setChecks] = useState<Record<string, { busy?: boolean; ok?: boolean; text?: string }>>({});
+  const [checkingAll, setCheckingAll] = useState(false);
+  const clients = useMemo(() => rows.filter((r) => r.modules.includes("admin") || r.admin_db), [rows]);
+  const count = (t: DbTab) => (t === "all" ? clients.length : clients.filter((r) => providerOfRow(r) === t).length);
+  const list = useMemo(() => {
+    const t = q.trim();
+    return clients
+      .filter((r) => tab === "all" || providerOfRow(r) === tab)
+      .filter((r) => !t || r.lab_name.includes(t) || r.note.includes(t) || deviceOf(r).includes(t) || (r.admin_db?.host ?? "").includes(t))
+      .sort((a, b) => Number(!!b.admin_db) - Number(!!a.admin_db) || a.lab_name.localeCompare(b.lab_name, "ar"));
+  }, [clients, tab, q]);
+  const own = clients.filter((r) => r.admin_db);
+  const down = own.filter((r) => r.admin_db_check && !r.admin_db_check.ok);
+
+  const check = useCallback(async (r: Row) => {
+    setChecks((c) => ({ ...c, [r.id]: { busy: true } }));
+    const d = await post({ op: "admin_db_test", id: r.id });
+    setChecks((c) => ({ ...c, [r.id]: d.ok ? { ok: true, text: `✓ تعمل — ${d.users} مستخدم` } : { ok: false, text: adminDbError(d.error) } }));
+  }, []);
+  const checkMany = useCallback(async (targets: Row[]) => {
+    if (!targets.length) return;
+    setCheckingAll(true);
+    for (const r of targets) await check(r);
+    setCheckingAll(false);
+    onChecked();
+  }, [check, onChecked]);
+  // Opening the list checks the databases not checked for a while (the result is kept for next time).
+  const stale = own.filter((r) => !r.admin_db_check || now - r.admin_db_check.at > RECHECK_MS).map((r) => r.id).join(",");
+  const autoRan = useRef(false);
+  useEffect(() => {
+    if (autoRan.current || !stale) return;
+    autoRan.current = true;
+    const ids = new Set(stale.split(","));
+    void checkMany(rows.filter((r) => ids.has(r.id)));
+  }, [stale, rows, checkMany]);
+
+  const lastCheck = (r: Row) => {
+    const c = checks[r.id];
+    if (c?.busy) return <span className="text-muted">جارٍ الفحص…</span>;
+    if (c?.text) return <span className={c.ok ? "text-teal-700" : "text-red-700"}>{c.text}</span>;
+    const s = r.admin_db_check;
+    if (!s) return <span className="text-muted">لم تُفحص بعد</span>;
+    return s.ok
+      ? <span className="text-teal-700">✓ تعمل — آخر فحص {fmtShort(s.at)}</span>
+      : <span className="text-red-700">✗ لا تستجيب ({adminDbError(s.error)}) — {fmtShort(s.at)}</span>;
+  };
+  async function importShared(r: Row) {
+    if (!window.confirm(`نقل بيانات لوحة الإدارة القديمة المشتركة (من قبل فصل المختبرات) إلى «${r.lab_name}»؟\nاستخدمه للمختبر الذي كان يعمل عليها فقط — تُنسخ كلها، والسجلات الموجودة تبقى كما هي.`)) return;
+    setChecks((c) => ({ ...c, [r.id]: { busy: true } }));
+    const d = await post({ op: "admin_db_import_shared", id: r.id });
+    setChecks((c) => ({ ...c, [r.id]: d.ok ? { ok: true, text: `✓ نُقلت البيانات القديمة: ${d.copied?.rows ?? 0} سجلاً` } : { ok: false, text: adminDbError(d.error) } }));
+  }
+  const tabs: [DbTab, string][] = [["all", "الكل"], ...PROVIDERS.map((p) => [p.id, p.name] as [DbTab, string])];
+  const candidates = clients.filter((r) => r.modules.includes("admin"));
+
+  return (
+    <>
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        {([["عملاء بلوحة الإدارة", candidates.length, ""], ["بقاعدة خاصة", own.length, ""],
+          ["أقسام في قاعدة الموقع", candidates.filter((r) => placeOf(r, needsOwn) === "site").length, ""],
+          ["بانتظار قاعدة", candidates.filter((r) => placeOf(r, needsOwn) === "waiting").length, candidates.some((r) => placeOf(r, needsOwn) === "waiting") ? "text-amber-700" : ""],
+          ["لا تستجيب", down.length, down.length ? "text-red-700" : ""]] as const).map(([k, v, tone]) => (
+          <div key={k} className="rounded-2xl border border-line bg-surface p-4 shadow-[var(--shadow-card)]">
+            <div className="text-xs text-muted">{k}</div>
+            <div className={`mt-1 text-2xl font-bold tabular-nums ${tone}`} data-testid={k === "لا تستجيب" ? "db-down-count" : k === "بانتظار قاعدة" ? "db-waiting-count" : undefined}>{v}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="mb-4 flex flex-wrap gap-1 rounded-xl border border-line bg-surface p-1" role="tablist" aria-label="المزوّد">
+        {tabs.map(([t, l]) => (
+          <button key={t} role="tab" aria-selected={tab === t} data-provider-tab={t} onClick={() => { setTab(t); setPick(""); }}
+            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm ${tab === t ? "bg-brand text-white" : "hover:bg-canvas"}`}>
+            {t !== "all" && <ProviderMark id={t} size="size-5" />} {l} <span className="text-xs opacity-70 tabular-nums">{count(t)}</span>
+          </button>
+        ))}
+      </div>
+
+      {tab !== "all" && (
+        <div data-testid="provider-panel" className="mb-4 space-y-3 rounded-2xl border border-line bg-surface p-4 shadow-[var(--shadow-card)]">
+          <ProviderGuide id={tab} />
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">ربط عميل بـ {providerById(tab).name}:</span>
+            <select value={pick} onChange={(e) => setPick(e.target.value)} aria-label="العميل" className="rounded-lg border border-line bg-surface px-2 py-1.5 text-sm">
+              <option value="">— اختر العميل —</option>
+              {candidates.map((r) => <option key={r.id} value={r.id}>{r.lab_name}{deviceOf(r) ? ` — ${deviceOf(r)}` : ""}{r.admin_db ? " (له قاعدة)" : ""}</option>)}
+            </select>
+            <button disabled={!pick} onClick={() => { const r = rows.find((x) => x.id === pick); if (r) onOpen(r, tab); }}
+              className="rounded-lg bg-brand px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-50">متابعة الربط</button>
+          </div>
+        </div>
+      )}
+
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <div className="relative min-w-52 flex-1">
+          <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="بحث باسم المختبر أو الجهاز أو الخادم" aria-label="بحث في قواعد البيانات" className={`${inp} ps-9`} />
+        </div>
+        <button disabled={checkingAll || !own.length} onClick={() => checkMany(own)} className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-2 text-sm hover:bg-canvas disabled:opacity-50">
+          <RefreshCw className={`size-4 ${checkingAll ? "animate-spin" : ""}`} /> فحص كل القواعد
+        </button>
+      </div>
+      {list.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-line bg-surface p-8 text-center text-sm text-muted">
+          {q.trim() ? "لا نتائج." : tab !== "all" ? `لا عملاء على ${providerById(tab).name} بعد — اختر عميلاً أعلاه واربطه.` : "لا عملاء بلوحة الإدارة الكاملة بعد — فعّل «لوحة الإدارة الكاملة» في رمز المختبر ثم اربط قاعدته هنا."}
+        </div>
+      ) : (
+        <ul data-testid="db-list" className="overflow-hidden rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)]">
+          {list.map((r) => {
+            const p = providerOfRow(r);
+            const bad = r.admin_db_check && !r.admin_db_check.ok && !checks[r.id]?.ok;
+            return (
+              <li key={r.id} data-db-lab={r.lab_name} className={`flex flex-wrap items-center gap-3 border-b border-line px-4 py-3 last:border-0 ${bad ? "bg-red-50/40" : ""}`}>
+                {p ? <ProviderMark id={p} size="size-10" /> : <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-canvas text-muted"><HardDrive className="size-5" /></span>}
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-semibold">{r.lab_name}</span>
+                    {deviceOf(r) && <span className="text-xs text-muted">— {deviceOf(r)}</span>}
+                    {!r.modules.includes("admin") && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700">لوحة الإدارة غير مفعّلة في رمزه</span>}
+                  </div>
+                  <div className="mt-0.5 text-xs text-muted" data-testid="db-state">
+                    {r.admin_db && p
+                      ? <>{providerById(p).name}: <span dir="ltr" className="font-mono">{r.admin_db.host}</span> · {r.admin_db.by === "lab" ? "ضبطها المختبر" : "ضبطتها أنت"} · {fmt(r.admin_db.at)}</>
+                      : placeOf(r, needsOwn) === "waiting"
+                        ? <span className="text-amber-700">بانتظار قاعدة خاصة — لوحة الإدارة مقفلة حتى الربط</span>
+                        : <>قسم مستقل في قاعدة الموقع{r.is_trial ? " (رمز تجريبي)" : ""} — لا يرى بيانات غيره</>}
+                  </div>
+                  {(r.admin_db || checks[r.id]) && <div data-testid="db-check" className="mt-1 text-xs">{lastCheck(r)}</div>}
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {r.admin_db && (
+                    <button disabled={checks[r.id]?.busy} onClick={() => check(r).then(onChecked)} className={`${small} disabled:opacity-50`}>
+                      {checks[r.id]?.busy ? <RefreshCw className="size-3.5 animate-spin" /> : <Check className="size-3.5" />} فحص
+                    </button>
+                  )}
+                  {placeOf(r, needsOwn) !== "waiting" && placeOf(r, needsOwn) !== "none" && (
+                    <>
+                      <button onClick={() => onReset(r)} className={small}><KeyRound className="size-3.5" /> كلمة مرور المدير</button>
+                      <button onClick={() => importShared(r)} className={small} title="بيانات لوحة الإدارة المشتركة من قبل فصل المختبرات"><Download className="size-3.5" /> البيانات القديمة</button>
+                    </>
+                  )}
+                  <button onClick={() => onOpen(r, tab === "all" ? undefined : tab)} className="inline-flex items-center gap-1 rounded-lg bg-brand px-3 py-1 text-xs font-semibold text-white hover:bg-brand-dark">
+                    {r.admin_db ? "تغيير" : "ربط قاعدة"}
+                  </button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </>
+  );
+}
+
+/** A new password for an admin of the lab, set in the lab's own database (the owner's way back in). */
+function ResetAdminModal({ row, onClose }: { row: Row; onClose: () => void }) {
+  const [a, setA] = useState({ username: "admin", password: "", again: "" });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  async function save() {
+    if (a.password !== a.again) { setMsg({ ok: false, text: "كلمتا المرور غير متطابقتين." }); return; }
+    setBusy(true); setMsg(null);
+    const d = await post({ op: "admin_db_reset", id: row.id, account: { username: a.username.trim(), password: a.password } });
+    setBusy(false);
+    setMsg(d.ok
+      ? { ok: true, text: `✓ ${d.created ? "أُنشئ حساب مدير جديد" : "تغيّرت كلمة المرور"} — يدخل المختبر باسم «${a.username.trim()}» وكلمة المرور الجديدة.` }
+      : { ok: false, text: adminDbError(d.error) });
+  }
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/40 p-4" onClick={onClose}>
+      <div role="dialog" aria-label="كلمة مرور مدير المختبر" data-testid="reset-admin-modal" onClick={(e) => e.stopPropagation()} className="w-full max-w-md rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-pop)]">
+        <h2 className="flex items-center gap-2 text-lg font-bold"><KeyRound className="size-5 text-brand" /> كلمة مرور مدير المختبر — {row.lab_name}</h2>
+        <p className="mt-1 text-xs leading-relaxed text-muted">
+          تُكتب مباشرة في قاعدة هذا المختبر ({row.admin_db?.host}). إن كان اسم المستخدم موجوداً تتغيّر كلمة مروره ويُفعَّل كمدير، وإن لم يكن يُنشأ حساب مدير جديد.
+        </p>
+        <div className="mt-3 grid gap-2">
+          <input dir="ltr" aria-label="اسم مستخدم المدير" value={a.username} onChange={(e) => setA({ ...a, username: e.target.value })} className={inp} />
+          <input dir="ltr" type="password" aria-label="كلمة المرور الجديدة" placeholder="6 أحرف على الأقل" value={a.password} onChange={(e) => setA({ ...a, password: e.target.value })} className={inp} />
+          <input dir="ltr" type="password" aria-label="تأكيد كلمة المرور" placeholder="أعد كتابتها" value={a.again} onChange={(e) => setA({ ...a, again: e.target.value })} className={inp} />
+        </div>
+        {msg && <p data-testid="reset-admin-msg" className={`mt-3 text-sm ${msg.ok ? "text-teal-700" : "text-red-700"}`}>{msg.text}</p>}
+        <div className="mt-4 flex justify-end gap-2">
+          <button onClick={onClose} className="rounded-lg border border-line px-4 py-2 text-sm hover:bg-canvas">إغلاق</button>
+          <button disabled={busy || !a.username.trim() || a.password.length < 6} onClick={save} className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-50">حفظ كلمة المرور</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** «الإعدادات العامة»: what a new code starts with, and when a code counts as ending soon. */
+function PrefsCard({ prefs, onSaved }: { prefs: Prefs; onSaved: () => void }) {
+  const preset = PERIODS.some((p) => p.d === prefs.defaultDays);
+  const [p, setP] = useState({ ...prefs, custom: preset ? "" : String(prefs.defaultDays), days: preset ? prefs.defaultDays : -1 });
+  const [msg, setMsg] = useState("");
+  async function save() {
+    const defaultDays = p.days === -1 ? Number(p.custom) : p.days;
+    if (!defaultDays || defaultDays < 1) { setMsg("حدّد المدة."); return; }
+    const d = await post({ op: "prefs", prefs: { defaultDays, defaultModules: p.defaultModules, trialDays: p.trialDays, soonDays: p.soonDays, adminNeedsOwnDb: p.adminNeedsOwnDb } });
+    setMsg(d.ok ? "✓ حُفظت الإعدادات" : "تعذّر الحفظ.");
+    if (d.ok) onSaved();
+  }
+  return (
+    <Panel tone="sky" icon={<Settings className="size-5" />} title="القيم الافتراضية" desc="يبدأ بها نموذج «رمز جديد» — تستطيع تغييرها لكل رمز عند إنشائه." testid="prefs-card">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <label className="text-sm font-medium">مدة الرمز الجديد
+          <div className="mt-1 flex gap-2">
+            <select value={p.days} onChange={(e) => setP({ ...p, days: Number(e.target.value) })} aria-label="مدة الرمز الافتراضية" className={inp}>
+              {PERIODS.map((x) => <option key={x.d} value={x.d}>{x.l}</option>)}
+              <option value={-1}>عدد أيام آخر…</option>
+            </select>
+            {p.days === -1 && <input type="number" min={1} value={p.custom} onChange={(e) => setP({ ...p, custom: e.target.value })} aria-label="أيام الرمز الافتراضية" className={`${inp} w-24`} />}
+          </div>
+        </label>
+        <label className="text-sm font-medium">مدة الرمز التجريبي (أيام)
+          <input type="number" min={1} max={60} value={p.trialDays} onChange={(e) => setP({ ...p, trialDays: Number(e.target.value) })} aria-label="أيام الرمز التجريبي" className={`mt-1 ${inp}`} />
+        </label>
+        <label className="text-sm font-medium">تنبيه «قارب على الانتهاء» قبل (أيام)
+          <input type="number" min={1} max={90} value={p.soonDays} onChange={(e) => setP({ ...p, soonDays: Number(e.target.value) })} aria-label="أيام التنبيه قبل الانتهاء" className={`mt-1 ${inp}`} />
+        </label>
+      </div>
+      <div className="mt-3 text-sm font-medium">المحطات المفعّلة في الرمز الجديد</div>
+      <ModuleChips value={p.defaultModules} onChange={(m) => setP({ ...p, defaultModules: m })} />
+      <label data-testid="needs-own-db" className="mt-4 flex items-start gap-2 rounded-lg border border-line p-3 text-sm">
+        <input type="checkbox" checked={p.adminNeedsOwnDb} onChange={(e) => setP({ ...p, adminNeedsOwnDb: e.target.checked })} aria-label="لوحة الإدارة تحتاج قاعدة خاصة" className="mt-1" />
+        <span>
+          <b>لوحة الإدارة الكاملة تحتاج قاعدة بيانات خاصة لكل مختبر</b>
+          <span className="mt-0.5 block text-xs text-muted">
+            لا تُفتح لوحة الإدارة لرمز مدفوع حتى تُربط قاعدته (منك في «قواعد البيانات» أو من المختبر نفسه). الرموز التجريبية تعمل في قسم مستقل من قاعدة الموقع.
+            عند الإيقاف يعمل كل مختبر بلا قاعدة خاصة في قسمه المستقل من قاعدة الموقع. في الحالتين لا يرى مختبر بيانات غيره.
+          </span>
+        </span>
+      </label>
+      <div className="mt-4 flex items-center gap-3">
+        <button onClick={save} className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark">حفظ الإعدادات</button>
+        {msg && <span data-testid="prefs-msg" className="text-xs text-brand-dark">{msg}</span>}
+      </div>
+    </Panel>
+  );
+}
+
+/** «قاعدة لوحة الإدارة» for one code: the full admin panel on the lab's own PostgreSQL, linked through
+ *  the chosen provider's own interface (its steps, its connection string, advice before saving). */
+function AdminDbModal({ row, rows, provider: initial, needsOwn, onClose, onSaved }: {
+  row: Row; rows: Row[]; provider?: ProviderId; needsOwn: boolean; onClose: () => void; onSaved: () => void;
+}) {
+  const locksWithout = needsOwn && !row.is_trial;
+  const savedProvider = row.admin_db ? row.admin_db.provider ?? providerOf(row.admin_db.host) : null;
+  const [provider, setProvider] = useState<ProviderId>(initial ?? savedProvider ?? "neon");
+  const [conn, setConn] = useState("");
+  const [from, setFrom] = useState("");
+  const [fromSync, setFromSync] = useState(false);
+  const [copy, setCopy] = useState(false);
+  const [first, setFirst] = useState({ username: "", password: "" });
+  const [needsAdmin, setNeedsAdmin] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const syncPg = STATION_SYNC && row.sync?.kind === "postgres" ? row.sync.host : "";
+  const others = rows.filter((r) => r.id !== row.id && r.admin_db);
+  const keepSaved = !conn.trim() && !from && !fromSync && !!row.admin_db && provider === savedProvider;
+  const target = () => (from ? { from } : fromSync ? { fromSync: true } : { conn: conn.trim() });
+  const ready = !!from || fromSync || !!conn.trim() || keepSaved;
+  async function go(op: "test" | "set" | "unlink") {
+    setBusy(true); setMsg(null);
+    const d = op === "unlink" ? await post({ op: "admin_db_set", id: row.id, conn: null })
+      : await post({ op: op === "test" ? "admin_db_test" : "admin_db_set", id: row.id, ...target(), ...(op === "set" && first.username ? { first } : {}), ...(op === "set" && copy ? { copy: true } : {}) });
+    setBusy(false);
+    if (!d.ok) {
+      if (d.error === "no_admin") setNeedsAdmin(true);
+      setMsg({ ok: false, text: adminDbError(d.error) }); return;
+    }
+    if (op === "test") {
+      setNeedsAdmin(!d.users);
+      setMsg({ ok: true, text: `✓ الاتصال يعمل والجداول جاهزة — المستخدمون: ${d.users ?? 0}${d.users ? "" : " (أدخل حساب المدير الأول، أو انسخ بيانات لوحته الحالية، قبل الحفظ)"}` });
+      return;
+    }
+    if (d.copied) window.alert(`نُسخت البيانات: ${d.copied.rows} سجلاً من ${d.copied.tables} جدولاً.`);
+    onSaved();
+  }
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/40 p-4" onClick={onClose}>
+      <div role="dialog" aria-label="قاعدة لوحة الإدارة" data-testid="admin-db-modal" onClick={(e) => e.stopPropagation()} className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-pop)]">
+        <h2 className="flex items-center gap-2 text-lg font-bold"><HardDrive className="size-5 text-brand" /> قاعدة بيانات المختبر — {row.lab_name}</h2>
+        <p className="mt-1 text-xs leading-relaxed text-muted">
+          تعمل لوحة الإدارة الكاملة لهذا المختبر على قاعدة PostgreSQL خاصة به: المرضى والطلبات والنتائج والفواتير والمستخدمون.
+          تُنشأ الجداول تلقائياً عند أول اتصال. يُحفظ الرابط مشفّراً بـ AUTH_SECRET ولا يُعرض مرة أخرى.
+        </p>
+        <div className="mt-3 rounded-lg bg-canvas px-3 py-2 text-xs">
+          الحالية: {row.admin_db ? <b dir="ltr">{row.admin_db.host}</b> : <b>{PLACE_LABEL[placeOf(row, needsOwn)] || "قسم مستقل في قاعدة الموقع"}</b>}
+          {row.admin_db?.by === "lab" && <span className="text-muted"> — ضبطها المختبر</span>}
+        </div>
+
+        <div className="mt-4 text-sm font-semibold">1. اختر مزوّد القاعدة</div>
+        <div className="mt-2"><ProviderPicker value={provider} onChange={(p) => { setProvider(p); setFrom(""); setFromSync(false); setMsg(null); }} /></div>
+
+        <div className="mt-4 text-sm font-semibold">2. اتبع خطوات {providerById(provider).name}</div>
+        <div className="mt-2"><ProviderGuide id={provider} /></div>
+
+        <div className="mt-4 text-sm font-semibold">3. الصق رابط الاتصال</div>
+        <div className={`mt-2 ${from || fromSync ? "pointer-events-none opacity-50" : ""}`}>
+          <ConnInput provider={provider} value={conn} onChange={(v) => { setConn(v); setMsg(null); }} label="رابط قاعدة لوحة الإدارة"
+            savedHost={row.admin_db && provider === savedProvider ? row.admin_db.host : undefined} />
+        </div>
+        {(others.length > 0 || syncPg) && (
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+            <span className="text-muted">أو:</span>
+            {others.length > 0 && (
+              <select value={from} onChange={(e) => { setFrom(e.target.value); setFromSync(false); }} aria-label="قاعدة رمز آخر" className="rounded-lg border border-line bg-surface px-2 py-1">
+                <option value="">استخدم قاعدة رمز آخر…</option>
+                {others.map((o) => <option key={o.id} value={o.id}>{o.lab_name}{o.device_name ? ` — ${o.device_name}` : ""} ({o.admin_db!.host})</option>)}
+              </select>
+            )}
+            {syncPg && <label className="inline-flex items-center gap-1"><input type="checkbox" checked={fromSync} onChange={(e) => { setFromSync(e.target.checked); setFrom(""); }} /> قاعدة المزامنة نفسها ({syncPg})</label>}
+          </div>
+        )}
+
+        <div className="mt-4 text-sm font-semibold">4. البيانات والحساب الأول</div>
+        <label data-testid="copy-site" className="mt-2 flex items-start gap-2 rounded-lg border border-line p-3 text-xs">
+          <input type="checkbox" checked={copy} onChange={(e) => setCopy(e.target.checked)} aria-label="نسخ بيانات قاعدة الموقع" className="mt-0.5" />
+          <span>
+            <b className="text-sm">انسخ بيانات لوحته الحالية إليها</b> — من {row.admin_db ? <>قاعدته الحالية (<span dir="ltr">{row.admin_db.host}</span>)</> : "قسمه في قاعدة الموقع"}: المرضى والطلبات والنتائج والفواتير والمخزون والمستخدمون، ليكمل المختبر من حيث توقّف. السجلات الموجودة في القاعدة الجديدة لا تتغيّر.
+          </span>
+        </label>
+        <div className={`mt-2 rounded-lg border p-3 ${needsAdmin ? "border-amber-300 bg-amber-50/50" : "border-line"}`}>
+          <div className="text-xs font-semibold">حساب المدير الأول <span className="font-normal text-muted">— للقاعدة الجديدة فقط (تُترك فارغة إن كان فيها مستخدمون أو عند نسخ البيانات)</span></div>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            <input dir="ltr" aria-label="اسم مستخدم المدير" placeholder="admin" value={first.username} onChange={(e) => setFirst({ ...first, username: e.target.value })} className={inp} />
+            <input dir="ltr" type="password" aria-label="كلمة مرور المدير" placeholder="6 أحرف على الأقل" value={first.password} onChange={(e) => setFirst({ ...first, password: e.target.value })} className={inp} />
+          </div>
+        </div>
+        {msg && <p className={`mt-3 text-sm ${msg.ok ? "text-teal-700" : "text-red-700"}`} data-testid="admin-db-msg">{msg.text}</p>}
+        <div className="mt-4 flex flex-wrap justify-end gap-2">
+          <button onClick={onClose} className="rounded-lg border border-line px-4 py-2 text-sm hover:bg-canvas">إغلاق</button>
+          {row.admin_db && <button disabled={busy} onClick={() => { if (confirm(locksWithout ? "إلغاء ربط قاعدة هذا المختبر؟ تُقفل لوحة الإدارة عنده حتى تُربط قاعدة أخرى، وتبقى بيانات قاعدته كما هي." : "إرجاع لوحة هذا المختبر إلى قسمه في قاعدة الموقع؟ تبقى بيانات قاعدته كما هي.")) go("unlink"); }} className="rounded-lg border border-red-200 px-4 py-2 text-sm text-red-700 hover:bg-red-50 disabled:opacity-50">{locksWithout ? "إلغاء ربط القاعدة" : "إرجاع لقسمه في قاعدة الموقع"}</button>}
+          <button disabled={busy || !ready} onClick={() => go("test")} className="rounded-lg border border-line px-4 py-2 text-sm hover:bg-canvas disabled:opacity-50">اختبار الاتصال</button>
+          <button disabled={busy || !ready} onClick={() => go("set")} className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-50">{busy ? "جارٍ…" : "حفظ"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** The page's side menu, like the lab station's (a drawer on phones). */
-function OwnerNav({ section, go, total, soon, open, setOpen, onLogout }: {
-  section: Section; go: (s: Section) => void; total: number; soon: number; open: boolean; setOpen: (v: boolean) => void; onLogout: () => void;
+function OwnerNav({ section, go, total, soon, soonDays, dbDown, open, setOpen, onLogout }: {
+  section: Section; go: (s: Section) => void; total: number; soon: number; soonDays: number; dbDown: number; open: boolean; setOpen: (v: boolean) => void; onLogout: () => void;
 }) {
   const current = SECTIONS.flatMap((g) => g.items).find((i) => i.id === section)?.label ?? "إدارة الرموز";
   return (
@@ -970,7 +1373,8 @@ function OwnerNav({ section, go, total, soon, open, setOpen, onLogout }: {
               <div className="flex flex-col gap-0.5">
                 {g.items.map((it) => {
                   const active = section === it.id;
-                  const badge = it.id === "codes" ? (soon || total) : 0;
+                  const badge = it.id === "codes" ? (soon || total) : it.id === "databases" ? dbDown : 0;
+                  const warn = it.id === "codes" ? !!soon : it.id === "databases";
                   return (
                     <button key={it.id} data-section={it.id} onClick={() => go(it.id)} aria-current={active ? "page" : undefined}
                       className={`group relative flex items-center gap-3 rounded-xl px-2.5 py-2 text-right text-sm ${active ? "bg-brand-light text-brand-dark shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--color-brand)_22%,transparent)]" : "text-ink hover:bg-canvas"}`}>
@@ -983,7 +1387,8 @@ function OwnerNav({ section, go, total, soon, open, setOpen, onLogout }: {
                         <span className={`block truncate text-[11px] ${active ? "text-brand-dark/70" : "text-muted"}`}>{it.hint}</span>
                       </span>
                       {badge ? (
-                        <span title={soon ? "تنتهي خلال 14 يوماً" : undefined} className={`min-w-5 rounded-full px-1.5 py-0.5 text-center text-[10px] font-bold leading-none tabular-nums text-white ${soon ? "bg-amber-500" : "bg-brand"}`}>{badge}</span>
+                        <span data-testid={`badge-${it.id}`} title={it.id === "databases" ? "قواعد لا تستجيب" : soon ? `تنتهي خلال ${soonDays} يوماً` : undefined}
+                          className={`min-w-5 rounded-full px-1.5 py-0.5 text-center text-[10px] font-bold leading-none tabular-nums text-white ${it.id === "databases" ? "bg-red-600" : warn ? "bg-amber-500" : "bg-brand"}`}>{badge}</span>
                       ) : (
                         <ChevronLeft className={`size-4 shrink-0 transition-all ${active ? "text-brand opacity-100" : "text-muted opacity-0 group-hover:opacity-60"}`} />
                       )}

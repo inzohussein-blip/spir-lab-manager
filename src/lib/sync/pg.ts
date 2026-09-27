@@ -18,7 +18,7 @@ const g = globalThis as unknown as { __labPools?: Map<string, { pool: Promise<Po
 const pools = (g.__labPools ??= new Map());
 
 export class LabDbError extends Error {
-  constructor(public code: "bad_url" | "private_host" | "unreachable" | "auth" | "tls" | "db", message: string) { super(message); }
+  constructor(public code: "bad_url" | "private_host" | "unreachable" | "auth" | "tls" | "db" | "needs_db", message: string) { super(message); }
 }
 
 /** Private, loopback and link-local addresses are refused (this server is not a way into its own
@@ -35,7 +35,7 @@ function privateAddress(ip: string): boolean {
   return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) ||
     (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) || a >= 224;
 }
-async function checkHost(host: string) {
+export async function checkHost(host: string) {
   if (process.env.LAB_DB_ALLOW_PRIVATE === "1") return;
   let addrs: string[];
   try { addrs = isIP(host) ? [host] : (await lookup(host, { all: true })).map((a) => a.address); }
@@ -43,7 +43,7 @@ async function checkHost(host: string) {
   if (!addrs.length || addrs.some(privateAddress)) throw new LabDbError("private_host", "private address");
 }
 
-function sslFor(u: URL): false | { rejectUnauthorized: boolean } {
+export function sslFor(u: URL): false | { rejectUnauthorized: boolean } {
   const mode = u.searchParams.get("sslmode");
   if (mode === "disable") return false;
   return { rejectUnauthorized: mode !== "no-verify" };
@@ -74,13 +74,15 @@ async function poolFor(conn: string): Promise<Pool> {
   return pool;
 }
 
-function toLabError(err: unknown): LabDbError {
+export function toLabError(err: unknown): LabDbError {
   if (err instanceof LabDbError) return err;
   const e = err as { code?: string; message?: string };
   const msg = String(e?.message ?? "error").slice(0, 200);
   if (e?.code === "28P01" || e?.code === "28000" || /password authentication/i.test(msg)) return new LabDbError("auth", msg);
   if (/self[- ]signed|certificate|does not support SSL|SSL|TLS/i.test(msg)) return new LabDbError("tls", msg);
   if (/ECONNREFUSED|ENOTFOUND|ETIMEDOUT|timeout|EAI_AGAIN|ECONNRESET/i.test(msg) || e?.code?.startsWith?.("E")) return new LabDbError("unreachable", msg);
+  // The server is there but not serving this database (shut down, dropped, closed to connections, full).
+  if (/^(08|57P0[1-3]|3D000|53300)/.test(e?.code ?? "") || /Connection terminated|not currently accepting connections/i.test(msg)) return new LabDbError("unreachable", msg);
   return new LabDbError("db", msg);
 }
 

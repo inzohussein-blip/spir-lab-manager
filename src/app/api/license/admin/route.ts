@@ -3,11 +3,13 @@ import {
   licensingEnabled, passwordSet, durableStorage, storageStatus, attemptsBlocked, noteAttempt, clearAttempts,
   logOwnerSignIn, ownerSignIns, signingKeySealed,
   twoFactorStatus, twoFactorRequired, checkOwnerCode, startTwoFactorSetup, confirmTwoFactor, disableTwoFactor, exportCodes, importCodes, listLicenses, listEvents, createLicense, updateLicense, getContact, setContact, type LicenseAction,
-  getSyncConfig, setSyncConfig, cleanSyncConfig,
+  getSyncConfig, setSyncConfig, cleanSyncConfig, getAdminDb, getPrefs, setPrefs,
 } from "@/lib/license/server";
 import { LabDbError, probe } from "@/lib/sync/pg";
 import { SupaError, supaProbe, supaSignIn } from "@/lib/sync/supabase";
 import { connHost, type SyncConfig } from "@/lib/sync/protocol";
+import { checkSavedAdminDb, cleanFirstAdmin, importShared, linkAdminDb, resetAdminPassword, resolveAdminConn, testAdminDb } from "@/lib/license/adminDb";
+import { forgetAdminDb } from "@/lib/db/lab";
 import { passwordMatches, startOwnerSession, endOwnerSession, isOwner, ipOf } from "@/lib/license/owner";
 
 /** Owner endpoints for the code manager (/licenses). */
@@ -19,7 +21,7 @@ export async function GET() {
   if (!(await isOwner())) return json({ enabled: true, owner: false });
   const storage = await storageStatus();
   if (!storage.ok) return json({ enabled: true, owner: true, storage, licenses: [], events: [], contact: "", now: Date.now() });
-  return json({ enabled: true, owner: true, storage: { ...storage, keySealed: await signingKeySealed() }, licenses: await listLicenses(), events: await listEvents(), signIns: await ownerSignIns(), twoFactor: await twoFactorStatus(), contact: await getContact(), version: process.env.LAB_VERSION ?? "", now: Date.now() });
+  return json({ enabled: true, owner: true, storage: { ...storage, keySealed: await signingKeySealed() }, licenses: await listLicenses(), events: await listEvents(), signIns: await ownerSignIns(), twoFactor: await twoFactorStatus(), contact: await getContact(), prefs: await getPrefs(), version: process.env.LAB_VERSION ?? "", now: Date.now() });
 }
 
 export async function POST(req: NextRequest) {
@@ -82,6 +84,7 @@ export async function POST(req: NextRequest) {
   if (b.op === "totp_enable") return (await confirmTwoFactor(String(b.code ?? ""))) ? json({ ok: true }) : json({ ok: false, error: "wrong_code" }, 400);
   if (b.op === "totp_disable") return (await disableTwoFactor(String(b.code ?? ""))) ? json({ ok: true }) : json({ ok: false, error: "wrong_code" }, 400);
   if (b.op === "contact") { await setContact(String(b.contact ?? "")); return json({ ok: true }); }
+  if (b.op === "prefs") { const prefs = await setPrefs(b.prefs); forgetAdminDb(); return json({ ok: true, prefs }); }
 
   // The lab's own database: see it (never the password or the connection string), test it, link it.
   if (b.op === "sync_get") {
@@ -115,6 +118,34 @@ export async function POST(req: NextRequest) {
     if (b.op === "sync_test") return json(tested);
     const err = await setSyncConfig(id, cfg, "owner");
     return err ? json({ ok: false, error: err }, 400) : json(tested);
+  }
+  // The full admin panel's own database for a code (the connection string never comes back).
+  if (b.op === "admin_db_test" || b.op === "admin_db_set") {
+    const id = String(b.id ?? "");
+    if (b.op === "admin_db_set" && b.conn === null) {
+      const r = await linkAdminDb(id, null, "owner");
+      return json(r, r.ok ? 200 : 400);
+    }
+    // «فحص» of the saved database: the result is kept for the list.
+    if (b.op === "admin_db_test" && !b.from && !b.fromSync && !String(b.conn ?? "").trim()) {
+      const r = await checkSavedAdminDb(id);
+      return json(r, r.ok ? 200 : 502);
+    }
+    const conn = b.from ? (await getAdminDb(String(b.from)))?.conn ?? null : await resolveAdminConn(id, b.conn, !!b.fromSync);
+    if (!conn) return json({ ok: false, error: "bad_config" }, 400);
+    if (b.op === "admin_db_test") { const r = await testAdminDb(conn); return json(r, r.ok ? 200 : 502); }
+    const first = cleanFirstAdmin(b.first);
+    if (first === "bad") return json({ ok: false, error: "bad_account" }, 400);
+    const r = await linkAdminDb(id, conn, "owner", first, b.copy === true);
+    return json(r, r.ok ? 200 : r.error === "no_admin" ? 409 : 502);
+  }
+  if (b.op === "admin_db_import_shared") {
+    const r = await importShared(String(b.id ?? ""));
+    return json(r, r.ok ? 200 : 400);
+  }
+  if (b.op === "admin_db_reset") {
+    const r = await resetAdminPassword(String(b.id ?? ""), b.account);
+    return json(r, r.ok ? 200 : 400);
   }
   return json({ ok: false, error: "bad_request" }, 400);
 }
