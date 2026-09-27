@@ -5,7 +5,7 @@ import {
   templateOf, cultureOf, formTitle, printValue, isSub, isAbnormal, sfaDiagnosis, cultureGrowth, astValue, AST_SCALE,
   type FormCode, type FormValues, type FormOptions, type TRow,
 } from "@/lib/station/templates";
-import { tableColors, DENSITY_PAD, type TableStyle } from "@/lib/station/tableStyle";
+import { reportColors, DENSITY_PAD, type TableStyle } from "@/lib/station/tableStyle";
 
 const exact = { WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as CSSProperties;
 
@@ -21,7 +21,7 @@ function visibleRows(rows: TRow[], values: FormValues, hideEmpty: boolean): TRow
 
 /** Printed structured report (English, left to right), styled like the results table. */
 export function FormReport({ code, values, ts, opts }: { code: FormCode; values: FormValues; ts: TableStyle; opts: FormOptions }) {
-  const c = tableColors(ts.intensity);
+  const c = reportColors(ts);
   const py = DENSITY_PAD[ts.density].screen;
   const small = (ts.fontSize * 12) / 14;
   const line = ts.layout === "plain" ? "transparent" : c.line;
@@ -80,7 +80,7 @@ export function FormReport({ code, values, ts, opts }: { code: FormCode; values:
 
 const AST_COLOR: Record<string, string> = { "H.S": "#15803d", "M.S": "#b45309", R: "#dc2626" };
 
-function Culture({ values, c, fontSize, py, testedOnly }: { values: FormValues; c: ReturnType<typeof tableColors>; fontSize: number; py: number; testedOnly: boolean }) {
+function Culture({ values, c, fontSize, py, testedOnly }: { values: FormValues; c: ReturnType<typeof reportColors>; fontSize: number; py: number; testedOnly: boolean }) {
   const growth = cultureGrowth(values);
   const noGrowth = (values.growth ?? "").toLowerCase().startsWith("no growth");
   const org1 = values.organism?.trim() ?? "";

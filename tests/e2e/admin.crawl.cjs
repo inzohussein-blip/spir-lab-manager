@@ -40,7 +40,8 @@ const routes = ['/', '/appointments', '/audit', '/calendar', '/insights', '/inve
   await p.goto(B + '/patients?q=' + encodeURIComponent(name));
   const link = p.locator('a', { hasText: name }).first();
   ok(await link.count() === 1, 'new patient saved and listed');
-  if (await link.count()) { await link.click(); await p.waitForTimeout(1200); ok((await p.locator('body').innerText()).includes(name), 'patient page opens'); }
+  let patientId = '';
+  if (await link.count()) { await link.click(); await p.waitForTimeout(1200); patientId = new URL(p.url()).pathname.split('/').pop(); ok((await p.locator('body').innerText()).includes(name), 'patient page opens'); }
 
   // The lab's own name and logo (Settings → «هوية المختبر»): on the panel, the report, the receipt
   // and the sign-in page; then back to the defaults.
@@ -55,7 +56,23 @@ const routes = ['/', '/appointments', '/audit', '/calendar', '/insights', '/inve
   ok((await p.locator('[data-testid="lab-name"]').innerText()).includes(LAB), 'panel: the lab\'s own name in the side menu');
   ok(((await p.locator('[data-testid="lab-mark"]').first().getAttribute('src')) || '').startsWith('data:image/'), 'panel: its own logo');
   ok(((await p.locator('[data-testid="logo-preview"]').getAttribute('src')) || '').startsWith('data:image/'), 'Settings: the logo preview');
-  const order = detail.find((h) => /^\/orders\/[0-9a-f-]{36}$/.test(h));
+  let order = detail.find((h) => /^\/orders\/[0-9a-f-]{36}$/.test(h));
+  if (!order && patientId) {
+    // A fresh database has no orders: add the default tests if the catalog is empty, then an order
+    // for the patient made above.
+    await p.goto(B + '/orders/new?patient=' + patientId); await p.waitForTimeout(1200);
+    if (await p.locator('text=لا فحوصات مطابقة').count()) {
+      await p.goto(B + '/settings'); await p.waitForSelector('[data-testid="import-tests-card"]', { timeout: 15000 });
+      await p.click('button:has-text("استيراد قائمة الفحوصات الافتراضية")');
+      await p.waitForSelector('[data-testid="import-tests-msg"]', { timeout: 30000 });
+      await p.goto(B + '/orders/new?patient=' + patientId); await p.waitForTimeout(1200);
+    }
+    await p.locator('button', { hasText: /د\.ع|بدون سعر/ }).first().click();
+    await p.click('button:has-text("إرسال الطلب للمختبر")');
+    await p.waitForURL((u) => /^\/orders\/[0-9a-f-]{36}$/.test(u.pathname), { timeout: 20000 }).catch(() => {});
+    const made = new URL(p.url()).pathname;
+    if (/^\/orders\/[0-9a-f-]{36}$/.test(made)) order = made;
+  }
   if (order) {
     await p.goto(B + order + '/report'); await p.waitForSelector('#report-sheet', { timeout: 15000 });
     const sheet = p.locator('#report-sheet');

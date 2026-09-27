@@ -76,6 +76,26 @@ const { B, OWNER, ok, launch, tmp, pdfPages, done, kv, resetLocal } = require('.
   await p.goto(B + '/station/records'); await p.waitForTimeout(500); await p.locator('text=طفل التجربة').first().click(); await p.waitForTimeout(300);
   const info = await p.locator('div.text-xs.text-muted', { hasText: '7 أشهر' }).first().innerText().catch(() => '');
   ok(info.includes('7 أشهر') && !info.includes('سنة'), `records page age "${info.trim()}"`);
+  // the lab's own colours on the printed report (Settings → «التقرير المطبوع: الألوان والجدول»)
+  const color = (sel) => p.locator(sel).first().evaluate((e) => getComputedStyle(e).color);
+  await p.goto(B + '/station?edit=' + v.id); await p.waitForTimeout(800);
+  const before = await color('#report-sheet h2');
+  await p.goto(B + '/station/settings'); await p.waitForTimeout(600);
+  const colors = p.locator('[data-testid="report-colors"]');
+  ok(await colors.locator('button[aria-pressed="true"]').getAttribute('aria-label') === 'بنفسجي وذهبي (الأصلي)', 'colours: the original purple + gold by default');
+  await colors.locator('button[aria-label="أزرق طبي"]').click(); await p.waitForTimeout(300);
+  const rt = (await ls('station.settings.v1')).reportTable;
+  ok(rt.primary === '#1e4f91' && rt.accent === '#4fa3d9', 'a ready palette is saved');
+  const blue = await color('[data-testid="preview-lab-name"]');
+  ok(blue !== before, `preview shows the new colour (${blue})`);
+  await p.goto(B + '/station?edit=' + v.id); await p.waitForTimeout(800);
+  ok(await color('#report-sheet h2') === blue && await color('#report-sheet .form-title') === blue, 'report letterhead and form title in the lab\'s colour');
+  await p.goto(B + '/station/settings'); await p.waitForTimeout(600);
+  await colors.locator('input[aria-label="اللون الرئيسي"]').fill('#f0e68c'); await p.waitForTimeout(300);
+  ok((await ls('station.settings.v1')).reportTable.primary === '#f0e68c' && await colors.locator('button[aria-pressed="true"]').count() === 0, 'a custom colour is saved');
+  ok(await p.locator('[data-testid="color-warning"]').count() === 1, 'a too-light main colour is warned about');
+  await p.locator('button:has-text("الوضع الافتراضي (الشكل الأصلي)")').click(); await p.waitForTimeout(300);
+  ok((await ls('station.settings.v1')).reportTable.primary === '#5a2a82' && await p.locator('[data-testid="color-warning"]').count() === 0, '«الوضع الافتراضي» brings the original colours back');
   ok(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.join(' | ') : ''));
   await b.close();
   done();

@@ -1,18 +1,28 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Table2, RotateCcw } from "lucide-react";
+import { Palette, RotateCcw, Check } from "lucide-react";
 import { getTests, type StationSettings, type StationTest } from "@/lib/station/store";
-import { tableStyleOf, ORIGINAL_TABLE, type TableStyle } from "@/lib/station/tableStyle";
+import { tableStyleOf, reportColors, ORIGINAL_TABLE, REPORT_PALETTES, type TableStyle } from "@/lib/station/tableStyle";
 import { ResultsTable, type ReportRow } from "./ReportSheet";
 
 const inp = "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
 
-/** Settings card: look of the printed results table, with a live preview. */
+/** How light a #rrggbb colour is (0 black … 1 white). */
+const lightness = (h: string) => {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
+  return 0.299 * r + 0.587 * g + 0.114 * b;
+};
+
+/** Settings card: the printed report's colours (the lab's own, or the original) and the look of
+ *  its results table, with a live preview. */
 export function TableStyleCard({ settings, onChange }: { settings: StationSettings; onChange: (t: TableStyle) => void }) {
   const ts = tableStyleOf(settings.reportTable);
   const set = (patch: Partial<TableStyle>) => onChange({ ...ts, ...patch });
   const isOriginal = JSON.stringify(ts) === JSON.stringify(ORIGINAL_TABLE);
+  const c = reportColors(ts);
+  const palette = REPORT_PALETTES.find((p) => p.primary === ts.primary && p.accent === ts.accent);
+  const tooLight = lightness(c.header) > 0.62;
 
   // Preview rows taken from the catalog (English names, real reference ranges).
   const [tests, setTests] = useState<StationTest[]>([]);
@@ -40,8 +50,42 @@ export function TableStyleCard({ settings, onChange }: { settings: StationSettin
 
   return (
     <div className="mb-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
-      <div className="mb-1 flex items-center gap-2 text-sm font-semibold"><Table2 className="size-4" /> جدول النتائج المطبوع</div>
-      <p className="mb-4 text-xs text-muted">تظهر التعديلات فوراً في المعاينة أدناه وفي ورقة النتائج (A4 وA5).</p>
+      <div className="mb-1 flex items-center gap-2 text-sm font-semibold"><Palette className="size-4" /> التقرير المطبوع: الألوان والجدول</div>
+      <p className="mb-4 text-xs text-muted">ألوان المختبر تظهر في رأس التقرير والجدول والاستمارات (الإدرار، الخروج، السائل المنوي، الزرع) وتذييل الصفحة. تظهر التعديلات فوراً في المعاينة أدناه وفي ورقة النتائج (A4 وA5).</p>
+
+      <div className="mb-4" data-testid="report-colors">
+        <div className="mb-2 text-xs text-muted">ألوان جاهزة</div>
+        <div className="flex flex-wrap gap-2">
+          {REPORT_PALETTES.map((p) => {
+            const on = p === palette;
+            return (
+              <button key={p.name} type="button" onClick={() => set({ primary: p.primary, accent: p.accent })} aria-pressed={on} aria-label={p.name} title={p.name}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs ${on ? "border-brand bg-canvas font-semibold" : "border-line hover:bg-canvas"}`}>
+                <span className="relative inline-flex">
+                  <span className="size-5 rounded-full border border-black/10" style={{ background: p.primary }} />
+                  <span className="-ms-1.5 size-5 rounded-full border border-white" style={{ background: p.accent }} />
+                </span>
+                {p.name}
+                {on && <Check className="size-3.5" />}
+              </button>
+            );
+          })}
+        </div>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <label className="flex items-center gap-2 text-xs text-muted">
+            <input type="color" value={ts.primary} onChange={(e) => set({ primary: e.target.value })} aria-label="اللون الرئيسي" className="h-9 w-12 cursor-pointer rounded border border-line bg-surface p-0.5" />
+            <span>اللون الرئيسي<span className="block text-[10px]">اسم المختبر، رأس الجدول، التذييل</span></span>
+            <span className="ms-auto font-mono text-[11px] text-ink" dir="ltr">{ts.primary}</span>
+          </label>
+          <label className="flex items-center gap-2 text-xs text-muted">
+            <input type="color" value={ts.accent} onChange={(e) => set({ accent: e.target.value })} aria-label="اللون الثانوي" className="h-9 w-12 cursor-pointer rounded border border-line bg-surface p-0.5" />
+            <span>اللون الثانوي<span className="block text-[10px]">الخط الفاصل، الإطارات، عناوين الأقسام</span></span>
+            <span className="ms-auto font-mono text-[11px] text-ink" dir="ltr">{ts.accent}</span>
+          </label>
+        </div>
+        {!palette && <p className="mt-2 text-[11px] text-muted">ألوان خاصة بالمختبر.</p>}
+        {tooLight && <p className="mt-2 text-[11px] text-amber-700" data-testid="color-warning">اللون الرئيسي فاتح: قد يصعب قراءة الكتابة البيضاء فوقه في رأس الجدول والتذييل. اختر لوناً أغمق أو ارفع شدة الألوان.</p>}
+      </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="text-xs text-muted sm:col-span-2">
@@ -64,12 +108,26 @@ export function TableStyleCard({ settings, onChange }: { settings: StationSettin
           className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas disabled:opacity-50">
           <RotateCcw className="size-4" /> الوضع الافتراضي (الشكل الأصلي)
         </button>
-        {isOriginal && <span className="text-xs text-muted">الجدول على شكله الأصلي.</span>}
+        {isOriginal && <span className="text-xs text-muted">التقرير على شكله الأصلي (ألوانه وجدوله).</span>}
       </div>
 
-      <div className="mt-4 rounded-xl border border-line bg-white p-4 text-black">
-        <div className="mb-1 text-[11px] text-gray-500">معاينة</div>
+      <div className="mt-4 rounded-xl border border-line bg-white p-4 text-black" data-testid="report-preview">
+        <div className="mb-2 text-[11px] text-gray-500">معاينة</div>
+        {/* The letterhead as printed (see ReportSheet) */}
+        <div className="flex items-center gap-3 pb-2">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          {settings.logo && <img src={settings.logo} alt="" className="size-12 object-contain" />}
+          <div>
+            <div className="text-lg font-extrabold leading-tight" style={{ color: c.title }} data-testid="preview-lab-name">{settings.labName || "اسم المختبر"}</div>
+            <div className="text-xs font-medium" style={{ color: c.subtitle }}>{settings.labSubtitle || "العبارة تحت الاسم"}</div>
+          </div>
+        </div>
+        <div className="h-1 w-full rounded" style={{ background: `linear-gradient(90deg, ${c.border} 0%, ${c.title} 50%, ${c.border} 100%)` }} />
+        <div className="mt-2 flex gap-6 rounded-lg border-2 px-3 py-1.5 text-xs" style={{ borderColor: c.border }}>
+          <span><b style={{ color: c.title }}>المريض:</b> مثال</span><span><b style={{ color: c.title }}>العمر:</b> 40</span>
+        </div>
         <ResultsTable ts={{ ...ts, gap: "near" }} groups={groups} gender="male" age="40" />
+        <div className="mt-3 rounded-md px-3 py-1.5 text-center text-[11px] font-medium text-white" style={{ background: c.bar }}>{settings.footer || "تذييل التقرير"}</div>
       </div>
     </div>
   );
