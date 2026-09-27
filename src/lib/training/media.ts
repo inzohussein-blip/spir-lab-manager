@@ -17,7 +17,7 @@ export interface MediaRecord {
 }
 export type MediaMeta = Omit<MediaRecord, "blob"> & { size: number; type: string };
 
-import { isStaticImage } from "./staticImages";
+import { isStaticImage } from "@/lib/local/staticImages";
 
 const DB_NAME = "training-media";
 const STORE = "images";

@@ -6,7 +6,7 @@ import { Images, Upload, Trash2, Loader2, X } from "lucide-react";
 import { addImage, deleteImage, listImages, setCaption, type MediaMeta } from "@/lib/training/media";
 import { imageUsage, removeImageRefs } from "@/lib/training/store";
 import { Img } from "@/components/training/Img";
-import { STATIC_IMAGES } from "@/lib/training/staticImages";
+import { STATIC_IMAGES } from "@/lib/local/staticImages";
 
 const kb = (n: number) => (n > 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 

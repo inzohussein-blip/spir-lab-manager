@@ -212,10 +212,25 @@ export function ReportSheet({
         {/* Bottom group — signature sits at the bottom of the last page */}
         <div className="report-keep mt-auto">
           <div className="report-sign mt-10 flex items-end justify-between text-xs text-gray-600">
-            <div>
-              <div className="mb-6">اعتمد النتائج:</div>
-              <div className="w-48 border-t pt-1 text-center text-gray-500" style={{ borderColor: GOLD }}>التوقيع / الختم</div>
-            </div>
+            {settings.signatureOn ? (
+              // Settings → «التوقيع والختم على التقرير»: the analyst's signature (and name), and the lab's stamp.
+              <div className="flex items-end gap-3" data-testid="report-signature">
+                <div className="text-center">
+                  <div className="mb-1 text-start">اعتمد النتائج:</div>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  {settings.signatureImage ? <img src={encodeURI(settings.signatureImage)} alt="التوقيع" className="mx-auto h-14 max-w-48 object-contain" /> : <div className="h-8" />}
+                  <div className="w-48 border-t pt-1 font-semibold text-gray-700" style={{ borderColor: GOLD }}>{settings.signatureName?.trim() || "التوقيع"}</div>
+                  {settings.signatureTitle?.trim() && <div className="text-[10px] text-gray-500">{settings.signatureTitle}</div>}
+                </div>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                {settings.stampImage && <img src={encodeURI(settings.stampImage)} alt="الختم" className="size-24 object-contain opacity-90" />}
+              </div>
+            ) : (
+              <div>
+                <div className="mb-6">اعتمد النتائج:</div>
+                <div className="w-48 border-t pt-1 text-center text-gray-500" style={{ borderColor: GOLD }}>التوقيع / الختم</div>
+              </div>
+            )}
             {qrCode && <LabQrCard q={qrCode} logo={qrLogo} />}
           </div>
 

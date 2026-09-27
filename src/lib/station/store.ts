@@ -129,6 +129,8 @@ const K_PATIENTS = "station.patients.v1";
 const K_STOCK = "station.stock.v1";
 const K_DOCTORS = "station.doctors.v1";
 const K_BACKUP_AT = "station.backupAt.v1";
+/** Deleted visits and patients, kept 30 days (shared with the lab's other devices when synced). */
+const K_TRASH = "station.trash.v1";
 /** This device's letter in its sample numbers (kept on the device, never synced). */
 const K_DEVICE_TAG = "station.deviceTag.v1";
 const K_CATALOG_VER = "station.catalogVersion.v1";
@@ -185,6 +187,13 @@ export interface StationSettings {
   formHideEmpty?: boolean;
   csTestedOnly?: boolean;
   formBoldAbnormal?: boolean;
+  /** Signature and stamp on the report — off by default. Images from the project's library
+   *  (public/lab-images), so they are the same on every device. */
+  signatureOn?: boolean;
+  signatureImage?: string;
+  stampImage?: string;
+  signatureName?: string;
+  signatureTitle?: string;
   /** Look of the printed results table (see ./tableStyle). Missing → the default look. */
   reportTable?: Partial<import("./tableStyle").TableStyle>;
 }
@@ -268,6 +277,38 @@ export function saveTests(tests: StationTest[]): void {
   write(K_TESTS, tests);
 }
 
+// ── Restoring the defaults (Settings) ─────────────────────────────────────────
+// Built-in tests are matched by their code and keep their ids, so saved visits and previous
+// results still point to them.
+const defaultTests = () => DEFAULT_TESTS().map(({ aliases: _a, legacy: _l, ...x }) => x);
+/** The built-in tests back to their default names, units and ranges; the lab's own tests stay,
+ *  and built-ins that were deleted come back. Returns how many were reset or added. */
+export function resetBuiltinTests(): number {
+  const defs = defaultTests();
+  const byCode = new Map(defs.map((d) => [d.code, d]));
+  const cur = getTests();
+  const seen = new Set<string>();
+  const out = cur.map((t) => {
+    const d = t.code ? byCode.get(t.code) : undefined;
+    if (!d) return t;
+    seen.add(d.code!);
+    return { ...d, id: t.id };
+  });
+  const added = defs.filter((d) => !seen.has(d.code!));
+  write(K_TESTS, [...out, ...added]);
+  return seen.size + added.length;
+}
+/** The whole default list, as on a new installation: the lab's own tests are removed. */
+export function restoreDefaultTests(): number {
+  const ids = new Map(getTests().filter((t) => t.code).map((t) => [t.code!, t.id]));
+  const list = defaultTests().map((d) => ({ ...d, id: ids.get(d.code!) ?? d.id }));
+  write(K_TESTS, list);
+  write(K_CATALOG_VER, CATALOG_VERSION);
+  write(K_ADD_FORMS, true);
+  write(K_FIX_GUE, true);
+  return list.length;
+}
+
 // ── Visits ───────────────────────────────────────────────────────────────────
 export function getVisits(): StationVisit[] {
   return read<StationVisit[]>(K_VISITS, []);
@@ -298,9 +339,57 @@ export function setDelivered(ids: string[], delivered: boolean): boolean {
     return delivered ? { ...rest, delivered_at: v.delivered_at ?? at } : rest;
   }));
 }
+/** Delete = move to the recycle bin (restorable for 30 days). */
 export function deleteVisits(ids: string[]): void {
   const set = new Set(ids);
-  write(K_VISITS, getVisits().filter((v) => !set.has(v.id)));
+  const all = getVisits();
+  toTrash(all.filter((v) => set.has(v.id)).map((item) => ({ kind: "visit" as const, item })));
+  write(K_VISITS, all.filter((v) => !set.has(v.id)));
+}
+
+// ── Recycle bin («سلة المحذوفات») ─────────────────────────────────────────────
+export const TRASH_DAYS = 30;
+export type TrashItem =
+  | { id: string; kind: "visit"; deleted_at: number; item: StationVisit }
+  | { id: string; kind: "patient"; deleted_at: number; item: StationPatient };
+function toTrash(items: ({ kind: "visit"; item: StationVisit } | { kind: "patient"; item: StationPatient })[]) {
+  if (!items.length) return;
+  const at = Date.now();
+  const added = items.map((x) => ({ ...x, id: x.item.id, deleted_at: at }) as TrashItem);
+  const ids = new Set(added.map((x) => x.id));
+  write(K_TRASH, [...added, ...getTrash().filter((x) => !ids.has(x.id))]);
+}
+/** What is in the bin (newest first); anything older than 30 days is removed for good. */
+export function getTrash(): TrashItem[] {
+  const all = read<TrashItem[]>(K_TRASH, []);
+  const limit = Date.now() - TRASH_DAYS * 86_400_000;
+  const kept = all.filter((x) => x && x.deleted_at > limit);
+  if (kept.length !== all.length) write(K_TRASH, kept);
+  return kept.sort((a, b) => b.deleted_at - a.deleted_at);
+}
+/** Put items back where they were (visits in date order); what is back leaves the bin. */
+export function restoreTrash(ids: string[]): number {
+  const set = new Set(ids);
+  const bin = getTrash();
+  const back = bin.filter((x) => set.has(x.id));
+  const visits = back.filter((x) => x.kind === "visit").map((x) => x.item as StationVisit);
+  const patients = back.filter((x) => x.kind === "patient").map((x) => x.item as StationPatient);
+  if (visits.length) {
+    const have = new Set(getVisits().map((v) => v.id));
+    write(K_VISITS, [...getVisits(), ...visits.filter((v) => !have.has(v.id))].sort((a, b) => b.created_at - a.created_at));
+  }
+  if (patients.length) {
+    const have = new Set(getPatients().map((p) => p.id));
+    savePatients([...patients.filter((p) => !have.has(p.id)), ...getPatients()]);
+  }
+  write(K_TRASH, bin.filter((x) => !set.has(x.id)));
+  return back.length;
+}
+/** Delete for good (from the bin). */
+export function purgeTrash(ids?: string[]): void {
+  if (!ids) { write(K_TRASH, []); return; }
+  const set = new Set(ids);
+  write(K_TRASH, getTrash().filter((x) => !set.has(x.id)));
 }
 
 // ── Custom pages ─────────────────────────────────────────────────────────────
@@ -439,9 +528,12 @@ export function addPatientNote(patientId: string, text: string): void {
   if (!t) return;
   savePatients(getPatients().map((p) => (p.id === patientId ? { ...p, notes: [{ ts: Date.now(), text: t }, ...p.notes] } : p)));
 }
+/** Delete = move to the recycle bin (restorable for 30 days). */
 export function deletePatients(ids: string[]): void {
   const set = new Set(ids);
-  savePatients(getPatients().filter((p) => !set.has(p.id)));
+  const all = getPatients();
+  toTrash(all.filter((p) => set.has(p.id)).map((item) => ({ kind: "patient" as const, item })));
+  savePatients(all.filter((p) => !set.has(p.id)));
 }
 
 // ── Referring doctors ────────────────────────────────────────────────────────

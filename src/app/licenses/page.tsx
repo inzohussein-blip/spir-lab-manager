@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   KeyRound, LogOut, Plus, Copy, Check, Ban, Play, MonitorSmartphone, RefreshCw, Trash2, Pencil, ShieldAlert,
   FlaskConical, Download, ChevronDown, MessageSquare, History, Wallet, MessageSquareText, Database, Upload, ShieldCheck, Smartphone, Phone,
+  Server, Menu, X, ChevronLeft, type LucideIcon,
 } from "lucide-react";
 import { LICENSE_MODULES, DEFAULT_MODULES, moduleLabel, type LicenseModule } from "@/lib/license/modules";
 import { SUPABASE_SQL } from "@/lib/sync/protocol";
@@ -55,6 +56,24 @@ const EVENT_LABEL: Record<string, string> = {
   paid: "تسجيل الدفع", unpaid: "إلغاء الدفع", message: "رسالة للمختبر", new_code: "رمز جديد", sync: "قاعدة بيانات المختبر",
 };
 const eventDetail = (e: Ev) => (e.kind === "modules" ? e.detail.split(",").filter(Boolean).map(moduleLabel).join("، ") || "لا شيء" : e.detail);
+
+type Section = "codes" | "new" | "security" | "backup" | "contact" | "system";
+const SECTIONS: { title: string; items: { id: Section; label: string; hint: string; icon: LucideIcon }[] }[] = [
+  { title: "الرموز", items: [
+    { id: "codes", label: "الرموز", hint: "المختبرات وأجهزتها", icon: KeyRound },
+    { id: "new", label: "رمز جديد", hint: "إنشاء رمز أو رمز تجريبي", icon: Plus },
+  ] },
+  { title: "الإعدادات", items: [
+    { id: "security", label: "الأمان", hint: "التحقق بخطوتين وسجل الدخول", icon: ShieldCheck },
+    { id: "backup", label: "النسخ الاحتياطي", hint: "تنزيل واسترجاع الرموز", icon: Database },
+    { id: "contact", label: "سطر التواصل", hint: "يظهر للمختبرات", icon: Phone },
+    { id: "system", label: "حالة النظام", hint: "التخزين والمفتاح والإصدار", icon: Server },
+  ] },
+];
+const sectionOf = (hash: string): Section => {
+  const h = hash.replace(/^#/, "");
+  return SECTIONS.some((g) => g.items.some((i) => i.id === h)) ? (h as Section) : "codes";
+};
 
 type Filter = "all" | "active" | "soon" | "expired" | "unused" | "stopped" | "unpaid" | "trial" | "outdated";
 type Sort = "expiry" | "newest" | "name" | "seen";
@@ -169,6 +188,19 @@ export default function LicensesPage() {
   const [backupMsg, setBackupMsg] = useState("");
   const [testing, setTesting] = useState(false);
   const [dbFor, setDbFor] = useState<Row | null>(null);
+  // The page's sections (like the lab station's pages), kept in the address (#codes, #new…) so a reload stays.
+  const [section, setSection] = useState<Section>(() => (typeof window !== "undefined" ? sectionOf(window.location.hash) : "codes"));
+  const [menu, setMenu] = useState(false);
+  useEffect(() => {
+    const onHash = () => setSection(sectionOf(window.location.hash));
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+  const go = (to: Section) => {
+    setSection(to); setMenu(false);
+    try { history.replaceState(null, "", `#${to}`); } catch { /* ignore */ }
+    window.scrollTo({ top: 0 });
+  };
 
   const load = useCallback(async () => {
     const r = await fetch("/api/license/admin", { cache: "no-store" });
@@ -266,7 +298,7 @@ export default function LicensesPage() {
     <form onSubmit={login} className="mx-auto mt-16 max-w-sm rounded-2xl border border-line bg-surface p-6 text-center shadow-[var(--shadow-card)]">
       <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-brand-light text-brand-dark"><KeyRound className="size-6" /></span>
       <div className="mt-3 text-lg font-bold">إدارة الرموز</div>
-      <p className="mb-4 mt-1 text-sm text-muted">صفحة المالك فقط.</p>
+      <div className="mb-4" />
       <input type="password" value={pw} onChange={(e) => { setPw(e.target.value); setErr(""); }} placeholder="كلمة المرور" autoFocus={!needCode} readOnly={needCode} aria-label="كلمة المرور" className={`${inp} text-center`} />
       {needCode && (
         <div className="mt-3">
@@ -288,41 +320,35 @@ export default function LicensesPage() {
     { k: "outdated", l: "نسخة قديمة", tone: "text-amber-700" },
   ];
 
-  return shell(
+  const soon = counts.soon;
+  const main = (
     <>
-      <header className="mb-5 overflow-hidden rounded-2xl text-white shadow-[var(--shadow-card)]" style={{ background: "linear-gradient(135deg, #134e4a 0%, #0f2f3a 100%)" }}>
-        <div className="flex flex-wrap items-start justify-between gap-3 px-5 pt-5">
-          <div>
-            <h1 className="flex items-center gap-2 text-2xl font-bold"><KeyRound className="size-6 text-teal-300" /> إدارة الرموز</h1>
-            <p className="mt-1 text-sm text-white/70">رمز لكل مختبر، يعمل على جهاز واحد، وتبدأ مدته من يوم التفعيل.</p>
-          </div>
-          <button onClick={async () => { await post({ op: "logout" }); load(); }} className="inline-flex items-center gap-1.5 rounded-lg border border-white/25 px-3 py-2 text-sm text-white hover:bg-white/10">
-            <LogOut className="size-4" /> خروج
-          </button>
-        </div>
-        {/* Where the codes are stored, the signing key, the site version — small status indicators */}
-        {data.storage && (
-          <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-white/10 bg-black/15 px-5 py-3 text-xs text-white/80">
-            <span className="inline-flex items-center gap-1.5">
-              <span className={`size-2 rounded-full ${data.storage.ok ? "bg-emerald-400 shadow-[0_0_0_3px_rgba(52,211,153,.25)]" : "bg-red-400 shadow-[0_0_0_3px_rgba(248,113,113,.3)]"}`} />
-              <Database className="size-3.5" /> {SOURCE[data.storage.source]} — {data.storage.ok ? <>متصلة · <b className="font-mono tabular-nums text-white">{data.storage.codes ?? 0}</b> رمز</> : <>غير متصلة {data.storage.error ?? ""}</>}
-            </span>
-            {data.storage.ok && data.storage.keySealed !== undefined && (
-              <span data-testid="key-sealed" className={`inline-flex items-center gap-1.5 ${data.storage.keySealed ? "" : "text-amber-300"}`}>
-                <span className={`size-2 rounded-full ${data.storage.keySealed ? "bg-emerald-400" : "bg-amber-400"}`} />
-                {data.storage.keySealed ? "مفتاح التوقيع مشفّر بـ AUTH_SECRET ✓" : "مفتاح التوقيع غير مشفّر — أضف AUTH_SECRET في Vercel ثم أعد النشر"}
-              </span>
-            )}
-            {data.version && <span data-testid="site-version" className="inline-flex items-center gap-1.5">الإصدار <b className="font-mono tabular-nums text-white" dir="ltr">{data.version}</b></span>}
-            <button onClick={async () => { setTesting(true); const d = await post({ op: "selftest" }); setTest(d.storage ?? { source: data.storage!.source, ok: false, error: "no reply" }); setTesting(false); }}
-              disabled={testing} className="ms-auto rounded-md border border-white/25 px-2.5 py-1 font-semibold text-white hover:bg-white/10 disabled:opacity-60">
-              {testing ? "جارٍ الاختبار…" : "اختبار الحفظ"}
+      {shown && (
+        <div className="my-5 rounded-2xl border-2 border-brand bg-brand-light/40 p-5 text-center">
+          <div className="text-sm font-semibold">رمز «{shown.row.lab_name}»{shown.row.is_trial ? " — تجريبي" : ""}</div>
+          <div className="mt-2 font-mono text-3xl font-extrabold tracking-widest text-brand-dark" dir="ltr">{shown.code}</div>
+          <div className="mt-3 flex flex-wrap justify-center gap-2">
+            <button onClick={() => copyText(shown.code, () => flash("code"))} className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark">
+              {copied === "code" ? <Check className="size-4" /> : <Copy className="size-4" />} {copied === "code" ? "نُسخ" : "نسخ الرمز"}
             </button>
-            {test && <span className={`basis-full ${test.ok ? "text-emerald-300" : "text-red-300"}`}>{test.ok ? `اختبار الحفظ نجح — كتابة وقراءة وحذف في ${test.roundTripMs} ملّي ثانية.` : `اختبار الحفظ فشل: ${test.error ?? ""}`}</span>}
+            <button onClick={() => copyText(activationMessage(shown.row, shown.code, origin), () => flash("msg"))} className="inline-flex items-center gap-1.5 rounded-lg border border-brand bg-surface px-4 py-2 text-sm font-semibold text-brand-dark hover:bg-brand-light">
+              {copied === "msg" ? <Check className="size-4" /> : <MessageSquareText className="size-4" />} {copied === "msg" ? "نُسخت الرسالة" : "نسخ رسالة التفعيل"}
+            </button>
+            <button onClick={() => setShown(null)} className="rounded-lg border border-line px-4 py-2 text-sm hover:bg-surface">تم</button>
           </div>
-        )}
-      </header>
+          <p className="mt-2 text-xs text-amber-700">احفظه الآن وأرسله للمختبر — لا يُعرض مرة أخرى (يُحفظ مشفّراً). إن ضاع أنشئ «رمزاً جديداً» لنفس المختبر.</p>
+        </div>
+      )}
 
+
+      {section === "codes" && (
+        <>
+          <SectionTitle icon={<KeyRound className="size-6" />} title="إدارة الرموز" desc="رمز لكل مختبر، يعمل على جهاز واحد، وتبدأ مدته من يوم التفعيل." />
+          {data.storage && !data.storage.ok && (
+            <button onClick={() => go("system")} className="mb-4 w-full rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-right text-sm text-red-800">
+              قاعدة الرموز غير متصلة — افتح «حالة النظام» للتفاصيل.
+            </button>
+          )}
       {/* Summary tiles = filters */}
       <div className="mb-2 grid grid-cols-3 gap-2">
         {TILES.map((t) => (
@@ -341,50 +367,6 @@ export default function LicensesPage() {
           <span>غير المدفوع: <b className="tabular-nums text-amber-700">{money.due.toLocaleString("en-US")}</b></span>
         </p>
       )}
-
-      {shown && (
-        <div className="my-5 rounded-2xl border-2 border-brand bg-brand-light/40 p-5 text-center">
-          <div className="text-sm font-semibold">رمز «{shown.row.lab_name}»{shown.row.is_trial ? " — تجريبي" : ""}</div>
-          <div className="mt-2 font-mono text-3xl font-extrabold tracking-widest text-brand-dark" dir="ltr">{shown.code}</div>
-          <div className="mt-3 flex flex-wrap justify-center gap-2">
-            <button onClick={() => copyText(shown.code, () => flash("code"))} className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark">
-              {copied === "code" ? <Check className="size-4" /> : <Copy className="size-4" />} {copied === "code" ? "نُسخ" : "نسخ الرمز"}
-            </button>
-            <button onClick={() => copyText(activationMessage(shown.row, shown.code, origin), () => flash("msg"))} className="inline-flex items-center gap-1.5 rounded-lg border border-brand bg-surface px-4 py-2 text-sm font-semibold text-brand-dark hover:bg-brand-light">
-              {copied === "msg" ? <Check className="size-4" /> : <MessageSquareText className="size-4" />} {copied === "msg" ? "نُسخت الرسالة" : "نسخ رسالة التفعيل"}
-            </button>
-            <button onClick={() => setShown(null)} className="rounded-lg border border-line px-4 py-2 text-sm hover:bg-surface">تم</button>
-          </div>
-          <p className="mt-2 text-xs text-amber-700">احفظه الآن وأرسله للمختبر — لا يُعرض مرة أخرى (يُحفظ مشفّراً). إن ضاع أنشئ «رمزاً جديداً» لنفس المختبر.</p>
-        </div>
-      )}
-
-      {/* New code */}
-      <form onSubmit={(e) => { e.preventDefault(); create(false); }} className="mb-5 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
-        <div className="mb-3 flex items-center gap-2 text-sm font-semibold"><Plus className="size-4" /> رمز جديد</div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="text-sm font-medium">اسم المختبر *<input value={f.lab} onChange={(e) => { setF({ ...f, lab: e.target.value }); setErr(""); }} className={`mt-1 ${inp}`} /></label>
-          <label className="text-sm font-medium">المدة (تبدأ من يوم التفعيل)
-            <div className="mt-1 flex gap-2">
-              <select value={f.days} onChange={(e) => setF({ ...f, days: Number(e.target.value) })} className={inp}>
-                {PERIODS.map((p) => <option key={p.d} value={p.d}>{p.l}</option>)}
-                <option value={-1}>عدد أيام آخر…</option>
-              </select>
-              {f.days === -1 && <input type="number" min={1} value={f.custom} onChange={(e) => setF({ ...f, custom: e.target.value })} placeholder="أيام" aria-label="عدد الأيام" className={`${inp} w-28`} />}
-            </div>
-          </label>
-          <label className="text-sm font-medium sm:col-span-2">ملاحظة (اختياري)<input value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} placeholder="المدينة، اسم المسؤول، رقم الهاتف…" className={`mt-1 ${inp}`} /></label>
-        </div>
-        <div className="mt-3 text-sm font-medium">المحطات المفعّلة</div>
-        <ModuleChips value={f.modules} onChange={(m) => setF({ ...f, modules: m })} />
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <button className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark"><KeyRound className="size-4" /> إنشاء الرمز</button>
-          <button type="button" onClick={() => create(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-violet-300 bg-violet-50 px-4 py-2 text-sm font-semibold text-violet-700 hover:bg-violet-100">
-            <FlaskConical className="size-4" /> رمز تجريبي {TRIAL_DAYS} أيام
-          </button>
-          {err && <span className="text-xs text-red-600">{err}</span>}
-        </div>
-      </form>
 
       {/* Codes toolbar */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -469,8 +451,68 @@ export default function LicensesPage() {
         })}
       </div>
 
-      {dbFor && <DbModal row={dbFor} rows={all} onClose={() => setDbFor(null)} onSaved={() => { setDbFor(null); load(); }} />}
+        </>
+      )}
 
+      {section === "new" && (
+        <>
+          <SectionTitle icon={<Plus className="size-6" />} title="رمز جديد" desc="اسم المختبر والمدة والمحطات المفعّلة. يظهر الرمز مرة واحدة بعد الإنشاء لتنسخه وترسله للمختبر." />
+      <form onSubmit={(e) => { e.preventDefault(); create(false); }} className="mb-5 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
+        <div className="mb-3 flex items-center gap-2 text-sm font-semibold"><Plus className="size-4" /> رمز جديد</div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="text-sm font-medium">اسم المختبر *<input value={f.lab} onChange={(e) => { setF({ ...f, lab: e.target.value }); setErr(""); }} className={`mt-1 ${inp}`} /></label>
+          <label className="text-sm font-medium">المدة (تبدأ من يوم التفعيل)
+            <div className="mt-1 flex gap-2">
+              <select value={f.days} onChange={(e) => setF({ ...f, days: Number(e.target.value) })} className={inp}>
+                {PERIODS.map((p) => <option key={p.d} value={p.d}>{p.l}</option>)}
+                <option value={-1}>عدد أيام آخر…</option>
+              </select>
+              {f.days === -1 && <input type="number" min={1} value={f.custom} onChange={(e) => setF({ ...f, custom: e.target.value })} placeholder="أيام" aria-label="عدد الأيام" className={`${inp} w-28`} />}
+            </div>
+          </label>
+          <label className="text-sm font-medium sm:col-span-2">ملاحظة (اختياري)<input value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} placeholder="المدينة، اسم المسؤول، رقم الهاتف…" className={`mt-1 ${inp}`} /></label>
+        </div>
+        <div className="mt-3 text-sm font-medium">المحطات المفعّلة</div>
+        <ModuleChips value={f.modules} onChange={(m) => setF({ ...f, modules: m })} />
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <button className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark"><KeyRound className="size-4" /> إنشاء الرمز</button>
+          <button type="button" onClick={() => create(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-violet-300 bg-violet-50 px-4 py-2 text-sm font-semibold text-violet-700 hover:bg-violet-100">
+            <FlaskConical className="size-4" /> رمز تجريبي {TRIAL_DAYS} أيام
+          </button>
+          {err && <span className="text-xs text-red-600">{err}</span>}
+        </div>
+      </form>
+
+        </>
+      )}
+
+      {section === "security" && (
+        <>
+          <SectionTitle icon={<ShieldCheck className="size-6" />} title="الأمان" desc="التحقق بخطوتين عند الدخول، وسجل محاولات الدخول لهذه الصفحة." />
+          <TwoFactorCard tf={data.twoFactor} reload={load} />
+      {/* Owner sign-in log */}
+      <Panel tone="teal" icon={<ShieldCheck className="size-5" />} title="سجل الدخول لهذه الصفحة"
+        desc="آخر محاولات الدخول الناجحة والفاشلة. بعد 8 محاولات خاطئة من نفس العنوان يُمنع الدخول 10 دقائق.">
+        {(data.signIns ?? []).length === 0 ? <p className="text-xs text-muted">لا شيء بعد.</p> : (
+          <ul className="max-h-64 overflow-y-auto rounded-lg border border-line text-xs">
+            {data.signIns!.map((x, i) => (
+              <li key={i} className={`flex flex-wrap items-center justify-between gap-2 border-b border-line px-3 py-1.5 last:border-0 ${x.ok ? "" : "bg-red-50/60"}`}>
+                <span className={`font-semibold ${x.ok ? "text-brand-dark" : "text-red-700"}`}>{x.ok ? "✓ دخول ناجح" : "✗ محاولة فاشلة"}</span>
+                <span className="text-muted" dir="ltr">{x.ip}</span>
+                <span className="text-muted">{agentLabel(x.agent)}</span>
+                <span className="font-mono tabular-nums text-muted" dir="ltr">{fmtShort(x.at)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Panel>
+
+        </>
+      )}
+
+      {section === "backup" && (
+        <>
+          <SectionTitle icon={<Database className="size-6" />} title="النسخ الاحتياطي" desc="نسخة من كل الرموز وسجلها تُحفظ عندك، وتُسترجع عند الحاجة." />
       {/* Backup of the codes */}
       <Panel tone="sky" icon={<Database className="size-5" />} title="نسخة احتياطية للرموز"
         desc="ملف يحفظ كل الرموز (مشفّرة كما هي في القاعدة — لا تظهر فيه الرموز نفسها) وسجلها وسطر التواصل. الاسترجاع يضيف ويحدّث ولا يحذف شيئاً. احفظ الملف في مكان آمن ولا تشاركه.">
@@ -504,25 +546,12 @@ export default function LicensesPage() {
         </div>
       </Panel>
 
-      <TwoFactorCard tf={data.twoFactor} reload={load} />
+        </>
+      )}
 
-      {/* Owner sign-in log */}
-      <Panel tone="teal" icon={<ShieldCheck className="size-5" />} title="سجل الدخول لهذه الصفحة"
-        desc="آخر محاولات الدخول الناجحة والفاشلة. بعد 8 محاولات خاطئة من نفس العنوان يُمنع الدخول 10 دقائق.">
-        {(data.signIns ?? []).length === 0 ? <p className="text-xs text-muted">لا شيء بعد.</p> : (
-          <ul className="max-h-64 overflow-y-auto rounded-lg border border-line text-xs">
-            {data.signIns!.map((x, i) => (
-              <li key={i} className={`flex flex-wrap items-center justify-between gap-2 border-b border-line px-3 py-1.5 last:border-0 ${x.ok ? "" : "bg-red-50/60"}`}>
-                <span className={`font-semibold ${x.ok ? "text-brand-dark" : "text-red-700"}`}>{x.ok ? "✓ دخول ناجح" : "✗ محاولة فاشلة"}</span>
-                <span className="text-muted" dir="ltr">{x.ip}</span>
-                <span className="text-muted">{agentLabel(x.agent)}</span>
-                <span className="font-mono tabular-nums text-muted" dir="ltr">{fmtShort(x.at)}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Panel>
-
+      {section === "contact" && (
+        <>
+          <SectionTitle icon={<Phone className="size-6" />} title="سطر التواصل" desc="ما يراه المختبر للتواصل معك عند التفعيل أو انتهاء المدة." />
       {/* Contact line */}
       <Panel tone="amber" icon={<Phone className="size-5" />} title="سطر التواصل"
         desc={<>يظهر في نافذة التفعيل وشاشة القفل. إذا تُرك فارغاً يظهر رقمك: <span className="font-mono" dir="ltr">{OWNER_PHONE}</span>.</>}>
@@ -531,7 +560,28 @@ export default function LicensesPage() {
           <button onClick={async () => { await post({ op: "contact", contact }); load(); flash("contact"); }} className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark">{copied === "contact" ? "حُفظ" : "حفظ"}</button>
         </div>
       </Panel>
-    </>,
+        </>
+      )}
+
+      {section === "system" && (
+        <>
+          <SectionTitle icon={<Server className="size-6" />} title="حالة النظام" desc="أين تُحفظ الرموز، ومفتاح التوقيع، وإصدار الموقع." />
+          {data.storage && <SystemStatus storage={data.storage} version={data.version} test={test} testing={testing}
+            onTest={async () => { setTesting(true); const d = await post({ op: "selftest" }); setTest(d.storage ?? { source: data.storage!.source, ok: false, error: "no reply" }); setTesting(false); }} />}
+        </>
+      )}
+    </>
+  );
+
+  return (
+    <div className="min-h-screen bg-canvas md:flex">
+      <OwnerNav section={section} go={go} total={counts.all} soon={soon} open={menu} setOpen={setMenu}
+        onLogout={async () => { await post({ op: "logout" }); load(); }} />
+      <main className="min-w-0 flex-1 p-4 md:p-7">
+        <div className="mx-auto max-w-5xl">{main}</div>
+      </main>
+      {dbFor && <DbModal row={dbFor} rows={all} onClose={() => setDbFor(null)} onSaved={() => { setDbFor(null); load(); }} />}
+    </div>
   );
 }
 
@@ -881,5 +931,116 @@ function DbModal({ row, rows, onClose, onSaved }: { row: Row; rows: Row[]; onClo
         </div>
       </div>
     </div>
+  );
+}
+
+/** The page's side menu, like the lab station's (a drawer on phones). */
+function OwnerNav({ section, go, total, soon, open, setOpen, onLogout }: {
+  section: Section; go: (s: Section) => void; total: number; soon: number; open: boolean; setOpen: (v: boolean) => void; onLogout: () => void;
+}) {
+  const current = SECTIONS.flatMap((g) => g.items).find((i) => i.id === section)?.label ?? "إدارة الرموز";
+  return (
+    <>
+      {/* Phone top bar */}
+      <div className="sticky top-0 z-30 flex items-center gap-3 border-b border-line bg-surface/90 px-4 py-2.5 backdrop-blur md:hidden">
+        <button onClick={() => setOpen(true)} aria-label="فتح القائمة" className="grid size-10 place-items-center rounded-xl border border-line bg-surface hover:bg-canvas"><Menu className="size-5" /></button>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-bold">{current}</div>
+          <div className="text-[11px] text-muted">إدارة الرموز</div>
+        </div>
+        <span className="grid size-9 place-items-center rounded-xl bg-gradient-to-br from-brand to-brand-dark text-white"><KeyRound className="size-[18px]" /></span>
+      </div>
+      <div onClick={() => setOpen(false)} className={`fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-[2px] transition-opacity md:hidden ${open ? "opacity-100" : "pointer-events-none opacity-0"}`} />
+
+      <aside className={`fixed inset-y-0 start-0 z-50 flex h-screen w-72 shrink-0 flex-col border-e border-line bg-surface shadow-[var(--shadow-pop)] transition-transform duration-200 md:sticky md:top-0 md:z-auto md:translate-x-0 md:shadow-none ${open ? "translate-x-0" : "translate-x-full"}`}>
+        <div className="px-4 pb-4 pt-5">
+          <div className="flex items-center gap-3">
+            <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-brand to-brand-dark text-white shadow-[0_6px_16px_-4px_color-mix(in_oklab,var(--color-brand)_60%,transparent)]"><KeyRound className="size-[22px]" /></span>
+            <div className="min-w-0 flex-1 leading-tight">
+              <div className="truncate text-[15px] font-bold">إدارة الرموز</div>
+              <div className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-brand-light px-2 py-0.5 text-[10px] font-medium text-brand-dark">منظومة رموز المختبرات</div>
+            </div>
+            <button onClick={() => setOpen(false)} aria-label="إغلاق القائمة" className="grid size-8 place-items-center rounded-lg text-muted hover:bg-canvas hover:text-ink md:hidden"><X className="size-4" /></button>
+          </div>
+        </div>
+        <nav className="flex flex-1 flex-col gap-4 overflow-y-auto px-3 pb-3">
+          {SECTIONS.map((g) => (
+            <div key={g.title}>
+              <div className="mb-1.5 px-2.5 text-[11px] font-semibold text-muted">{g.title}</div>
+              <div className="flex flex-col gap-0.5">
+                {g.items.map((it) => {
+                  const active = section === it.id;
+                  const badge = it.id === "codes" ? (soon || total) : 0;
+                  return (
+                    <button key={it.id} data-section={it.id} onClick={() => go(it.id)} aria-current={active ? "page" : undefined}
+                      className={`group relative flex items-center gap-3 rounded-xl px-2.5 py-2 text-right text-sm ${active ? "bg-brand-light text-brand-dark shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--color-brand)_22%,transparent)]" : "text-ink hover:bg-canvas"}`}>
+                      {active && <span className="absolute inset-y-2 -start-3 w-1 rounded-e-full bg-brand" />}
+                      <span className={`grid size-9 shrink-0 place-items-center rounded-lg transition-colors ${active ? "bg-gradient-to-br from-brand to-brand-dark text-white" : "bg-canvas text-muted ring-1 ring-line group-hover:bg-brand-light group-hover:text-brand group-hover:ring-transparent"}`}>
+                        <it.icon className="size-[18px]" strokeWidth={active ? 2.2 : 1.9} />
+                      </span>
+                      <span className="min-w-0 flex-1 leading-tight">
+                        <span className={`block truncate ${active ? "font-semibold" : ""}`}>{it.label}</span>
+                        <span className={`block truncate text-[11px] ${active ? "text-brand-dark/70" : "text-muted"}`}>{it.hint}</span>
+                      </span>
+                      {badge ? (
+                        <span title={soon ? "تنتهي خلال 14 يوماً" : undefined} className={`min-w-5 rounded-full px-1.5 py-0.5 text-center text-[10px] font-bold leading-none tabular-nums text-white ${soon ? "bg-amber-500" : "bg-brand"}`}>{badge}</span>
+                      ) : (
+                        <ChevronLeft className={`size-4 shrink-0 transition-all ${active ? "text-brand opacity-100" : "text-muted opacity-0 group-hover:opacity-60"}`} />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </nav>
+        <div className="border-t border-line p-3">
+          <button onClick={onLogout} className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-line px-3 py-2 text-sm hover:bg-canvas"><LogOut className="size-4" /> خروج</button>
+        </div>
+      </aside>
+    </>
+  );
+}
+
+/** A section's heading, as on the lab station's pages. */
+function SectionTitle({ icon, title, desc }: { icon: React.ReactNode; title: string; desc: string }) {
+  return (
+    <div className="mb-5">
+      <h1 className="flex items-center gap-2 text-2xl font-bold"><span className="text-brand">{icon}</span> {title}</h1>
+      <p className="mt-1 text-sm text-muted">{desc}</p>
+    </div>
+  );
+}
+
+/** Where the codes live, the signing key and the site version, with a save test. */
+function SystemStatus({ storage, version, test, testing, onTest }: { storage: Storage; version?: string; test: Storage | null; testing: boolean; onTest: () => void }) {
+  return (
+    <div className="rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)]">
+      <ul>
+        <StatusItem ok={storage.ok}>
+          <b>مكان حفظ الرموز:</b> {SOURCE[storage.source]} — {storage.ok ? <>متصلة · <b className="font-mono tabular-nums">{storage.codes ?? 0}</b> رمز</> : <>غير متصلة {storage.error ?? ""}</>}
+        </StatusItem>
+        {storage.ok && storage.keySealed !== undefined && (
+          <StatusItem ok={storage.keySealed} warn testid="key-sealed">
+            {storage.keySealed ? "مفتاح التوقيع مشفّر بـ AUTH_SECRET ✓" : "مفتاح التوقيع غير مشفّر — أضف AUTH_SECRET في Vercel ثم أعد النشر"}
+          </StatusItem>
+        )}
+        {version && <StatusItem ok testid="site-version"><b>إصدار الموقع:</b> <b className="font-mono tabular-nums" dir="ltr">{version}</b></StatusItem>}
+      </ul>
+      <div className="flex flex-wrap items-center gap-2 border-t border-line px-4 py-3">
+        <button onClick={onTest} disabled={testing} className="rounded-lg border border-line px-3 py-1.5 text-sm font-semibold hover:bg-canvas disabled:opacity-60">
+          {testing ? "جارٍ الاختبار…" : "اختبار الحفظ"}
+        </button>
+        {test && <span className={`text-sm ${test.ok ? "text-emerald-700" : "text-red-700"}`}>{test.ok ? `اختبار الحفظ نجح — كتابة وقراءة وحذف في ${test.roundTripMs} ملّي ثانية.` : `اختبار الحفظ فشل: ${test.error ?? ""}`}</span>}
+      </div>
+    </div>
+  );
+}
+function StatusItem({ ok, warn, children, testid }: { ok: boolean; warn?: boolean; children: React.ReactNode; testid?: string }) {
+  return (
+    <li data-testid={testid} className="flex items-start gap-3 border-b border-line px-4 py-3 text-sm last:border-0">
+      <span className={`mt-1.5 size-2.5 shrink-0 rounded-full ${ok ? "bg-emerald-500" : warn ? "bg-amber-500" : "bg-red-500"}`} />
+      <span className="min-w-0 flex-1">{children}</span>
+    </li>
   );
 }

@@ -41,6 +41,9 @@ export const SYNC_TABLE = "lab_sync_records";
 export const PULL_LIMIT = 500;
 export const PUSH_LIMIT = 200;
 
+/** How long a deletion is kept in the lab's database, so every device learns of it (the 180 in SCHEMA_SQL). */
+export const TOMBSTONE_DAYS = 180;
+
 /** Table + write function, shared by both kinds of database. */
 export const SCHEMA_SQL = `create sequence if not exists lab_sync_rev;
 create table if not exists lab_sync_records (
@@ -55,10 +58,14 @@ create table if not exists lab_sync_records (
   primary key (coll, id)
 );
 create index if not exists lab_sync_records_rev on lab_sync_records (rev);
+create index if not exists lab_sync_records_gone on lab_sync_records (mtime) where deleted;
 
 -- Writes a batch; a record is replaced only by a change at least as recent as the stored one.
+-- Also removes deletion marks older than 180 days (only those: records in use are never touched).
 create or replace function lab_sync_push(batch jsonb) returns integer
 language sql security definer set search_path = public as $$
+  delete from lab_sync_records
+   where deleted and mtime < (extract(epoch from now()) * 1000)::bigint - 180::bigint * 86400000;
   with up as (
     insert into lab_sync_records as t (coll, id, data, mtime, deleted, ord, node)
     select x.coll, x.id, x.data, x.mtime, coalesce(x.deleted, false), coalesce(x.ord, 0), coalesce(x.node, '')

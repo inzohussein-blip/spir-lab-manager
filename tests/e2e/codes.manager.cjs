@@ -10,13 +10,20 @@ const fs = require('node:fs');
   await o.waitForSelector('h1:has-text("إدارة الرموز")', { timeout: 15000 });
   const clip = () => o.evaluate(() => navigator.clipboard.readText());
   const card = (lab) => o.locator(`div[data-lab="${lab}"]`);
+  // The code manager's sections (side menu).
+  const go = (s) => o.click(`[data-section="${s}"]`);
+  ok(await o.locator('text=صفحة المالك فقط').count() === 0, 'no «صفحة المالك فقط» line');
+  ok(await o.locator('[data-section]').count() === 6, 'code manager: six sections in the side menu');
   // signing key sealed with AUTH_SECRET (the codes run always sets it)
+  await go('system');
   await o.waitForSelector('[data-testid="key-sealed"]', { timeout: 15000 });
   ok((await o.locator('[data-testid="key-sealed"]').innerText()).includes('مشفّر بـ AUTH_SECRET'), 'signing key shown as sealed with AUTH_SECRET');
   // 5. trial
+  await go('new');
   await o.fill('label:has-text("اسم المختبر") input', 'مختبر التجربة');
   await o.click('button:has-text("رمز تجريبي 7 أيام")'); await o.waitForTimeout(800);
   const trialCode = (await o.locator('div.font-mono.text-3xl').innerText()).trim();
+  await go('codes');
   ok(await card('مختبر التجربة').locator('text=تجريبي').count() >= 1 && (await card('مختبر التجربة').innerText()).includes('7 يوم'), 'trial code: 7 days with «تجريبي» badge');
   // 2. activation message
   await o.click('button:has-text("نسخ رسالة التفعيل")'); await o.waitForTimeout(300);
@@ -24,8 +31,10 @@ const fs = require('node:fs');
   ok(msg.includes(trialCode) && msg.includes('مختبر التجربة') && msg.includes('/welcome') && msg.includes('07803993585') && msg.includes('(تجريبي)'), 'activation message has code, lab, link, phone');
   await o.click('button:text-is("تم")');
   // normal code, activate on a device
+  await go('new');
   await o.fill('label:has-text("اسم المختبر") input', 'مختبر الرسالة'); await o.click('button:has-text("إنشاء الرمز")'); await o.waitForTimeout(800);
   const code = (await o.locator('div.font-mono.text-3xl').innerText()).trim(); await o.click('button:text-is("تم")');
+  await go('codes');
   const ctxD = await b.newContext({ viewport: { width: 1300, height: 900 } }); const d = await ctxD.newPage(); d.on('pageerror', e => errs.push(e.message.slice(0, 120)));
   await d.goto(B + '/welcome'); await d.waitForTimeout(1500);
   await d.fill('input[aria-label="رمز المختبر"]', code); await d.click('button:has-text("تفعيل")'); await d.waitForTimeout(1500);
@@ -75,13 +84,18 @@ const fs = require('node:fs');
   ok(csv.includes('مختبر الرسالة') && csv.includes('150,000') && csv.includes('حاسوب الاستقبال') && csv.includes('مختبر التجربة'), 'CSV export has codes, payment, device');
   await o.screenshot({ path: tmp('lic2-owner.png'), fullPage: true });
   // backup: download, delete a code, restore it back
+  await go('backup');
   const [bk] = await Promise.all([o.waitForEvent('download'), o.click('button:has-text("تنزيل نسخة احتياطية")')]);
   const backup = JSON.parse(fs.readFileSync(await bk.path(), 'utf8'));
   ok(backup.app === 'lab-codes' && backup.licenses.length >= 2 && !JSON.stringify(backup).includes(code) && !JSON.stringify(backup).includes('signing_key'), 'backup has codes as hashes only, no signing key');
+  await go('codes');
   await card('مختبر التجربة').locator('button[aria-label="حذف"]').click(); await o.waitForTimeout(700);
   ok(await card('مختبر التجربة').count() === 0, 'code deleted before restore');
+  await go('backup');
   await o.setInputFiles('input[aria-label="ملف النسخة"]', await bk.path()); await o.waitForTimeout(1500);
-  ok(await card('مختبر التجربة').count() === 1 && await o.locator('text=تم الاسترجاع').count() === 1, 'restore brings the deleted code back');
+  const restored = await o.locator('text=تم الاسترجاع').count() === 1;
+  await go('codes');
+  ok(await card('مختبر التجربة').count() === 1 && restored, 'restore brings the deleted code back');
   // the restored code still activates (its hash came back)
   const ctxT = await b.newContext(); const t = await ctxT.newPage();
   await t.goto(B + '/welcome'); await t.waitForTimeout(1500);
@@ -92,7 +106,7 @@ const fs = require('node:fs');
   await x.goto(B + '/licenses'); await x.waitForTimeout(500);
   for (let i = 0; i < 9; i++) { await x.fill('input[aria-label="كلمة المرور"]', 'wrong-' + i); await x.click('button:has-text("دخول")'); await x.waitForTimeout(700); }
   ok(await x.locator('text=محاولات كثيرة').count() === 1, 'too many wrong passwords are blocked');
-  await o.reload(); await o.waitForTimeout(800);
+  await o.reload(); await o.waitForTimeout(800); await go('security');
   const log = await o.locator('div.rounded-2xl:has-text("سجل الدخول لهذه الصفحة")').innerText();
   ok(log.includes('دخول ناجح') && (log.match(/محاولة فاشلة/g) || []).length >= 8, 'sign-in log shows the success and the failed tries');
   ok(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.join(' | ') : ''));

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ImagePlus, Images, X, Loader2 } from "lucide-react";
 import { addImage, listImages, type MediaMeta } from "@/lib/training/media";
 import { Img } from "./Img";
-import { STATIC_IMAGES } from "@/lib/training/staticImages";
+import { STATIC_IMAGES } from "@/lib/local/staticImages";
 
 /** Pick an image: upload a new one (auto-compressed) or choose from the library. */
 export function ImagePicker({

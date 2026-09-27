@@ -16,7 +16,7 @@ const PREFIX = "local-app-";
 const BASES = ["/welcome", "/station", "/store", "/training", "/qc", "/roster"];
 const ROUTES = [
   "/welcome",
-  "/station", "/station/inventory", "/station/records", "/station/settings", "/station/tests", "/station/visits", "/station/page/_",
+  "/station", "/station/inventory", "/station/records", "/station/settings", "/station/tests", "/station/visits", "/station/trash", "/station/page/_",
   "/store", "/store/report", "/store/settings", "/store/suppliers",
   "/training", "/training/cards", "/training/edit", "/training/exam", "/training/manual", "/training/map", "/training/media",
   "/training/quiz", "/training/settings", "/training/tools", "/training/trainees", "/training/tubes", "/training/test/_",
