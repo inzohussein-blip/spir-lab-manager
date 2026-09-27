@@ -1,6 +1,7 @@
 import { PageHeader, Card, Button } from "@/components/ui/primitives";
 import { cloudApiConfigured } from "@/lib/whatsapp";
-import { DEFAULT_LAB_NAME, getLabIdentity, labLogo } from "@/lib/lab-identity";
+import { DEFAULT_LAB_NAME, getLabIdentity, getReportLook, labLogo, labName } from "@/lib/lab-identity";
+import { ReportLookCard } from "@/components/ReportLookCard";
 import { LogoCard } from "@/components/LogoCard";
 import { updateLabIdentity } from "@/app/actions/settings";
 import { labCodeId } from "@/lib/db/lab";
@@ -36,6 +37,7 @@ function Row({ label, value, ok }: { label: string; value: string; ok?: boolean 
 
 export default async function SettingsPage() {
   const identity = await getLabIdentity();
+  const look = await getReportLook();
   const lid = await labCodeId();
   const own = lid ? await getAdminDb(lid).catch(() => null) : null;
   const hostedDb = !!process.env.DATABASE_URL || !!own;
@@ -67,6 +69,8 @@ export default async function SettingsPage() {
         </form>
         <LogoCard logo={labLogo(identity)} isDefault={!identity.logo} />
       </Card>
+
+      <ReportLookCard look={look} lab={{ name: labName(identity), subtitle: identity.subtitle, footer: identity.footer, logo: labLogo(identity) }} />
 
       <Card className="mb-4">
         <div className="mb-2 font-semibold">قاعدة البيانات</div>

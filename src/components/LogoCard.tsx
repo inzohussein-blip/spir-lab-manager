@@ -4,25 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ImageUp, Trash2 } from "lucide-react";
 import { updateLabLogo } from "@/app/actions/settings";
-
-/** The largest side of the stored logo, in pixels (it prints at about 16 mm). */
-const SIDE = 320;
-
-/** Make the chosen image small (≤ 320 px, PNG keeps transparency) before it is saved. */
-async function shrink(file: File): Promise<string> {
-  const url = URL.createObjectURL(file);
-  try {
-    const img = await new Promise<HTMLImageElement>((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
-    const k = Math.min(1, SIDE / Math.max(img.naturalWidth, img.naturalHeight));
-    const c = document.createElement("canvas");
-    c.width = Math.max(1, Math.round(img.naturalWidth * k)); c.height = Math.max(1, Math.round(img.naturalHeight * k));
-    c.getContext("2d")!.drawImage(img, 0, 0, c.width, c.height);
-    const png = c.toDataURL("image/png");
-    return png.length < 200_000 ? png : c.toDataURL("image/webp", 0.9);
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
+import { shrinkImage } from "@/lib/shrinkImage";
 
 /** Settings → «شعار المختبر»: shown on the panel, the reports and the receipts. */
 export function LogoCard({ logo, isDefault }: { logo: string; isDefault: boolean }) {
@@ -48,7 +30,7 @@ export function LogoCard({ logo, isDefault }: { logo: string; isDefault: boolean
         <p className="text-xs text-muted">يظهر في القائمة الجانبية وعلى التقارير والوصولات. PNG بخلفية شفافة أفضل، ويُصغَّر تلقائياً.</p>
         <div className="mt-2 flex flex-wrap gap-2">
           <input ref={input} type="file" accept="image/png,image/jpeg,image/webp" aria-label="ملف الشعار" className="hidden"
-            onChange={async (e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) await save(await shrink(f).catch(() => "")); }} />
+            onChange={async (e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) await save(await shrinkImage(f, 320).catch(() => "")); }} />
           <button type="button" disabled={busy} onClick={() => input.current?.click()} className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-sm hover:bg-canvas disabled:opacity-50">
             <ImageUp className="size-4" /> {isDefault ? "رفع شعار المختبر" : "تغيير الشعار"}
           </button>

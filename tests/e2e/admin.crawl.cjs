@@ -79,6 +79,48 @@ const routes = ['/', '/appointments', '/audit', '/calendar', '/insights', '/inve
     ok((await sheet.locator('h1').innerText()).includes(LAB) && ((await sheet.locator('img').nth(1).getAttribute('src')) || '').startsWith('data:image/'), 'report: the lab\'s name and logo');
     await p.goto(B + order + '/receipt'); await p.waitForSelector('#report-sheet', { timeout: 15000 });
     ok((await p.locator('#report-sheet').innerText()).includes(LAB), 'receipt: the lab\'s name');
+
+    // The report's look (Settings → «شكل تقرير النتائج»): colours, signature and stamp, English.
+    const color = (loc) => loc.first().evaluate((e) => getComputedStyle(e).color);
+    await p.goto(B + order + '/report'); await p.waitForSelector('#report-sheet', { timeout: 15000 });
+    ok(await color(p.locator('#report-sheet h1')) === 'rgb(90, 42, 130)' && await p.locator('[data-testid="report-signature"]').count() === 0, 'report: the original purple, the empty signature box');
+    await p.goto(B + '/settings'); await p.waitForSelector('[data-testid="report-look"]', { timeout: 15000 });
+    const look = p.locator('[data-testid="report-look"]');
+    await look.locator('button[aria-label="أزرق طبي"]').click();
+    await look.locator('input[aria-label="التوقيع والختم على التقرير"]').check();
+    await look.locator('input[aria-label="اسم المسؤول"]').fill('د. سارة محمود');
+    await look.locator('input[aria-label="الصفة"]').fill('أخصائية تحليلات مرضية');
+    await look.locator('input[aria-label="اسم المختبر بالإنجليزية"]').fill('Al-Noor Specialist Lab');
+    await look.locator('button:has-text("حفظ شكل التقرير")').click();
+    await p.waitForSelector('[data-testid="look-msg"]:has-text("حُفظ")', { timeout: 15000 });
+    await look.locator('input[aria-label="ملف صورة التوقيع"]').setInputFiles({ name: 'sign.png', mimeType: 'image/png', buffer: PNG });
+    await p.waitForSelector('[data-testid="look-signature-preview"]', { timeout: 15000 });
+    await look.locator('input[aria-label="ملف صورة الختم"]').setInputFiles({ name: 'stamp.png', mimeType: 'image/png', buffer: PNG });
+    await p.waitForSelector('[data-testid="look-stamp-preview"]', { timeout: 15000 });
+    ok(true, 'Settings: colours, signature details, signature and stamp images saved');
+    await p.goto(B + order + '/report'); await p.waitForSelector('#report-sheet', { timeout: 15000 });
+    ok(await color(p.locator('#report-sheet h1')) === 'rgb(30, 79, 145)', 'report: the lab\'s colour');
+    const sig = p.locator('[data-testid="report-signature"]');
+    ok((await sig.innerText()).includes('د. سارة محمود') && (await sig.innerText()).includes('أخصائية تحليلات مرضية')
+      && ((await sig.locator('img').first().getAttribute('src')) || '').startsWith('data:image/') && await p.locator('[data-testid="report-stamp"]').count() === 1, 'report: the signature, name, title and stamp');
+    ok(await p.locator('#report-sheet[dir="rtl"]').count() === 1, 'report opens in Arabic');
+    await p.locator('[data-testid="report-lang"] a:has-text("English")').click();
+    await p.waitForSelector('#report-sheet[dir="ltr"]', { timeout: 15000 });
+    const enText = await p.locator('#report-sheet').innerText();
+    ok((await p.locator('#report-sheet h1').innerText()).includes('Al-Noor Specialist Lab') && enText.includes('Patient') && enText.includes('Reference range') && enText.includes('Verification code'), 'English report: the English name and headings');
+    await p.goto(B + order + '/receipt'); await p.waitForSelector('#report-sheet', { timeout: 15000 });
+    ok(await color(p.locator('#report-sheet .text-base.font-bold')) === 'rgb(30, 79, 145)', 'receipt: the lab\'s colour');
+    // Back to the original look.
+    await p.goto(B + '/settings'); await p.waitForSelector('[data-testid="report-look"]', { timeout: 15000 });
+    await look.locator('button[aria-label="إزالة صورة التوقيع"]').click(); await p.waitForSelector('[data-testid="look-signature-preview"]', { state: 'detached', timeout: 15000 });
+    await look.locator('button[aria-label="إزالة صورة الختم"]').click(); await p.waitForSelector('[data-testid="look-stamp-preview"]', { state: 'detached', timeout: 15000 });
+    await look.locator('button:has-text("الألوان الأصلية")').click();
+    await look.locator('input[aria-label="التوقيع والختم على التقرير"]').uncheck();
+    await look.locator('input[aria-label="اسم المختبر بالإنجليزية"]').fill('');
+    await look.locator('button:has-text("حفظ شكل التقرير")').click();
+    await p.waitForSelector('[data-testid="look-msg"]:has-text("حُفظ")', { timeout: 15000 });
+    await p.goto(B + order + '/report'); await p.waitForSelector('#report-sheet', { timeout: 15000 });
+    ok(await color(p.locator('#report-sheet h1')) === 'rgb(90, 42, 130)' && await p.locator('[data-testid="report-signature"]').count() === 0, 'back to the original report look');
   } else ok(false, 'no order to open a report for');
   const lctx = await b.newContext(); const lp = await lctx.newPage();
   await lp.goto(B + '/login'); await lp.waitForSelector('[data-testid="login-lab-name"]', { timeout: 15000 });

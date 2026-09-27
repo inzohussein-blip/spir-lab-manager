@@ -197,6 +197,17 @@ export interface StationSettings {
   signatureTitle?: string;
   /** Look of the printed results table (see ./tableStyle). Missing → the default look. */
   reportTable?: Partial<import("./tableStyle").TableStyle>;
+  /** Printing on the lab's pre-printed paper: no letterhead, footer bar or watermark, and blank
+   *  space at the top and bottom (mm) — off by default (see ./reportExtras). */
+  prePrinted?: boolean;
+  prePrintedTop?: number;
+  prePrintedBottom?: number;
+  /** Logo placement and watermark — off by default (the original letterhead). */
+  reportHeadOn?: boolean;
+  reportHead?: Partial<import("./reportExtras").ReportHead>;
+  /** The report's font — off by default (the app's font). */
+  reportFontOn?: boolean;
+  reportFont?: string;
 }
 
 function read<T>(key: string, fallback: T): T {

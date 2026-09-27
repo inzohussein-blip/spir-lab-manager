@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import { query, queryOne } from "@/lib/db";
 import { barcodeSvg } from "@/lib/barcode";
-import { getLabIdentity, labLogo, labName } from "@/lib/lab-identity";
+import { getLabIdentity, getReportLook, labLogo, labName } from "@/lib/lab-identity";
+import { tableColors } from "@/lib/station/tableStyle";
 import { money } from "@/lib/utils";
 import { PrintButton } from "@/components/PrintButton";
 import { Button } from "@/components/ui/primitives";
@@ -35,6 +36,7 @@ export default async function ReceiptPage(props: { params: Promise<{ id: string 
   );
   if (!order) notFound();
   const identity = await getLabIdentity();
+  const look = await getReportLook(); // the lab's colours (Settings → «شكل تقرير النتائج»)
 
   const items = await query<{ name_ar: string; price: number }>(
     `select t.name_ar, i.price
@@ -61,7 +63,7 @@ export default async function ReceiptPage(props: { params: Promise<{ id: string 
         <div className="text-center">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={labLogo(identity)} alt="" className="mx-auto mb-1 size-10 object-contain" />
-          <div className="text-base font-bold" style={{ color: "#5a2a82" }}>{labName(identity)}</div>
+          <div className="text-base font-bold" style={{ color: tableColors(look.intensity, look.primary, look.accent).title }}>{labName(identity)}</div>
           {identity.subtitle && <div className="text-[10px] text-gray-600">{identity.subtitle}</div>}
           <div className="mt-0.5 text-[11px] text-gray-600">وصل استلام طلب فحص</div>
         </div>

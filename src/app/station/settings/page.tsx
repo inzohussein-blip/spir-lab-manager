@@ -3,7 +3,7 @@
 import { SyncPanel } from "@/components/local/SyncPanel";
 import { kvFlush } from "@/lib/local/kv";
 import { useEffect, useRef, useState } from "react";
-import { Settings, Check, Image as ImageIcon, Download, Upload, Trash2, Stethoscope, Plus, Pencil, X, Smartphone, History, ListCollapse, ClipboardList, QrCode as QrCodeIcon, Hash, PenLine, RotateCcw } from "lucide-react";
+import { Settings, Check, Image as ImageIcon, Download, Upload, Trash2, Stethoscope, Plus, Pencil, X, Smartphone, History, ListCollapse, ClipboardList, QrCode as QrCodeIcon, Hash, PenLine, RotateCcw, FileText } from "lucide-react";
 import { labQrCode, QR_TITLE_DEFAULT, QR_HINT_DEFAULT } from "@/lib/station/labQr";
 import { LabQrCard } from "@/components/station/ReportSheet";
 import {
@@ -14,6 +14,7 @@ import {
 import { InstallButton } from "@/components/station/InstallButton";
 import { TableStyleCard } from "@/components/station/TableStyleCard";
 import { reportColors, tableStyleOf } from "@/lib/station/tableStyle";
+import { ORIGINAL_HEAD, PRE_BOTTOM_DEFAULT, PRE_TOP_DEFAULT, REPORT_FONTS, type ReportHead } from "@/lib/station/reportExtras";
 import { ThemeCard } from "@/components/local/LocalTheme";
 import { LABEL_SIZES, type LabelSize } from "@/components/station/TubeLabel";
 import { THEME_KEYS } from "@/lib/local/theme";
@@ -255,6 +256,90 @@ export default function StationSettingsPage() {
 
       {/* Printed report: the lab's colours and the results table */}
       <TableStyleCard settings={s} onChange={(t) => setOption({ reportTable: t })} />
+
+      {/* Extra report options — each off by default */}
+      <div className="mb-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]" data-testid="report-extras">
+        <div className="mb-1 flex items-center gap-2 text-sm font-semibold"><FileText className="size-4" /> خيارات إضافية للتقرير المطبوع</div>
+        <p className="mb-4 text-xs text-muted">كلها موقوفة في البداية؛ يبقى التقرير على شكله حتى تشغّل أحدها. تظهر النتيجة في ورقة النتائج عند الطباعة.</p>
+        <div className="flex flex-col gap-4">
+          <Toggle
+            checked={s.prePrinted === true}
+            onChange={(v) => setOption({ prePrinted: v })}
+            label="الطباعة على ورق المختبر المطبوع مسبقاً"
+            desc="لا يُطبع رأس التقرير (الشعار والاسم) ولا شريط التذييل ولا العلامة المائية، وتُترك مساحة فارغة أعلى الصفحة وأسفلها لرأس ورقك وتذييله."
+          />
+          {s.prePrinted === true && (
+            <div className="grid gap-3 border-s-2 border-line ps-4 sm:grid-cols-2">
+              <label className="text-xs text-muted">المساحة الفارغة أعلى الصفحة (مم)
+                <input type="number" min={0} max={120} value={s.prePrintedTop ?? PRE_TOP_DEFAULT} aria-label="المساحة أعلى الصفحة"
+                  onChange={(e) => setOption({ prePrintedTop: Math.max(0, Math.min(120, Number(e.target.value) || 0)) })} className={`mt-1 ${inp}`} dir="ltr" />
+              </label>
+              <label className="text-xs text-muted">المساحة الفارغة أسفل الصفحة (مم)
+                <input type="number" min={0} max={120} value={s.prePrintedBottom ?? PRE_BOTTOM_DEFAULT} aria-label="المساحة أسفل الصفحة"
+                  onChange={(e) => setOption({ prePrintedBottom: Math.max(0, Math.min(120, Number(e.target.value) || 0)) })} className={`mt-1 ${inp}`} dir="ltr" />
+              </label>
+              <p className="text-[11px] text-muted sm:col-span-2">قِس ارتفاع رأس ورقك وتذييله بالمسطرة وأضف 5 مم احتياطاً، ثم اطبع صفحة تجريبية على ورقة عادية وضعها فوق الورق المطبوع للمقارنة.</p>
+            </div>
+          )}
+
+          <Toggle
+            checked={s.reportHeadOn === true}
+            onChange={(v) => setOption({ reportHeadOn: v })}
+            label="مكان الشعار والعلامة المائية"
+            desc="الشعار بجانب الاسم أو في الجهة الأخرى أو في الوسط فوق الاسم، وحجمه، وإظهار العلامة المائية وحجمها وشفافيتها."
+          />
+          {s.reportHeadOn === true && (() => {
+            const h = { ...ORIGINAL_HEAD, ...(s.reportHead ?? {}) };
+            const setHead = (patch: Partial<ReportHead>) => setOption({ reportHead: { ...h, ...patch } });
+            const sel = (label: string, value: string, options: [string, string][], on: (v: string) => void) => (
+              <label className="text-xs text-muted">{label}
+                <select value={value} onChange={(e) => on(e.target.value)} className={`mt-1 ${inp}`} aria-label={label}>
+                  {options.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
+                </select>
+              </label>
+            );
+            return (
+              <div className="grid gap-3 border-s-2 border-line ps-4 sm:grid-cols-2">
+                {sel("مكان الشعار", h.logo, [["start", "بجانب الاسم (الأصلي)"], ["end", "في الجهة الأخرى من الصفحة"], ["center", "في الوسط فوق الاسم"]], (v) => setHead({ logo: v as ReportHead["logo"] }))}
+                {sel("حجم الشعار", h.logoSize, [["small", "صغير"], ["medium", "متوسط (الأصلي)"], ["large", "كبير"]], (v) => setHead({ logoSize: v as ReportHead["logoSize"] }))}
+                {sel("العلامة المائية", h.watermark ? "on" : "off", [["on", "ظاهرة (الأصلي)"], ["off", "مخفية"]], (v) => setHead({ watermark: v === "on" }))}
+                {h.watermark && sel("حجم العلامة المائية", h.wmSize, [["small", "صغيرة"], ["medium", "متوسطة (الأصلي)"], ["large", "كبيرة"]], (v) => setHead({ wmSize: v as ReportHead["wmSize"] }))}
+                {h.watermark && (
+                  <label className="text-xs text-muted sm:col-span-2">
+                    <span className="flex items-center justify-between">وضوح العلامة المائية <b className="tabular-nums text-ink" dir="ltr">{h.wmOpacity}%</b></span>
+                    <input type="range" min={2} max={20} step={1} value={h.wmOpacity} onChange={(e) => setHead({ wmOpacity: Number(e.target.value) })}
+                      className="mt-2 w-full accent-[var(--color-brand)]" aria-label="وضوح العلامة المائية" />
+                    <span className="flex justify-between text-[10px]"><span>أخف</span><span>أوضح</span></span>
+                    <span className="mt-0.5 block text-[10px]">6% = الأصلي</span>
+                  </label>
+                )}
+              </div>
+            );
+          })()}
+
+          <Toggle
+            checked={s.reportFontOn === true}
+            onChange={(v) => setOption({ reportFontOn: v })}
+            label="خط التقرير"
+            desc="خط آخر لورقة النتائج كلها. الخطوط مضمّنة في التطبيق فتعمل بلا إنترنت."
+          />
+          {s.reportFontOn === true && (
+            <div className="grid gap-2 border-s-2 border-line ps-4 sm:grid-cols-2">
+              {REPORT_FONTS.map((f) => {
+                const on = (s.reportFont ?? "plex") === f.id;
+                return (
+                  <button key={f.id} type="button" onClick={() => setOption({ reportFont: f.id })} aria-pressed={on} aria-label={f.name}
+                    className={`rounded-lg border px-3 py-2 text-start ${on ? "border-brand bg-canvas" : "border-line hover:bg-canvas"}`}>
+                    <span className="block text-[11px] text-muted">{f.name}</span>
+                    <span className="block text-base" style={{ fontFamily: f.family }}>مختبر التحليلات المرضية 123</span>
+                    <span className="block text-sm" style={{ fontFamily: f.family }} dir="ltr">Hemoglobin 13.5 g/dL</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Entry-screen options */}
       <div className="mb-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
