@@ -798,7 +798,7 @@ function DbModal({ row, rows, onClose, onSaved }: { row: Row; rows: Row[]; onClo
         <p className="mt-1 text-xs leading-relaxed text-muted">
           يبقى جهاز المختبر يعمل ويحفظ على نفسه حتى بدون إنترنت، ويزامن بياناته مع قاعدة بيانات خاصة بالمختبر.
           اربط كل رموز المختبر الواحد (كل أجهزته) بالقاعدة نفسها لتتشارك الزيارات والمراجعين. يصل الربط للجهاز عند اتصاله بالإنترنت.
-          تُحفظ بيانات الاتصال مشفّرة بـ AUTH_SECRET.
+          تُزامَن النصوص فقط (الصور تبقى على كل جهاز). تُحفظ بيانات الاتصال مشفّرة بـ AUTH_SECRET.
         </p>
         <div className="mt-3 inline-flex rounded-lg border border-line p-0.5 text-xs">
           {([["none", "بدون (على الجهاز فقط)"], ["supabase", "Supabase"], ["postgres", "PostgreSQL"]] as const).map(([k, l]) => (

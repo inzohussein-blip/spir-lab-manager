@@ -116,6 +116,20 @@ const { PG, freshDb, fakeSupabase, waitFor } = require('./pgfake.cjs');
   const la = (await kv(A.p, 'station.settings.v1'))?.labName, lb = (await kv(B2.p, 'station.settings.v1'))?.labName;
   ok(la === 'مختبر ب (أحدث)' && lb === 'مختبر ب (أحدث)', `the later change wins on both (${la} / ${lb})`);
 
+  // ── Text only: a device's logo (an image) stays on it; text changes still arrive ──
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+  await A.p.goto(B + '/station/settings'); await A.p.waitForSelector('text=اسم المختبر', { timeout: 15000 });
+  await A.p.setInputFiles('input[type=file][accept="image/*"]', { name: 'logo.png', mimeType: 'image/png', buffer: png }); await A.p.waitForTimeout(600);
+  ok(String((await kv(A.p, 'station.settings.v1'))?.logo).startsWith('data:image'), 'A has its logo');
+  await syncNow(A.p);
+  const remoteSettings = (await db.query(`select data from lab_sync_records where coll = 'station.settings.v1'`))[0]?.data;
+  ok(!!remoteSettings && !JSON.stringify(remoteSettings).includes('data:'), 'the logo image was not sent to the lab database (text only)');
+  await setName(B2.p, 'مختبر ب (بعد الشعار)');
+  await syncNow(B2.p); await syncNow(A.p);
+  const sa = await kv(A.p, 'station.settings.v1'), sbs = await kv(B2.p, 'station.settings.v1');
+  ok(sa?.labName === 'مختبر ب (بعد الشعار)' && String(sa?.logo).startsWith('data:image'), 'A received B\'s text change and kept its own logo');
+  ok(!String(sbs?.logo ?? '').startsWith('data:'), 'B did not receive A\'s logo');
+
   // ── Work done offline arrives later; the other device is told ──
   await B2.ctx.setOffline(true);
   await addVisit(B2.p, 'مريض بدون إنترنت');

@@ -78,6 +78,7 @@ export function SyncPanel() {
       <div className="mb-1 flex items-center gap-2 text-sm font-semibold"><Database className="size-4" /> قاعدة بيانات المختبر (مزامنة الأجهزة)</div>
       <p className="mb-3 text-xs text-muted">
         يبقى كل جهاز يعمل ويحفظ على نفسه حتى بدون إنترنت، ويتبادل التعديلات مع أجهزة المختبر الأخرى عبر قاعدة بيانات خاصة بالمختبر (Supabase أو أي PostgreSQL).
+        تُزامَن النصوص فقط — الصور (كشعار المختبر المرفوع) تبقى على الجهاز الذي أُضيفت فيه.
       </p>
 
       {st.state === "unsupported" && <p className="text-sm text-amber-700">المزامنة غير متاحة في هذا المتصفح (نافذة خاصة أو تخزين محظور).</p>}

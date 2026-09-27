@@ -162,6 +162,28 @@ const serverAdapter: Adapter = {
 };
 const adapterFor = (l: Link): Adapter => (l.kind === "postgres" ? serverAdapter : supabaseAdapter(l.cfg));
 
+// ── Text only: images stay on the device ─────────────────────────────────────
+// Only text travels to the lab's database. An image or file kept inside a record as a data URL
+// (the lab's logo in the station settings) stays on the device that has it: it is left out of
+// what is sent, and kept when that record arrives changed from another device.
+const isMedia = (v: unknown) => typeof v === "string" && v.startsWith("data:");
+const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
+function textOnly(x: unknown): unknown {
+  if (Array.isArray(x)) return x.filter((v) => !isMedia(v)).map(textOnly);
+  if (isObj(x)) return Object.fromEntries(Object.entries(x).filter(([, v]) => !isMedia(v)).map(([k, v]) => [k, textOnly(v)]));
+  return x;
+}
+/** A record from another device, with this device's own images put back in. */
+function keepMedia(remote: unknown, local: unknown): unknown {
+  if (!isObj(remote) || !isObj(local)) return remote;
+  const out: Record<string, unknown> = { ...remote };
+  for (const [k, v] of Object.entries(local)) {
+    if (isMedia(v)) out[k] = v; // an image here stays until this device changes it
+    else if (isObj(v) && isObj(remote[k])) out[k] = keepMedia(remote[k], v);
+  }
+  return out;
+}
+
 // ── Records of a stored value ────────────────────────────────────────────────
 type Records = Map<string, string>;
 /** A list of records with ids → id → its JSON; anything else is one record "_". */
@@ -171,9 +193,12 @@ function recordsOf(v: string | null): Records {
   try {
     const x = JSON.parse(v) as unknown;
     if (Array.isArray(x) && x.every((e) => e && typeof e === "object" && typeof (e as { id?: unknown }).id === "string")) {
-      for (const e of x as { id: string }[]) m.set(e.id, JSON.stringify(e));
+      for (const e of x as { id: string }[]) m.set(e.id, JSON.stringify(textOnly(e)));
       return m;
     }
+    // One value: compared without its images (changing only the logo sends nothing).
+    m.set("_", isObj(x) || Array.isArray(x) ? JSON.stringify(textOnly(x)) : v);
+    return m;
   } catch { /* not JSON: one value */ }
   m.set("_", v);
   return m;
@@ -247,7 +272,9 @@ function applyRows(coll: string, rows: SyncRow[], pending: Map<string, OutEntry>
   let next = cur;
   if (whole) {
     const d = whole.data as { __raw?: unknown } | null;
-    next = whole.deleted ? null : d && typeof d === "object" && typeof d.__raw === "string" ? d.__raw : JSON.stringify(whole.data);
+    let mine: unknown = null;
+    try { mine = cur == null ? null : JSON.parse(cur); } catch { /* not JSON */ }
+    next = whole.deleted ? null : d && typeof d === "object" && typeof d.__raw === "string" ? d.__raw : JSON.stringify(keepMedia(whole.data, mine));
   }
   if (recs.length) {
     let arr: { id?: string }[] = [];
@@ -255,7 +282,7 @@ function applyRows(coll: string, rows: SyncRow[], pending: Map<string, OutEntry>
     for (const r of recs) {
       const i = arr.findIndex((e) => e && e.id === r.id);
       if (r.deleted) { if (i >= 0) arr.splice(i, 1); }
-      else if (i >= 0) arr[i] = r.data as { id: string };
+      else if (i >= 0) arr[i] = keepMedia(r.data, arr[i]) as { id: string };
       else arr.splice(Math.min(Math.max(0, r.ord), arr.length), 0, r.data as { id: string });
     }
     next = JSON.stringify(arr);
@@ -298,10 +325,10 @@ function rowsFor(entries: OutEntry[]): SyncRow[] {
   };
   return entries.map((e) => {
     const v = valueOf(e.coll);
-    if (e.id === "_") return { coll: e.coll, id: "_", data: v ?? null, mtime: e.mtime, deleted: v == null, ord: 0 };
+    if (e.id === "_") return { coll: e.coll, id: "_", data: textOnly(v ?? null), mtime: e.mtime, deleted: v == null, ord: 0 };
     const arr = Array.isArray(v) ? (v as { id?: string }[]) : [];
     const i = arr.findIndex((x) => x && x.id === e.id);
-    return i < 0 ? { coll: e.coll, id: e.id, data: null, mtime: e.mtime, deleted: true, ord: 0 } : { coll: e.coll, id: e.id, data: arr[i], mtime: e.mtime, deleted: false, ord: i };
+    return i < 0 ? { coll: e.coll, id: e.id, data: null, mtime: e.mtime, deleted: true, ord: 0 } : { coll: e.coll, id: e.id, data: textOnly(arr[i]), mtime: e.mtime, deleted: false, ord: i };
   });
 }
 async function pushFrom(ad: Adapter, st: State) {

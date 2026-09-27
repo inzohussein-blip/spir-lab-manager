@@ -4,7 +4,8 @@
  * Every device keeps working on its own copy (IndexedDB, no internet needed). When the lab has a
  * database of its own, each device sends what it changed and receives what the other devices
  * changed, one record at a time (a visit, a patient, a test…). When two devices changed the same
- * record, the later change wins.
+ * record, the later change wins. Only text travels: images kept in a record (a data URL, such as
+ * an uploaded logo) stay on the device that has them.
  *
  * The database is the lab's, not the site's: Supabase (the device talks to it directly with the
  * project's URL, anon key and a user of the lab), or any PostgreSQL (through this site's server,
