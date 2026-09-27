@@ -13,7 +13,7 @@ const fs = require('node:fs');
   // The code manager's sections (side menu).
   const go = (s) => o.click(`[data-section="${s}"]`);
   ok(await o.locator('text=صفحة المالك فقط').count() === 0, 'no «صفحة المالك فقط» line');
-  ok(await o.locator('[data-section]').count() === 6, 'code manager: six sections in the side menu');
+  ok(await o.locator('[data-section]').count() === 7, 'code manager: seven sections in the side menu');
   // signing key sealed with AUTH_SECRET (the codes run always sets it)
   await go('system');
   await o.waitForSelector('[data-testid="key-sealed"]', { timeout: 15000 });

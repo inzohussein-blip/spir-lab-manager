@@ -2,7 +2,7 @@ import "server-only";
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "node:crypto";
 import { SignJWT, exportJWK, generateKeyPair, importJWK, type JWK, type KeyLike } from "jose";
 import { mainQuery as appQuery } from "@/lib/db";
-import { cleanModules, type LicenseModule, type LicensePayload } from "./modules";
+import { cleanModules, DEFAULT_MODULES, type LicenseModule, type LicensePayload } from "./modules";
 import { licenseDbUrl } from "./env";
 import { newTotpSecret, totpMatch, totpUri } from "./totp";
 import { connHost, isPostgresUrl, isSupabaseUrl, type DeviceSync, type SyncConfig } from "@/lib/sync/protocol";
@@ -138,6 +138,39 @@ async function getConfig(key: string): Promise<string | null> {
 async function setConfig(key: string, value: string) {
   await ensureTables();
   await query(`insert into license_config (key, value) values ($1, $2) on conflict (key) do update set value = excluded.value`, [key, value]);
+}
+
+// ── The owner's settings («الإعدادات العامة» in /licenses) ─────────────────────────
+export interface OwnerPrefs {
+  /** What a new code starts with in «رمز جديد». */
+  defaultDays: number;
+  defaultModules: LicenseModule[];
+  /** Length of a trial code. */
+  trialDays: number;
+  /** A code is «قارب على الانتهاء» this many days before its end. */
+  soonDays: number;
+}
+export const DEFAULT_PREFS: OwnerPrefs = { defaultDays: 365, defaultModules: [...DEFAULT_MODULES], trialDays: 7, soonDays: 14 };
+const within = (v: unknown, min: number, max: number, dflt: number) => {
+  const n = Math.round(Number(v));
+  return Number.isFinite(n) && n >= min && n <= max ? n : dflt;
+};
+export function cleanPrefs(v: unknown): OwnerPrefs {
+  const p = (v && typeof v === "object" ? v : {}) as Record<string, unknown>;
+  return {
+    defaultDays: within(p.defaultDays, 1, 3650, DEFAULT_PREFS.defaultDays),
+    defaultModules: Array.isArray(p.defaultModules) ? cleanModules(p.defaultModules) : [...DEFAULT_PREFS.defaultModules],
+    trialDays: within(p.trialDays, 1, 60, DEFAULT_PREFS.trialDays),
+    soonDays: within(p.soonDays, 1, 90, DEFAULT_PREFS.soonDays),
+  };
+}
+export async function getPrefs(): Promise<OwnerPrefs> {
+  try { return cleanPrefs(JSON.parse((await getConfig("owner_prefs")) || "{}")); } catch { return cleanPrefs({}); }
+}
+export async function setPrefs(v: unknown): Promise<OwnerPrefs> {
+  const p = cleanPrefs(v);
+  await setConfig("owner_prefs", JSON.stringify(p));
+  return p;
 }
 
 /** Shown on the activation / lock screens when the owner has not written a contact line. */
@@ -647,12 +680,14 @@ export async function ownerSignIns(limit = 30): Promise<OwnerSignIn[]> {
 export interface CodesBackup {
   app: "lab-codes"; version: 1; exported_at: string;
   licenses: Record<string, unknown>[]; events: Record<string, unknown>[]; contact: string;
+  /** The owner's settings (added later; older files have none). */
+  prefs?: OwnerPrefs;
 }
 export async function exportCodes(): Promise<CodesBackup> {
   await ensureTables();
   const licenses = await query<Record<string, unknown>>(`select * from station_licenses order by created_at`);
   const events = await query<Record<string, unknown>>(`select * from license_events order by at`);
-  return { app: "lab-codes", version: 1, exported_at: new Date().toISOString(), licenses, events, contact: (await getConfig("contact")) ?? "" };
+  return { app: "lab-codes", version: 1, exported_at: new Date().toISOString(), licenses, events, contact: (await getConfig("contact")) ?? "", prefs: await getPrefs() };
 }
 const LIC_COLS = ["id", "code_hash", "code_hint", "lab_name", "note", "duration_days", "modules", "status", "device_id", "device_label",
   "activated_at", "expires_at", "last_seen_at", "created_at", "price", "paid", "paid_at", "message", "device_name", "is_trial", "app_version",
@@ -685,5 +720,6 @@ export async function importCodes(data: unknown): Promise<{ licenses: number; ev
     ne++;
   }
   if (typeof b.contact === "string" && b.contact.trim()) await setConfig("contact", b.contact.trim().slice(0, 300));
+  if (b.prefs && typeof b.prefs === "object") await setPrefs(b.prefs);
   return { licenses: nl, events: ne };
 }

@@ -5,6 +5,17 @@ const { B, ok, launch, done, kv, resetLocal } = require('./lib.cjs');
 const { PG, freshDb, fakeSupabase, waitFor } = require('./pgfake.cjs');
 
 (async () => {
+  // Station sync is off unless the build has NEXT_PUBLIC_STATION_SYNC=1 (E2E_STATION_SYNC=1 here):
+  // then the stations show no lab database window at all.
+  if (process.env.E2E_STATION_SYNC !== '1') {
+    const b = await launch(); const p = await b.newPage();
+    await p.goto(B + '/welcome'); await resetLocal(p, { 'local.activation.v1': 'legacy' });
+    for (const st of ['station', 'store', 'training', 'qc', 'roster']) {
+      await p.goto(B + `/${st}/settings`); await p.waitForTimeout(1500);
+      ok(await p.locator('[data-testid="sync-panel"]').count() === 0, `/${st}/settings: no lab database window (station sync off)`);
+    }
+    await b.close(); return done();
+  }
   if (!PG) { console.log('SKIP sync.supabase.cjs — set E2E_PG_URL (a PostgreSQL the test may create databases in)'); ok(!process.env.CI, 'E2E_PG_URL is set in CI'); return done(); }
   const db = await freshDb('sbtest', { supabase: true });
   const empty = await freshDb('sbempty');

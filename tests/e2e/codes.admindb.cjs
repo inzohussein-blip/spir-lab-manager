@@ -42,9 +42,26 @@ const ROUTES = ['/', '/appointments', '/audit', '/calendar', '/insights', '/inve
   await p.goto(B + '/patients');
   ok((await p.content()).includes('محمد عبدالله السالم'), 'site database: its sample patient is listed');
 
+  // ── The owner's general settings: what a new code starts with ──
+  await o.goto(B + '/licenses#settings'); await o.reload(); await o.waitForSelector('[data-testid="prefs-card"]', { timeout: 15000 });
+  ok(await o.locator('input[aria-label="سطر التواصل"]').count() === 1, 'settings section: holds the contact line too');
+  const prefs = o.locator('[data-testid="prefs-card"]');
+  await prefs.locator('select[aria-label="مدة الرمز الافتراضية"]').selectOption('90');
+  await prefs.locator('input[aria-label="أيام الرمز التجريبي"]').fill('10');
+  await prefs.locator('button[aria-pressed]:has-text("لوحة الإدارة الكاملة")').click();
+  await prefs.locator('button:has-text("حفظ الإعدادات")').click();
+  await waitFor(async () => (await prefs.locator('[data-testid="prefs-msg"]').innerText().catch(() => '')).includes('حُفظت'), 10000);
+  await o.goto(B + '/licenses#new'); await o.reload(); await o.waitForSelector('text=إنشاء الرمز', { timeout: 15000 });
+  ok(await o.locator('form select').first().inputValue() === '90', 'a new code starts with the default period (3 months)');
+  ok(await o.locator('form button[aria-pressed="true"]:has-text("لوحة الإدارة الكاملة")').count() === 1, 'and with the default stations (admin panel on)');
+  ok(await o.locator('button:has-text("رمز تجريبي 10")').count() === 1, 'trial length from the settings (10 days)');
+  ok(await o.locator('[data-section="contact"]').count() === 0 && await o.locator('[data-section="databases"]').count() === 1, 'side menu: «قواعد البيانات» and «الإعدادات العامة»');
+  await api({ op: 'prefs', prefs: {} }); // back to the defaults for the other files
+
   // ── Owner gives the code its own database ──
   await o.goto(B + '/licenses'); await o.waitForSelector(`div[data-lab="${LAB}"]`, { timeout: 15000 });
   const card = o.locator(`div[data-lab="${LAB}"]`);
+  ok(await card.locator('[data-testid="lab-db"]').count() === 0, 'card: no station-sync column (station sync off)');
   ok((await card.locator('[data-testid="admin-db"]').innerText()).includes('قاعدة الموقع'), 'card: the panel is on the site\'s database');
   await card.locator('button[aria-label="قاعدة لوحة الإدارة"]').click();
   const modal = o.locator('[data-testid="admin-db-modal"]');
@@ -104,6 +121,24 @@ const ROUTES = ['/', '/appointments', '/audit', '/calendar', '/insights', '/inve
   ok(await signIn('admin', 'admin123'), 'the site\'s admin signs in again');
   await p.goto(B + '/patients');
   ok((await p.content()).includes('محمد عبدالله السالم'), 'and sees the site\'s data again');
+
+  // ── «قواعد البيانات»: every client's admin-panel database in one place ──
+  await o.goto(B + '/licenses#databases'); await o.reload(); await o.waitForSelector('[data-testid="db-list"]', { timeout: 15000 });
+  const item = o.locator(`li[data-db-lab="${LAB}"]`);
+  ok((await item.locator('[data-testid="db-state"]').innerText()).includes('قاعدة الموقع'), 'databases section: the client is listed, on the site\'s database');
+  await item.locator('button:has-text("ربط قاعدة")').click();
+  await modal.locator('input[aria-label="رابط قاعدة لوحة الإدارة"]').fill(db.url);
+  await modal.locator('button:has-text("حفظ")').click();
+  await waitFor(async () => (await item.locator('[data-testid="db-state"]').innerText()).includes('قاعدة خاصة'), 15000);
+  ok((await item.locator('[data-testid="db-state"]').innerText()).includes('ضبطتها أنت'), 'databases section: linked from here (the database already has its admin)');
+  await item.locator('button:has-text("فحص")').click();
+  ok(((await waitFor(async () => { const t = await item.locator('[data-testid="db-check"]').innerText().catch(() => ''); return t.includes('تعمل') && t; }, 20000)) || '').includes('1 مستخدم'), 'databases section: «فحص» — works, 1 user');
+  await item.locator('button:has-text("تغيير")').click();
+  await modal.locator('button:has-text("إرجاع لقاعدة الموقع")').click();
+  await waitFor(async () => (await item.locator('[data-testid="db-state"]').innerText()).includes('قاعدة الموقع'), 15000);
+  ok((await item.locator('[data-testid="db-state"]').innerText()).includes('قاعدة الموقع'), 'databases section: back to the site\'s database');
+  await p.goto(B + '/patients');
+  ok((await p.content()).includes('محمد عبدالله السالم'), 'the device is on the site\'s database again');
 
   // ── The lab's admin moves the panel to a database of its own (Settings) ──
   await p.goto(B + '/settings'); await p.waitForSelector('[data-testid="lab-db-card"]', { timeout: 15000 });

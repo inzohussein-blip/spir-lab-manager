@@ -7,6 +7,7 @@ const HDR = { 'x-forwarded-for': '10.20.30.42' }; // own address: codes.manager 
 const LAB = 'مختبر المزامنة ' + Date.now().toString(36);
 
 (async () => {
+  if (process.env.E2E_STATION_SYNC !== '1') { console.log('SKIP codes.sync.cjs — station sync is off (build with NEXT_PUBLIC_STATION_SYNC=1, run with E2E_STATION_SYNC=1)'); return done(); }
   if (!PG) { console.log('SKIP codes.sync.cjs — set E2E_PG_URL'); ok(!process.env.CI, 'E2E_PG_URL is set in CI'); return done(); }
   const db = await freshDb('pgsync');
   const pgPass = new URL(PG).password;

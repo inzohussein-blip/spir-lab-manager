@@ -3,7 +3,7 @@ import {
   licensingEnabled, passwordSet, durableStorage, storageStatus, attemptsBlocked, noteAttempt, clearAttempts,
   logOwnerSignIn, ownerSignIns, signingKeySealed,
   twoFactorStatus, twoFactorRequired, checkOwnerCode, startTwoFactorSetup, confirmTwoFactor, disableTwoFactor, exportCodes, importCodes, listLicenses, listEvents, createLicense, updateLicense, getContact, setContact, type LicenseAction,
-  getSyncConfig, setSyncConfig, cleanSyncConfig, getAdminDb,
+  getSyncConfig, setSyncConfig, cleanSyncConfig, getAdminDb, getPrefs, setPrefs,
 } from "@/lib/license/server";
 import { LabDbError, probe } from "@/lib/sync/pg";
 import { SupaError, supaProbe, supaSignIn } from "@/lib/sync/supabase";
@@ -20,7 +20,7 @@ export async function GET() {
   if (!(await isOwner())) return json({ enabled: true, owner: false });
   const storage = await storageStatus();
   if (!storage.ok) return json({ enabled: true, owner: true, storage, licenses: [], events: [], contact: "", now: Date.now() });
-  return json({ enabled: true, owner: true, storage: { ...storage, keySealed: await signingKeySealed() }, licenses: await listLicenses(), events: await listEvents(), signIns: await ownerSignIns(), twoFactor: await twoFactorStatus(), contact: await getContact(), version: process.env.LAB_VERSION ?? "", now: Date.now() });
+  return json({ enabled: true, owner: true, storage: { ...storage, keySealed: await signingKeySealed() }, licenses: await listLicenses(), events: await listEvents(), signIns: await ownerSignIns(), twoFactor: await twoFactorStatus(), contact: await getContact(), prefs: await getPrefs(), version: process.env.LAB_VERSION ?? "", now: Date.now() });
 }
 
 export async function POST(req: NextRequest) {
@@ -83,6 +83,7 @@ export async function POST(req: NextRequest) {
   if (b.op === "totp_enable") return (await confirmTwoFactor(String(b.code ?? ""))) ? json({ ok: true }) : json({ ok: false, error: "wrong_code" }, 400);
   if (b.op === "totp_disable") return (await disableTwoFactor(String(b.code ?? ""))) ? json({ ok: true }) : json({ ok: false, error: "wrong_code" }, 400);
   if (b.op === "contact") { await setContact(String(b.contact ?? "")); return json({ ok: true }); }
+  if (b.op === "prefs") return json({ ok: true, prefs: await setPrefs(b.prefs) });
 
   // The lab's own database: see it (never the password or the connection string), test it, link it.
   if (b.op === "sync_get") {

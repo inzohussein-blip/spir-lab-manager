@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   KeyRound, LogOut, Plus, Copy, Check, Ban, Play, MonitorSmartphone, RefreshCw, Trash2, Pencil, ShieldAlert,
   FlaskConical, Download, ChevronDown, MessageSquare, History, Wallet, MessageSquareText, Database, Upload, ShieldCheck, Smartphone, Phone,
-  Server, Menu, X, ChevronLeft, type LucideIcon,
+  Server, Menu, X, ChevronLeft, HardDrive, Settings, Search, type LucideIcon,
 } from "lucide-react";
 import { LICENSE_MODULES, DEFAULT_MODULES, moduleLabel, type LicenseModule } from "@/lib/license/modules";
-import { SUPABASE_SQL } from "@/lib/sync/protocol";
+import { STATION_SYNC, SUPABASE_SQL } from "@/lib/sync/protocol";
 import { SYNC_ERRORS } from "@/components/local/SyncPanel";
 import { adminDbError } from "@/lib/db/labErrors";
 
@@ -30,7 +30,9 @@ interface Ev { license_id: string; at: number; kind: string; detail: string }
 interface Storage { source: "license-db" | "app-db" | "embedded"; ok: boolean; codes?: number; roundTripMs?: number; error?: string; keySealed?: boolean }
 interface SignIn { at: number; ok: boolean; ip: string; agent: string }
 interface TwoFactor { enabled: boolean; broken: boolean; forcedOff: boolean; canSetup: boolean }
-type Data = { enabled: boolean; owner: boolean; needsDb?: boolean; storage?: Storage; licenses?: Row[]; events?: Ev[]; signIns?: SignIn[]; twoFactor?: TwoFactor; contact?: string; version?: string; now?: number };
+type Prefs = { defaultDays: number; defaultModules: LicenseModule[]; trialDays: number; soonDays: number };
+const DEFAULT_PREFS: Prefs = { defaultDays: 365, defaultModules: [...DEFAULT_MODULES], trialDays: 7, soonDays: 14 };
+type Data = { enabled: boolean; owner: boolean; needsDb?: boolean; storage?: Storage; licenses?: Row[]; events?: Ev[]; signIns?: SignIn[]; twoFactor?: TwoFactor; contact?: string; prefs?: Prefs; version?: string; now?: number };
 const agentLabel = (ua: string) => {
   const os = /Windows/.test(ua) ? "Windows" : /Android/.test(ua) ? "Android" : /iPhone|iPad/.test(ua) ? "iOS" : /Mac OS/.test(ua) ? "Mac" : /Linux/.test(ua) ? "Linux" : "";
   const br = /Edg\//.test(ua) ? "Edge" : /Chrome\//.test(ua) ? "Chrome" : /Firefox\//.test(ua) ? "Firefox" : /Safari\//.test(ua) ? "Safari" : "";
@@ -46,7 +48,6 @@ const inp = "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm o
 const small = "inline-flex items-center gap-1 rounded-lg border border-line px-2 py-1 text-xs hover:bg-canvas";
 const DAY = 86_400_000;
 const OWNER_PHONE = "07803993585";
-const TRIAL_DAYS = 7;
 const PERIODS = [{ d: 30, l: "شهر" }, { d: 90, l: "3 أشهر" }, { d: 180, l: "6 أشهر" }, { d: 365, l: "سنة" }];
 const fmt = (ms: number | null) => (ms ? new Date(ms).toLocaleDateString("en-CA") : "—");
 const fmtTime = (ms: number | null) => (ms ? new Date(ms).toLocaleString("ar-IQ-u-nu-latn") : "—");
@@ -61,21 +62,23 @@ const EVENT_LABEL: Record<string, string> = {
 };
 const eventDetail = (e: Ev) => (e.kind === "modules" ? e.detail.split(",").filter(Boolean).map(moduleLabel).join("، ") || "لا شيء" : e.detail);
 
-type Section = "codes" | "new" | "security" | "backup" | "contact" | "system";
+type Section = "codes" | "new" | "databases" | "settings" | "security" | "backup" | "system";
 const SECTIONS: { title: string; items: { id: Section; label: string; hint: string; icon: LucideIcon }[] }[] = [
   { title: "الرموز", items: [
     { id: "codes", label: "الرموز", hint: "المختبرات وأجهزتها", icon: KeyRound },
     { id: "new", label: "رمز جديد", hint: "إنشاء رمز أو رمز تجريبي", icon: Plus },
+    { id: "databases", label: "قواعد البيانات", hint: "قاعدة لوحة الإدارة لكل عميل", icon: HardDrive },
   ] },
   { title: "الإعدادات", items: [
+    { id: "settings", label: "الإعدادات العامة", hint: "المدد والمحطات الافتراضية والتواصل", icon: Settings },
     { id: "security", label: "الأمان", hint: "التحقق بخطوتين وسجل الدخول", icon: ShieldCheck },
     { id: "backup", label: "النسخ الاحتياطي", hint: "تنزيل واسترجاع الرموز", icon: Database },
-    { id: "contact", label: "سطر التواصل", hint: "يظهر للمختبرات", icon: Phone },
     { id: "system", label: "حالة النظام", hint: "التخزين والمفتاح والإصدار", icon: Server },
   ] },
 ];
 const sectionOf = (hash: string): Section => {
   const h = hash.replace(/^#/, "");
+  if (h === "contact") return "settings"; // the contact line moved into the general settings
   return SECTIONS.some((g) => g.items.some((i) => i.id === h)) ? (h as Section) : "codes";
 };
 
@@ -87,15 +90,15 @@ async function post(body: unknown) {
   return r.json().catch(() => ({ ok: false }));
 }
 
-function kindOf(r: Row, now: number): Exclude<Filter, "all" | "unpaid" | "trial" | "soon" | "outdated"> | "soon" {
+function kindOf(r: Row, now: number, soonMs = 14 * DAY): Exclude<Filter, "all" | "unpaid" | "trial" | "soon" | "outdated"> | "soon" {
   if (r.status === "stopped") return "stopped";
   if (!r.activated_at) return "unused";
   if (r.expires_at != null && r.expires_at <= now) return "expired";
-  return (r.expires_at ?? now) - now <= 14 * DAY ? "soon" : "active";
+  return (r.expires_at ?? now) - now <= soonMs ? "soon" : "active";
 }
 /** State of a code: its pill, the stripe on the card's edge and the colour of its time bar. */
-function status(r: Row, now: number) {
-  const k = kindOf(r, now);
+function status(r: Row, now: number, soonMs?: number) {
+  const k = kindOf(r, now, soonMs);
   if (k === "stopped") return { t: "موقوف", c: "bg-red-50 text-red-700", stripe: "border-s-red-500", bar: "bg-red-400" };
   if (k === "unused") return { t: "غير مستخدم", c: "bg-slate-100 text-slate-600", stripe: "border-s-slate-300", bar: "bg-slate-300" };
   if (k === "expired") return { t: "منتهٍ", c: "bg-red-50 text-red-700", stripe: "border-s-red-500", bar: "bg-red-400" };
@@ -157,14 +160,15 @@ function statusMessage(r: Row, now: number) {
 
 function copyText(t: string, done: () => void) { navigator.clipboard?.writeText(t).then(done).catch(() => window.prompt("انسخ النص:", t)); }
 
-function exportCsv(rows: Row[], now: number) {
+function exportCsv(rows: Row[], now: number, soonMs?: number) {
   const cell = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-  const head = ["المختبر", "ملاحظة", "آخر 4 خانات", "الحالة", "تجريبي", "المدة (يوم)", "التفعيل", "الانتهاء", "الجهاز", "آخر اتصال", "الإصدار", "المحطات", "المبلغ", "مدفوع", "تاريخ الدفع", "رسالة للمختبر", "أُنشئ", "قاعدة البيانات", "آخر مزامنة"];
+  const head = ["المختبر", "ملاحظة", "آخر 4 خانات", "الحالة", "تجريبي", "المدة (يوم)", "التفعيل", "الانتهاء", "الجهاز", "آخر اتصال", "الإصدار", "المحطات", "المبلغ", "مدفوع", "تاريخ الدفع", "رسالة للمختبر", "أُنشئ", "قاعدة لوحة الإدارة", ...(STATION_SYNC ? ["قاعدة المزامنة", "آخر مزامنة"] : [])];
   const lines = [head.map(cell).join(",")];
   for (const r of rows) {
-    lines.push([r.lab_name, r.note, r.code_hint, status(r, now).t, r.is_trial ? "نعم" : "", r.duration_days, fmt(r.activated_at), fmt(r.expires_at), deviceOf(r),
+    lines.push([r.lab_name, r.note, r.code_hint, status(r, now, soonMs).t, r.is_trial ? "نعم" : "", r.duration_days, fmt(r.activated_at), fmt(r.expires_at), deviceOf(r),
       fmtTime(r.last_seen_at), r.app_version, r.modules.map(moduleLabel).join("، "), r.price, r.paid ? "نعم" : "لا", fmt(r.paid_at), r.message, fmt(r.created_at),
-      r.sync ? `${r.sync.kind === "postgres" ? "PostgreSQL" : "Supabase"} — ${r.sync.host}` : "", fmtTime(r.sync_last_at)].map(cell).join(","));
+      r.admin_db ? r.admin_db.host : r.modules.includes("admin") ? "قاعدة الموقع" : "",
+      ...(STATION_SYNC ? [r.sync ? `${r.sync.kind === "postgres" ? "PostgreSQL" : "Supabase"} — ${r.sync.host}` : "", fmtTime(r.sync_last_at)] : [])].map(cell).join(","));
   }
   const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -184,6 +188,7 @@ export default function LicensesPage() {
   const [copied, setCopied] = useState("");
   const [f, setF] = useState({ lab: "", days: 365, custom: "", note: "", modules: [...DEFAULT_MODULES] as LicenseModule[] });
   const [contact, setContact] = useState("");
+  const prefsSeen = useRef(false);
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [sort, setSort] = useState<Sort>("expiry");
@@ -212,6 +217,11 @@ export default function LicensesPage() {
     const d = (await r.json()) as Data;
     setData(d);
     if (d.contact != null) setContact(d.contact);
+    if (d.prefs && !prefsSeen.current) {
+      // A new code starts from the owner's defaults (once, so a half-filled form is kept).
+      prefsSeen.current = true;
+      setF((x) => ({ ...x, days: d.prefs!.defaultDays, modules: [...d.prefs!.defaultModules] }));
+    }
   }, []);
   useEffect(() => { load(); }, [load]);
   const flash = (k: string) => { setCopied(k); setTimeout(() => setCopied(""), 1500); };
@@ -226,11 +236,11 @@ export default function LicensesPage() {
     setErr(d.error === "too_many" ? "محاولات كثيرة — حاول بعد قليل." : d.error === "wrong_code" ? "رمز التحقق غير صحيح أو مستعمل — اكتب الرمز الظاهر الآن." : "كلمة المرور غير صحيحة.");
   }
   async function create(trial: boolean) {
-    const days = trial ? TRIAL_DAYS : f.days === -1 ? Number(f.custom) : f.days;
+    const days = trial ? prefs.trialDays : f.days === -1 ? Number(f.custom) : f.days;
     if (!f.lab.trim() || !days || days < 1) { setErr(f.lab.trim() ? "حدّد المدة." : "اكتب اسم المختبر."); return; }
     setErr("");
     const d = await post({ op: "create", lab: f.lab, days, note: f.note, modules: f.modules, trial });
-    if (d.ok) { setShown({ row: d.row, code: d.code }); setF({ lab: "", days: 365, custom: "", note: "", modules: [...DEFAULT_MODULES] }); load(); }
+    if (d.ok) { setShown({ row: d.row, code: d.code }); setF({ lab: "", days: prefs.defaultDays, custom: "", note: "", modules: [...prefs.defaultModules] }); load(); }
   }
   async function change(r: Row, c: Record<string, unknown>, confirmText?: string) {
     if (confirmText && !window.confirm(confirmText)) return;
@@ -240,11 +250,13 @@ export default function LicensesPage() {
   }
 
   const now = data?.now ?? Date.now();
+  const prefs = data?.prefs ?? DEFAULT_PREFS;
+  const soonMs = prefs.soonDays * DAY;
   const all = useMemo(() => data?.licenses ?? [], [data]);
   const counts = useMemo(() => {
     const c: Record<Filter, number> = { all: all.length, active: 0, soon: 0, expired: 0, unused: 0, stopped: 0, unpaid: 0, trial: 0, outdated: 0 };
     for (const r of all) {
-      const k = kindOf(r, now);
+      const k = kindOf(r, now, soonMs);
       c[k] += 1;
       if (k === "soon") c.active += 1; // "active" counts every working code
       if (!r.paid) c.unpaid += 1;
@@ -252,7 +264,7 @@ export default function LicensesPage() {
       if (isOutdated(r, data?.version)) c.outdated += 1;
     }
     return c;
-  }, [all, now, data?.version]);
+  }, [all, now, soonMs, data?.version]);
   const money = useMemo(() => ({
     paid: all.filter((r) => r.paid).reduce((n, r) => n + amount(r.price), 0),
     due: all.filter((r) => !r.paid).reduce((n, r) => n + amount(r.price), 0),
@@ -261,7 +273,7 @@ export default function LicensesPage() {
     const t = q.trim();
     const list = all.filter((r) => {
       if (t && !(r.lab_name.includes(t) || r.note.includes(t) || r.code_hint.includes(t.toUpperCase()) || deviceOf(r).includes(t))) return false;
-      const k = kindOf(r, now);
+      const k = kindOf(r, now, soonMs);
       if (filter === "active") return k === "active" || k === "soon";
       if (filter === "unpaid") return !r.paid;
       if (filter === "trial") return r.is_trial;
@@ -272,7 +284,7 @@ export default function LicensesPage() {
     return list.sort((a, b) =>
       sort === "expiry" ? exp(a) - exp(b) : sort === "name" ? a.lab_name.localeCompare(b.lab_name, "ar")
       : sort === "seen" ? (b.last_seen_at ?? 0) - (a.last_seen_at ?? 0) : b.created_at - a.created_at);
-  }, [all, q, filter, sort, now, data?.version]);
+  }, [all, q, filter, sort, now, soonMs, data?.version]);
   const eventsOf = useMemo(() => {
     const m = new Map<string, Ev[]>();
     for (const e of data?.events ?? []) (m.get(e.license_id) ?? m.set(e.license_id, []).get(e.license_id)!).push(e);
@@ -382,7 +394,7 @@ export default function LicensesPage() {
           <option value="seen">آخر اتصال</option>
           <option value="name">الاسم</option>
         </select>
-        <button onClick={() => exportCsv(rows, now)} disabled={!rows.length} className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-surface disabled:opacity-50">
+        <button onClick={() => exportCsv(rows, now, soonMs)} disabled={!rows.length} className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-surface disabled:opacity-50">
           <Download className="size-4" /> تصدير CSV
         </button>
         <button onClick={load} title="تحديث" className="grid size-9 shrink-0 place-items-center rounded-lg border border-line hover:bg-surface"><RefreshCw className="size-4" /></button>
@@ -392,7 +404,7 @@ export default function LicensesPage() {
       <div className="flex flex-col gap-3">
         {rows.length === 0 && <p className="rounded-2xl border border-dashed border-line p-8 text-center text-sm text-muted">{all.length ? "لا رموز مطابقة." : "لا رموز بعد."}</p>}
         {rows.map((r) => {
-          const st = status(r, now);
+          const st = status(r, now, soonMs);
           const isOpen = open.has(r.id);
           const evs = eventsOf.get(r.id) ?? [];
           return (
@@ -419,7 +431,7 @@ export default function LicensesPage() {
                   </button>
                   {/* Less frequent actions: one size of square icon buttons, named by their tooltip */}
                   {r.device_id && <IconBtn label="نقل لجهاز جديد" onClick={() => change(r, { action: "reset_device" }, "فك ربط الجهاز؟ يستطيع المختبر بعدها إدخال نفس الرمز على جهاز جديد، والمدة تستمر كما هي.")}><MonitorSmartphone className="size-4" /></IconBtn>}
-                  <IconBtn label="قاعدة بيانات المختبر" onClick={() => setDbFor(r)}><Database className="size-4" /></IconBtn>
+                  {STATION_SYNC && <IconBtn label="قاعدة بيانات المختبر" onClick={() => setDbFor(r)}><Database className="size-4" /></IconBtn>}
                   <IconBtn label="رمز جديد" onClick={() => change(r, { action: "new_code" }, "إنشاء رمز جديد لهذا المختبر؟ الرمز القديم لا يعمل بعدها لتفعيل جهاز، والجهاز الحالي يستمر.")}><KeyRound className="size-4" /></IconBtn>
                   <IconBtn label="تعديل الاسم" onClick={() => { const lab = window.prompt("اسم المختبر:", r.lab_name); if (lab == null) return; const note = window.prompt("ملاحظة:", r.note) ?? r.note; change(r, { action: "rename", lab, note }); }}><Pencil className="size-4" /></IconBtn>
                   {r.status === "active"
@@ -435,16 +447,16 @@ export default function LicensesPage() {
                 <VersionInfo r={r} current={data.version} />
                 <Info k="الرمز" v={`…${r.code_hint}`} mono />
                 <Info k="أُنشئ" v={fmt(r.created_at)} mono />
-                <div data-testid="lab-db" className="min-w-0">
-                  <div className="text-[10px] text-muted">قاعدة البيانات</div>
+                {STATION_SYNC && <div data-testid="lab-db" className="min-w-0">
+                  <div className="text-[10px] text-muted">مزامنة المحطة</div>
                   <button onClick={() => setDbFor(r)} className="block max-w-full truncate text-start font-medium hover:underline" title={r.sync ? r.sync.host : "غير مربوط — البيانات على الجهاز فقط"}>
                     {r.sync ? <>{r.sync.kind === "postgres" ? "PostgreSQL" : "Supabase"}{r.sync.by === "device" ? " (من الجهاز)" : ""}</> : <span className="text-muted">على الجهاز فقط</span>}
                   </button>
                   {r.sync && <SyncHealth r={r} now={now} />}
-                </div>
+                </div>}
                 {(r.modules.includes("admin") || r.admin_db) && (
                   <div data-testid="admin-db" className="min-w-0">
-                    <div className="text-[10px] text-muted">لوحة الإدارة</div>
+                    <div className="text-[10px] text-muted">قاعدة البيانات</div>
                     <button onClick={() => setAdminDbFor(r)} aria-label="قاعدة لوحة الإدارة" className="block max-w-full truncate text-start font-medium hover:underline" title={r.admin_db ? r.admin_db.host : "قاعدة الموقع المشتركة"}>
                       {r.admin_db ? <>قاعدة خاصة{r.admin_db.by === "lab" ? " (من المختبر)" : ""}</> : <span className="text-muted">قاعدة الموقع</span>}
                     </button>
@@ -490,7 +502,7 @@ export default function LicensesPage() {
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <button className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark"><KeyRound className="size-4" /> إنشاء الرمز</button>
           <button type="button" onClick={() => create(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-violet-300 bg-violet-50 px-4 py-2 text-sm font-semibold text-violet-700 hover:bg-violet-100">
-            <FlaskConical className="size-4" /> رمز تجريبي {TRIAL_DAYS} أيام
+            <FlaskConical className="size-4" /> رمز تجريبي {prefs.trialDays} {prefs.trialDays <= 10 ? "أيام" : "يوماً"}
           </button>
           {err && <span className="text-xs text-red-600">{err}</span>}
         </div>
@@ -562,9 +574,18 @@ export default function LicensesPage() {
         </>
       )}
 
-      {section === "contact" && (
+      {section === "databases" && (
         <>
-          <SectionTitle icon={<Phone className="size-6" />} title="سطر التواصل" desc="ما يراه المختبر للتواصل معك عند التفعيل أو انتهاء المدة." />
+          <SectionTitle icon={<HardDrive className="size-6" />} title="قواعد البيانات"
+            desc="قاعدة لوحة الإدارة الكاملة لكل عميل: اربطها أو غيّرها أو افحصها من هنا. المحطات تعمل على أجهزتها ولا تحتاج قاعدة." />
+          <Databases rows={all} onOpen={setAdminDbFor} />
+        </>
+      )}
+
+      {section === "settings" && (
+        <>
+          <SectionTitle icon={<Settings className="size-6" />} title="الإعدادات العامة" desc="القيم التي يبدأ بها كل رمز جديد، والتنبيه قبل الانتهاء، وسطر التواصل الذي تراه المختبرات." />
+          <PrefsCard prefs={prefs} onSaved={load} />
       {/* Contact line */}
       <Panel tone="amber" icon={<Phone className="size-5" />} title="سطر التواصل"
         desc={<>يظهر في نافذة التفعيل وشاشة القفل. إذا تُرك فارغاً يظهر رقمك: <span className="font-mono" dir="ltr">{OWNER_PHONE}</span>.</>}>
@@ -948,6 +969,133 @@ function DbModal({ row, rows, onClose, onSaved }: { row: Row; rows: Row[]; onClo
   );
 }
 
+/** «قواعد البيانات»: every client with the full admin panel, and where its panel keeps its data. */
+function Databases({ rows, onOpen }: { rows: Row[]; onOpen: (r: Row) => void }) {
+  const [q, setQ] = useState("");
+  const [checks, setChecks] = useState<Record<string, { busy?: boolean; ok?: boolean; text?: string }>>({});
+  const [checkingAll, setCheckingAll] = useState(false);
+  const list = useMemo(() => {
+    const t = q.trim();
+    return rows
+      .filter((r) => r.modules.includes("admin") || r.admin_db)
+      .filter((r) => !t || r.lab_name.includes(t) || r.note.includes(t) || deviceOf(r).includes(t) || (r.admin_db?.host ?? "").includes(t))
+      .sort((a, b) => Number(!!b.admin_db) - Number(!!a.admin_db) || a.lab_name.localeCompare(b.lab_name, "ar"));
+  }, [rows, q]);
+  const withAdmin = rows.filter((r) => r.modules.includes("admin"));
+  const own = rows.filter((r) => r.admin_db).length;
+  async function check(r: Row) {
+    setChecks((c) => ({ ...c, [r.id]: { busy: true } }));
+    const d = await post({ op: "admin_db_test", id: r.id });
+    setChecks((c) => ({ ...c, [r.id]: d.ok ? { ok: true, text: `✓ تعمل — ${d.users} مستخدم` } : { ok: false, text: adminDbError(d.error) } }));
+  }
+  async function checkAll() {
+    setCheckingAll(true);
+    for (const r of list.filter((x) => x.admin_db)) await check(r);
+    setCheckingAll(false);
+  }
+  return (
+    <>
+      <div className="mb-4 grid gap-3 sm:grid-cols-3">
+        {[["عملاء بلوحة الإدارة", withAdmin.length], ["بقاعدة خاصة", own], ["على قاعدة الموقع", withAdmin.filter((r) => !r.admin_db).length]].map(([k, v]) => (
+          <div key={k} className="rounded-2xl border border-line bg-surface p-4 shadow-[var(--shadow-card)]">
+            <div className="text-xs text-muted">{k}</div>
+            <div className="mt-1 text-2xl font-bold tabular-nums">{v}</div>
+          </div>
+        ))}
+      </div>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <div className="relative min-w-52 flex-1">
+          <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="بحث باسم المختبر أو الجهاز أو الخادم" aria-label="بحث في قواعد البيانات" className={`${inp} ps-9`} />
+        </div>
+        <button disabled={checkingAll || !own} onClick={checkAll} className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-2 text-sm hover:bg-canvas disabled:opacity-50">
+          <RefreshCw className={`size-4 ${checkingAll ? "animate-spin" : ""}`} /> فحص كل القواعد
+        </button>
+      </div>
+      {list.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-line bg-surface p-8 text-center text-sm text-muted">
+          {q.trim() ? "لا نتائج." : "لا عملاء بلوحة الإدارة الكاملة بعد — فعّل «لوحة الإدارة الكاملة» في رمز المختبر ثم اربط قاعدته هنا."}
+        </div>
+      ) : (
+        <ul data-testid="db-list" className="overflow-hidden rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)]">
+          {list.map((r) => {
+            const c = checks[r.id];
+            return (
+              <li key={r.id} data-db-lab={r.lab_name} className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3 last:border-0">
+                <span className={`grid size-10 shrink-0 place-items-center rounded-xl ${r.admin_db ? "bg-teal-50 text-brand-dark" : "bg-canvas text-muted"}`}><HardDrive className="size-5" /></span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-semibold">{r.lab_name}</span>
+                    {deviceOf(r) && <span className="text-xs text-muted">— {deviceOf(r)}</span>}
+                    {!r.modules.includes("admin") && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700">لوحة الإدارة غير مفعّلة في رمزه</span>}
+                  </div>
+                  <div className="mt-0.5 text-xs text-muted" data-testid="db-state">
+                    {r.admin_db
+                      ? <>قاعدة خاصة: <span dir="ltr" className="font-mono">{r.admin_db.host}</span> · {r.admin_db.by === "lab" ? "ضبطها المختبر" : "ضبطتها أنت"} · {fmt(r.admin_db.at)}</>
+                      : "على قاعدة الموقع المشتركة"}
+                  </div>
+                  {c?.text && <div data-testid="db-check" className={`mt-1 text-xs ${c.ok ? "text-teal-700" : "text-red-700"}`}>{c.text}</div>}
+                </div>
+                <div className="flex gap-1.5">
+                  {r.admin_db && (
+                    <button disabled={c?.busy} onClick={() => check(r)} className={`${small} disabled:opacity-50`}>
+                      {c?.busy ? <RefreshCw className="size-3.5 animate-spin" /> : <Check className="size-3.5" />} فحص
+                    </button>
+                  )}
+                  <button onClick={() => onOpen(r)} className="inline-flex items-center gap-1 rounded-lg bg-brand px-3 py-1 text-xs font-semibold text-white hover:bg-brand-dark">
+                    {r.admin_db ? "تغيير" : "ربط قاعدة"}
+                  </button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </>
+  );
+}
+
+/** «الإعدادات العامة»: what a new code starts with, and when a code counts as ending soon. */
+function PrefsCard({ prefs, onSaved }: { prefs: Prefs; onSaved: () => void }) {
+  const preset = PERIODS.some((p) => p.d === prefs.defaultDays);
+  const [p, setP] = useState({ ...prefs, custom: preset ? "" : String(prefs.defaultDays), days: preset ? prefs.defaultDays : -1 });
+  const [msg, setMsg] = useState("");
+  async function save() {
+    const defaultDays = p.days === -1 ? Number(p.custom) : p.days;
+    if (!defaultDays || defaultDays < 1) { setMsg("حدّد المدة."); return; }
+    const d = await post({ op: "prefs", prefs: { defaultDays, defaultModules: p.defaultModules, trialDays: p.trialDays, soonDays: p.soonDays } });
+    setMsg(d.ok ? "✓ حُفظت الإعدادات" : "تعذّر الحفظ.");
+    if (d.ok) onSaved();
+  }
+  return (
+    <Panel tone="sky" icon={<Settings className="size-5" />} title="القيم الافتراضية" desc="يبدأ بها نموذج «رمز جديد» — تستطيع تغييرها لكل رمز عند إنشائه." testid="prefs-card">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <label className="text-sm font-medium">مدة الرمز الجديد
+          <div className="mt-1 flex gap-2">
+            <select value={p.days} onChange={(e) => setP({ ...p, days: Number(e.target.value) })} aria-label="مدة الرمز الافتراضية" className={inp}>
+              {PERIODS.map((x) => <option key={x.d} value={x.d}>{x.l}</option>)}
+              <option value={-1}>عدد أيام آخر…</option>
+            </select>
+            {p.days === -1 && <input type="number" min={1} value={p.custom} onChange={(e) => setP({ ...p, custom: e.target.value })} aria-label="أيام الرمز الافتراضية" className={`${inp} w-24`} />}
+          </div>
+        </label>
+        <label className="text-sm font-medium">مدة الرمز التجريبي (أيام)
+          <input type="number" min={1} max={60} value={p.trialDays} onChange={(e) => setP({ ...p, trialDays: Number(e.target.value) })} aria-label="أيام الرمز التجريبي" className={`mt-1 ${inp}`} />
+        </label>
+        <label className="text-sm font-medium">تنبيه «قارب على الانتهاء» قبل (أيام)
+          <input type="number" min={1} max={90} value={p.soonDays} onChange={(e) => setP({ ...p, soonDays: Number(e.target.value) })} aria-label="أيام التنبيه قبل الانتهاء" className={`mt-1 ${inp}`} />
+        </label>
+      </div>
+      <div className="mt-3 text-sm font-medium">المحطات المفعّلة في الرمز الجديد</div>
+      <ModuleChips value={p.defaultModules} onChange={(m) => setP({ ...p, defaultModules: m })} />
+      <div className="mt-4 flex items-center gap-3">
+        <button onClick={save} className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark">حفظ الإعدادات</button>
+        {msg && <span data-testid="prefs-msg" className="text-xs text-brand-dark">{msg}</span>}
+      </div>
+    </Panel>
+  );
+}
+
 /** «قاعدة لوحة الإدارة» for one code: the full admin panel on the lab's own PostgreSQL. */
 function AdminDbModal({ row, rows, onClose, onSaved }: { row: Row; rows: Row[]; onClose: () => void; onSaved: () => void }) {
   const [source, setSource] = useState<"typed" | "sync" | "copy">("typed");
@@ -957,7 +1105,7 @@ function AdminDbModal({ row, rows, onClose, onSaved }: { row: Row; rows: Row[]; 
   const [needsAdmin, setNeedsAdmin] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const syncPg = row.sync?.kind === "postgres" ? row.sync.host : "";
+  const syncPg = STATION_SYNC && row.sync?.kind === "postgres" ? row.sync.host : "";
   const others = rows.filter((r) => r.id !== row.id && r.admin_db);
   const target = () => source === "sync" ? { fromSync: true } : source === "copy" ? { from } : { conn: conn.trim() };
   const ready = source === "sync" ? !!syncPg : source === "copy" ? !!from : !!conn.trim() || !!row.admin_db;

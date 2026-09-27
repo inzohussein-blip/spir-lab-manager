@@ -12,6 +12,13 @@
  * with a connection string kept encrypted on the server — the device never sees it).
  */
 
+/**
+ * Off by default: the lab's database belongs to the full admin panel (lib/db/lab.ts), and the
+ * stations stay on the device only. NEXT_PUBLIC_STATION_SYNC=1 at build time switches the
+ * stations' sync back on (its window in the stations' settings and in /licenses).
+ */
+export const STATION_SYNC = process.env.NEXT_PUBLIC_STATION_SYNC === "1";
+
 /** One record as stored in the lab's database (table lab_sync_records). */
 export interface SyncRow {
   /** The station data key the record belongs to (e.g. "station.visits.v1"). */

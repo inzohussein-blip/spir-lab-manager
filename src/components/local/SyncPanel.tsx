@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Check, Copy, Database, Link2, Loader2, RefreshCw, RotateCcw, Unlink } from "lucide-react";
-import { SUPABASE_SQL } from "@/lib/sync/protocol";
+import { STATION_SYNC, SUPABASE_SQL } from "@/lib/sync/protocol";
 import type { JoinMode, SyncErrorCode, SyncStatus } from "@/lib/sync/client";
 
 type Sync = typeof import("@/lib/sync/client");
@@ -25,7 +25,12 @@ const t = (n?: number) => (n ? new Date(n).toLocaleTimeString("en-GB", { hour: "
 const input = "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
 
 /** «قاعدة بيانات المختبر»: link this device to the lab's database and follow the sync. */
+/** The lab database window in a station's settings — only when station sync is switched on. */
 export function SyncPanel() {
+  return STATION_SYNC ? <SyncPanelInner /> : null;
+}
+
+function SyncPanelInner() {
   const [m, setM] = useState<Sync | null>(null);
   const [st, setSt] = useState<SyncStatus | null>(null);
   const [kind, setKind] = useState<"supabase" | "postgres">("supabase");
