@@ -16,7 +16,10 @@ const DAY = 86400000;
   ok(await o.locator('text=كلمة المرور غير صحيحة').count() === 1, 'owner: wrong password refused');
   await o.fill('input[aria-label="كلمة المرور"]', OWNER); await o.click('button:has-text("دخول")'); await o.waitForSelector('h1:has-text("إدارة الرموز")', { timeout: 15000 }).catch(() => {});
   ok(await o.locator('h1:has-text("إدارة الرموز")').count() === 1, 'owner: signed in');
+  // The code manager's sections (side menu).
+  const go = (s) => o.click(`[data-section="${s}"]`);
   const create = async (lab, period, admin) => {
+    await go('new');
     await o.fill('label:has-text("اسم المختبر") input', lab);
     if (period) await o.selectOption('label:has-text("المدة") select', String(period));
     if (period === -1) await o.fill('input[aria-label="عدد الأيام"]', '1');
@@ -30,7 +33,7 @@ const DAY = 86400000;
   const codeB = await create('مختبر النور', 365, true);
   const codeC = await create('مختبر يوم واحد', -1, false);
   ok(/^[2-9A-Z]{4}-[2-9A-Z]{4}-[2-9A-Z]{4}$/.test(codeA), `code format ${codeA}`);
-  const owner = async (lab, btn) => { await o.reload(); await o.waitForTimeout(700); const card = o.locator(`div[data-lab="${lab}"]`); return card; };
+  const owner = async (lab, btn) => { await o.reload(); await o.waitForTimeout(700); await go('codes'); const card = o.locator(`div[data-lab="${lab}"]`); return card; };
   // ── device A: new device must activate ──
   const { p: a } = await newDev();
   await a.goto(B + '/welcome'); await a.waitForTimeout(1500);
@@ -131,7 +134,7 @@ const DAY = 86400000;
   // data kept
   ok(!!(await kv(a, 'station.tests.v1')), 'station data still on the device');
   // owner list
-  await o.reload(); await o.waitForTimeout(800);
+  await o.reload(); await o.waitForTimeout(800); await go('codes');
   const txt = await o.locator('body').innerText();
   ok(txt.includes('مختبر الأمل') && txt.includes('Chrome'), 'owner list shows device label');
   await o.screenshot({ path: tmp('lic-owner.png'), fullPage: true });

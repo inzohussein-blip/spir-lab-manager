@@ -5,9 +5,9 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   FlaskConical, ClipboardPlus, ListChecks, FileText, Plus, Settings, Home,
-  Archive, Boxes, Menu, X, ChevronLeft, type LucideIcon,
+  Archive, Boxes, Menu, X, ChevronLeft, Trash2, type LucideIcon,
 } from "lucide-react";
-import { getPages, savePages, getVisits, getStock, daysToExpiry, requestPersistentStorage, uid, type StationPage } from "@/lib/station/store";
+import { getPages, savePages, getVisits, getStock, daysToExpiry, requestPersistentStorage, uid, TRASH_DAYS, type StationPage } from "@/lib/station/store";
 import { cn } from "@/lib/utils";
 
 interface NavItem { href: string; label: string; hint: string; icon: LucideIcon }
@@ -19,6 +19,7 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
       { href: "/station", label: "إدخال وطباعة النتائج", hint: "مريض جديد ونتائجه", icon: ClipboardPlus },
       { href: "/station/visits", label: "الزيارات المحفوظة", hint: "بحث وطباعة وتعديل", icon: FileText },
       { href: "/station/records", label: "سجل المراجعين", hint: "التاريخ الكامل للمريض", icon: Archive },
+      { href: "/station/trash", label: "سلة المحذوفات", hint: `الاسترجاع خلال ${TRASH_DAYS} يوماً`, icon: Trash2 },
     ],
   },
   {

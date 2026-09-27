@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Archive, Search, UserRound, Phone, Plus, Trash2, Printer } from "lucide-react";
 import { valueText } from "@/lib/station/templates";
 import {
-  getPatients, addPatientNote, deletePatients, getVisits, getTests,
+  getPatients, addPatientNote, deletePatients, getVisits, getTests, TRASH_DAYS,
   type StationPatient, type StationVisit, type Gender,
 } from "@/lib/station/store";
 
@@ -49,7 +49,7 @@ export default function RecordsPage() {
     setNote("");
   }
   function removePatient(id: string) {
-    if (!window.confirm("حذف سجل هذا المراجع؟ (لا يحذف زياراته المطبوعة)")) return;
+    if (!window.confirm(`حذف سجل هذا المراجع؟ (لا يحذف زياراته المطبوعة) يُنقل إلى سلة المحذوفات ويمكن استرجاعه خلال ${TRASH_DAYS} يوماً.`)) return;
     deletePatients([id]);
     setPatients(getPatients());
     if (selId === id) setSelId(null);
@@ -109,7 +109,7 @@ export default function RecordsPage() {
                 </div>
                 <div className="flex gap-2">
                   <Link href={`/station?patient=${sel.id}`} className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white hover:bg-brand-dark"><Plus className="size-4" /> زيارة جديدة</Link>
-                  <button onClick={() => removePatient(sel.id)} className="grid size-9 place-items-center rounded-lg border border-line text-red-600 hover:bg-red-50"><Trash2 className="size-4" /></button>
+                  <button onClick={() => removePatient(sel.id)} title="حذف المراجع" aria-label="حذف المراجع" className="grid size-9 place-items-center rounded-lg border border-line text-red-600 hover:bg-red-50"><Trash2 className="size-4" /></button>
                 </div>
               </div>
 

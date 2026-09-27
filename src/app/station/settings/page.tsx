@@ -3,12 +3,12 @@
 import { SyncPanel } from "@/components/local/SyncPanel";
 import { kvFlush } from "@/lib/local/kv";
 import { useEffect, useRef, useState } from "react";
-import { Settings, Check, Image as ImageIcon, Download, Upload, Trash2, Stethoscope, Plus, Pencil, X, Smartphone, History, ListCollapse, ClipboardList, QrCode as QrCodeIcon, Hash } from "lucide-react";
+import { Settings, Check, Image as ImageIcon, Download, Upload, Trash2, Stethoscope, Plus, Pencil, X, Smartphone, History, ListCollapse, ClipboardList, QrCode as QrCodeIcon, Hash, PenLine, RotateCcw } from "lucide-react";
 import { labQrCode, QR_TITLE_DEFAULT, QR_HINT_DEFAULT } from "@/lib/station/labQr";
 import { LabQrCard } from "@/components/station/ReportSheet";
 import {
   getSettings, saveSettings, normalizeUrl, exportBackup, importBackup, getDoctors, saveDoctors, markBackupNow, daysSinceBackup, getVisits, storageUsage, requestPersistentStorage, uid, type StorageUsage,
-  getDeviceTag, setDeviceTag,
+  getDeviceTag, setDeviceTag, resetBuiltinTests, restoreDefaultTests,
   type StationSettings, type StationDoctor,
 } from "@/lib/station/store";
 import { InstallButton } from "@/components/station/InstallButton";
@@ -17,6 +17,7 @@ import { ThemeCard } from "@/components/local/LocalTheme";
 import { LABEL_SIZES, type LabelSize } from "@/components/station/TubeLabel";
 import { THEME_KEYS } from "@/lib/local/theme";
 import { OfflineStatusLine } from "@/components/local/OfflineReady";
+import { STATIC_IMAGES } from "@/lib/local/staticImages";
 
 const inp = "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
 
@@ -39,6 +40,7 @@ export default function StationSettingsPage() {
   const [persisted, setPersisted] = useState<boolean | null>(null);
   const [tag, setTag] = useState("");
   const [tagSaved, setTagSaved] = useState(false);
+  const [defaultsMsg, setDefaultsMsg] = useState("");
   const overdue = hasData && (since === null || since >= 7);
 
   useEffect(() => {
@@ -451,6 +453,55 @@ export default function StationSettingsPage() {
         {msg && <p className="mt-1 text-xs text-muted">{msg}</p>}
       </div>
 
+      {/* Signature and stamp on the report — off by default */}
+      <div className="mt-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]" data-testid="signature-card">
+        <div className="mb-3 flex items-center gap-2 text-sm font-semibold"><PenLine className="size-4" /> التوقيع والختم على التقرير</div>
+        <Toggle
+          checked={s.signatureOn === true}
+          onChange={(v) => setOption({ signatureOn: v })}
+          label="إظهار التوقيع والختم أسفل التقرير"
+          desc="صورة توقيع المحلل واسمه، وختم المختبر، مكان سطر «التوقيع / الختم». الصور من صور المشروع فتظهر نفسها على كل الأجهزة."
+        />
+        {s.signatureOn === true && (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {STATIC_IMAGES.length === 0 && (
+              <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 sm:col-span-2">
+                لا صور في المشروع بعد — ضع صورة التوقيع وصورة الختم في المجلد <span dir="ltr" className="font-mono">public/lab-images</span> ثم انشر التحديث لتظهر هنا.
+              </p>
+            )}
+            <ImageChoice label="صورة التوقيع" value={s.signatureImage} onChange={(v) => setOption({ signatureImage: v })} />
+            <ImageChoice label="صورة الختم" value={s.stampImage} onChange={(v) => setOption({ stampImage: v })} />
+            <label className="text-sm font-medium">الاسم تحت التوقيع
+              <input value={s.signatureName ?? ""} onChange={(e) => setS({ ...s, signatureName: e.target.value })} onBlur={(e) => setOption({ signatureName: e.target.value.trim() })} placeholder="مثلاً: د. أحمد علي" className={`mt-1 ${inp}`} />
+            </label>
+            <label className="text-sm font-medium">الصفة (اختياري)
+              <input value={s.signatureTitle ?? ""} onChange={(e) => setS({ ...s, signatureTitle: e.target.value })} onBlur={(e) => setOption({ signatureTitle: e.target.value.trim() })} placeholder="مثلاً: أخصائي تحليلات مرضية" className={`mt-1 ${inp}`} />
+            </label>
+          </div>
+        )}
+      </div>
+
+      {/* Restore the default tests */}
+      <div className="mt-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]" data-testid="defaults-card">
+        <div className="mb-1 flex items-center gap-2 text-sm font-semibold"><RotateCcw className="size-4" /> استعادة الافتراض لقائمة الفحوصات</div>
+        <p className="mb-3 text-xs text-muted">الزيارات المحفوظة لا تتأثر. الفحوصات المدمجة تحتفظ بمعرّفاتها فتبقى النتائج السابقة مرتبطة بها.</p>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={() => {
+            if (!window.confirm("إرجاع أسماء ووحدات ومعدلات الفحوصات المدمجة إلى قيمها الافتراضية، وإعادة المحذوف منها؟ فحوصاتك المضافة تبقى كما هي.")) return;
+            setDefaultsMsg(`أُعيدت ${resetBuiltinTests()} فحصاً مدمجاً إلى القيم الافتراضية.`);
+          }} className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas">
+            <RotateCcw className="size-4" /> استعادة القيم الافتراضية للفحوصات
+          </button>
+          <button onClick={() => {
+            if (!window.confirm("استبدال قائمة الفحوصات كلها بالقائمة الافتراضية؟ تُحذف الفحوصات التي أضفتها بنفسك وتُعاد كل الفحوصات المدمجة إلى قيمها الافتراضية.")) return;
+            setDefaultsMsg(`أُعيدت القائمة الافتراضية (${restoreDefaultTests()} فحصاً).`);
+          }} className="inline-flex items-center gap-1.5 rounded-lg border border-red-300 px-3 py-2 text-sm text-red-700 hover:bg-red-50">
+            استعادة قائمة الفحوصات الافتراضية بالكامل
+          </button>
+        </div>
+        {defaultsMsg && <p className="mt-2 text-xs text-brand-dark" role="status">{defaultsMsg}</p>}
+      </div>
+
       {/* This device's letter in its sample numbers (kept on this device only) */}
       <div className="mt-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]" data-testid="device-tag">
         <div className="mb-1 flex items-center gap-2 text-sm font-semibold"><Hash className="size-4" /> حرف هذا الجهاز في رقم العينة</div>
@@ -495,6 +546,24 @@ function Toggle({ checked, onChange, label, desc }: { checked: boolean; onChange
       >
         <span className={`absolute top-0.5 size-5 rounded-full bg-white shadow transition-all ${checked ? "start-[22px]" : "start-0.5"}`} />
       </button>
+    </label>
+  );
+}
+
+/** Pick one of the project's images (public/lab-images), with a preview. */
+function ImageChoice({ label, value, onChange }: { label: string; value?: string; onChange: (v: string | undefined) => void }) {
+  return (
+    <label className="text-sm font-medium">{label}
+      <div className="mt-1 flex items-center gap-2">
+        {value ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={encodeURI(value)} alt="" className="size-12 shrink-0 rounded-lg border border-line bg-white object-contain" />
+        ) : <span className="grid size-12 shrink-0 place-items-center rounded-lg border border-dashed border-line text-muted"><ImageIcon className="size-4" /></span>}
+        <select value={value ?? ""} onChange={(e) => onChange(e.target.value || undefined)} aria-label={label} className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand">
+          <option value="">— بدون —</option>
+          {STATIC_IMAGES.map((m) => <option key={m.path} value={m.path}>{m.caption}</option>)}
+        </select>
+      </div>
     </label>
   );
 }

@@ -1,16 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Printer, Trash2, FileText, Search, Pencil, Download, PackageCheck, Clock, Tag } from "lucide-react";
 import {
-  getVisits, getTests, getSettings, rangeLabel, flagFor, deleteVisits, previousResults, setDelivered, nextAccession, updateVisit,
+  getVisits, getTests, getSettings, rangeLabel, flagFor, deleteVisits, previousResults, setDelivered, nextAccession, updateVisit, TRASH_DAYS,
   type StationVisit, type StationTest, type StationSettings,
 } from "@/lib/station/store";
 import { ReportSheet } from "@/components/station/ReportSheet";
 import { TubeLabels } from "@/components/station/TubeLabel";
 import { valueText, isFormCode } from "@/lib/station/templates";
 
+
+/** Rows drawn at first; more appear while scrolling (a lab's list grows to thousands of visits). */
+const PAGE = 100;
 
 export default function StationVisitsPage() {
   const [visits, setVisits] = useState<StationVisit[]>([]);
@@ -43,7 +46,8 @@ export default function StationVisitsPage() {
 
   useEffect(() => { setVisits(getVisits()); setTests(getTests()); setSettings(getSettings()); }, []);
 
-  const byId = (id: string) => tests.find((t) => t.id === id);
+  const testMap = useMemo(() => new Map(tests.map((t) => [t.id, t])), [tests]);
+  const byId = (id: string) => testMap.get(id);
   // Optional (Settings → «حالة التسليم»): mark visits handed to the patient.
   const delivery = settings.deliveryStatus === true;
   function markDelivered(ids: string[], on: boolean) {
@@ -66,22 +70,41 @@ export default function StationVisitsPage() {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   };
 
+  // What the search looks in, prepared once per list (not on every key press).
+  const index = useMemo(() => visits.map((v) => ({
+    v, day: dayOf(v.created_at),
+    hay: `${v.patient.name}\n${v.accession ?? ""}\n${v.patient.phone ?? ""}`.toLowerCase(),
+  })), [visits]);
+  // Typing stays smooth: the list follows the search box a moment later.
+  const dq = useDeferredValue(q);
   const filtered = useMemo(() => {
-    const term = q.trim().toLowerCase();
-    return visits.filter((v) => {
-      if (term &&
-        !v.patient.name.toLowerCase().includes(term) &&
-        !(v.accession ?? "").toLowerCase().includes(term) &&
-        !(v.patient.phone ?? "").toLowerCase().includes(term)) return false;
-      const d = dayOf(v.created_at);
-      if (from && d < from) return false;
-      if (to && d > to) return false;
-      if (delivery && deliv === "pending" && v.delivered_at) return false;
-      if (delivery && deliv === "done" && !v.delivered_at) return false;
-      return true;
-    });
+    const term = dq.trim().toLowerCase();
+    const out: StationVisit[] = [];
+    for (const { v, day, hay } of index) {
+      if (term && !hay.includes(term)) continue;
+      if (from && day < from) continue;
+      if (to && day > to) continue;
+      if (delivery && deliv === "pending" && v.delivered_at) continue;
+      if (delivery && deliv === "done" && !v.delivered_at) continue;
+      out.push(v);
+    }
+    return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visits, q, from, to, deliv, settings.deliveryStatus]);
+  }, [index, dq, from, to, deliv, settings.deliveryStatus]);
+  // Draw PAGE rows, then more when the end of the list comes into view.
+  const sig = `${dq}|${from}|${to}|${deliv}`;
+  const [shownN, setShownN] = useState({ sig, n: PAGE });
+  const limit = shownN.sig === sig ? shownN.n : PAGE;
+  const rows = filtered.length > limit ? filtered.slice(0, limit) : filtered;
+  const more = () => setShownN({ sig, n: limit + PAGE });
+  const endRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = endRef.current;
+    if (!el || rows.length >= filtered.length || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) setShownN({ sig, n: limit + PAGE }); }, { rootMargin: "600px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [rows.length, filtered.length, sig, limit]);
 
   function csvCell(v: unknown) {
     const s = v == null ? "" : String(v);
@@ -123,7 +146,7 @@ export default function StationVisitsPage() {
 
   function remove(ids: string[]) {
     if (ids.length === 0) return;
-    if (!window.confirm(ids.length === 1 ? "حذف هذه الزيارة؟" : `حذف ${ids.length} زيارة؟`)) return;
+    if (!window.confirm(`${ids.length === 1 ? "حذف هذه الزيارة؟" : `حذف ${ids.length} زيارة؟`} تُنقل إلى سلة المحذوفات ويمكن استرجاعها خلال ${TRASH_DAYS} يوماً.`)) return;
     deleteVisits(ids);
     refresh();
     setChecked((c) => { const n = new Set(c); ids.forEach((id) => n.delete(id)); return n; });
@@ -216,7 +239,7 @@ export default function StationVisitsPage() {
             {filtered.length === 0 && (
               <tr><td colSpan={delivery ? 7 : 6} className="px-4 py-8 text-center text-muted">{visits.length === 0 ? "لا زيارات محفوظة بعد" : "لا نتائج مطابقة"}</td></tr>
             )}
-            {filtered.map((v) => (
+            {rows.map((v) => (
               <tr key={v.id} className={`border-b border-line last:border-0 hover:bg-canvas ${checked.has(v.id) ? "bg-brand-light/40" : ""}`}>
                 <td className="px-4 py-3">
                   <input type="checkbox" checked={checked.has(v.id)} onChange={() => toggleCheck(v.id)} className="size-4 align-middle" />
@@ -247,13 +270,20 @@ export default function StationVisitsPage() {
                       <button onClick={() => printLabel(v)} title="طباعة ملصق الأنبوب" className="inline-flex items-center gap-1 rounded-lg border border-line px-3 py-1 text-xs hover:bg-canvas"><Tag className="size-3.5" /> ملصق</button>
                     )}
                     <Link href={`/station?edit=${v.id}`} className="inline-flex items-center gap-1 rounded-lg border border-line px-3 py-1 text-xs hover:bg-canvas"><Pencil className="size-3.5" /> تعديل</Link>
-                    <button onClick={() => remove([v.id])} className="grid size-7 place-items-center rounded-lg border border-line text-red-600 hover:bg-red-50"><Trash2 className="size-4" /></button>
+                    <button onClick={() => remove([v.id])} title="حذف الزيارة" aria-label="حذف الزيارة" className="grid size-7 place-items-center rounded-lg border border-line text-red-600 hover:bg-red-50"><Trash2 className="size-4" /></button>
                   </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+        {rows.length < filtered.length && (
+          <div ref={endRef} className="border-t border-line p-3 text-center">
+            <button onClick={more} className="rounded-lg border border-line px-4 py-1.5 text-xs hover:bg-canvas">
+              عرض المزيد ({filtered.length - rows.length} متبقية)
+            </button>
+          </div>
+        )}
       </div>
 
       {sel && (

@@ -30,6 +30,7 @@ const HDR = { 'x-forwarded-for': '10.20.30.40' };
     return p;
   };
   const o = await newOwnerPage();
+  await o.waitForSelector('[data-section="security"]', { timeout: 15000 }); await o.click('[data-section="security"]');
   await o.waitForSelector('[data-testid="two-factor"]', { timeout: 15000 });
   await o.click('button:has-text("تفعيل التحقق بخطوتين")');
   await o.waitForSelector('[data-testid="totp-secret"]');
@@ -55,6 +56,7 @@ const HDR = { 'x-forwarded-for': '10.20.30.40' };
   await p.fill('input[aria-label="رمز التحقق"]', used); await p.click('button:has-text("دخول")');
   await p.waitForSelector('h1:has-text("إدارة الرموز")', { timeout: 10000 });
   ok(true, 'password + fresh code opens the page');
+  await p.click('[data-section="security"]');
   const log = await p.locator('div.rounded-2xl:has-text("سجل الدخول لهذه الصفحة")').innerText();
   ok((log.match(/محاولة فاشلة/g) || []).length >= 2, 'failed code attempts appear in the sign-in log');
 
