@@ -117,7 +117,8 @@ async function initPglite(): Promise<Db> {
   };
 }
 
-export async function getDb(): Promise<Db> {
+/** The site's own database (DATABASE_URL or the embedded one) — never a lab's. */
+export async function getMainDb(): Promise<Db> {
   if (store.dbRef) return store.dbRef;
   if (!store.initPromise) {
     const url = process.env.DATABASE_URL;
@@ -127,6 +128,21 @@ export async function getDb(): Promise<Db> {
     });
   }
   return store.initPromise;
+}
+
+/**
+ * The database this request works on: the lab's own when its code has one (see ./lab.ts),
+ * otherwise the site's.
+ */
+export async function getDb(): Promise<Db> {
+  const { labTarget, labDb } = await import("./lab");
+  const t = await labTarget();
+  return t ? labDb(t.conn) : getMainDb();
+}
+
+/** Convenience: run a query on the site's own database (the lab codes live there). */
+export async function mainQuery<T = any>(sql: string, params?: unknown[]): Promise<T[]> {
+  return (await (await getMainDb()).query<T>(sql, params)).rows;
 }
 
 /** Convenience: run a query and return rows. */

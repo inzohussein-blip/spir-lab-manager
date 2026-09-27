@@ -1,5 +1,7 @@
 import { ShieldCheck, ShieldX, FlaskConical } from "lucide-react";
-import { queryOne, query } from "@/lib/db";
+import { getDb } from "@/lib/db";
+import { labDb } from "@/lib/db/lab";
+import { getAdminDb } from "@/lib/license/server";
 
 export const dynamic = "force-dynamic";
 
@@ -11,9 +13,15 @@ export const dynamic = "force-dynamic";
 export default async function VerifyPage(
   props: {
     params: Promise<{ token: string }>;
+    searchParams: Promise<{ l?: string }>;
   }
 ) {
   const params = await props.params;
+  // A report printed by a lab on its own database carries the lab's code (?l=).
+  const l = (await props.searchParams).l;
+  const own = l ? await getAdminDb(String(l)).catch(() => null) : null;
+  const db = await (own ? labDb(own.conn) : getDb()).catch(() => null);
+  const queryOne = async <T,>(sql: string, p: unknown[]): Promise<T | null> => (db ? ((await db.query<T>(sql, p)).rows[0] ?? null) : null);
   const report = await queryOne<any>(
     `select r.generated_at, r.order_id,
             p.full_name, o.order_date, o.status

@@ -20,13 +20,19 @@ export async function signAdminCookie(v: { lid: string; mods: LicenseModule[]; u
     .sign(secret());
 }
 
-/** True when the cookie is genuine, unexpired and grants the admin panel. */
-export async function adminCookieValid(token: string | undefined): Promise<boolean> {
-  if (!token) return false;
+/** The lab code a genuine, unexpired admin-panel cookie belongs to (null otherwise). */
+export async function adminCookieLid(token: string | undefined): Promise<string | null> {
+  if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, secret());
-    return Array.isArray(payload.mods) && payload.mods.includes("admin") && Number(payload.until) > Date.now();
+    const ok = Array.isArray(payload.mods) && payload.mods.includes("admin") && Number(payload.until) > Date.now();
+    return ok && typeof payload.lid === "string" ? payload.lid : null;
   } catch {
-    return false;
+    return null;
   }
+}
+
+/** True when the cookie is genuine, unexpired and grants the admin panel. */
+export async function adminCookieValid(token: string | undefined): Promise<boolean> {
+  return (await adminCookieLid(token)) !== null;
 }

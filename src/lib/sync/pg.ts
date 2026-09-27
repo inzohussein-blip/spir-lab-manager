@@ -35,7 +35,7 @@ function privateAddress(ip: string): boolean {
   return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) ||
     (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) || a >= 224;
 }
-async function checkHost(host: string) {
+export async function checkHost(host: string) {
   if (process.env.LAB_DB_ALLOW_PRIVATE === "1") return;
   let addrs: string[];
   try { addrs = isIP(host) ? [host] : (await lookup(host, { all: true })).map((a) => a.address); }
@@ -43,7 +43,7 @@ async function checkHost(host: string) {
   if (!addrs.length || addrs.some(privateAddress)) throw new LabDbError("private_host", "private address");
 }
 
-function sslFor(u: URL): false | { rejectUnauthorized: boolean } {
+export function sslFor(u: URL): false | { rejectUnauthorized: boolean } {
   const mode = u.searchParams.get("sslmode");
   if (mode === "disable") return false;
   return { rejectUnauthorized: mode !== "no-verify" };
@@ -74,7 +74,7 @@ async function poolFor(conn: string): Promise<Pool> {
   return pool;
 }
 
-function toLabError(err: unknown): LabDbError {
+export function toLabError(err: unknown): LabDbError {
   if (err instanceof LabDbError) return err;
   const e = err as { code?: string; message?: string };
   const msg = String(e?.message ?? "error").slice(0, 200);

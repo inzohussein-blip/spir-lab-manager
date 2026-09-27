@@ -2,6 +2,10 @@ import { PageHeader, Card, Button } from "@/components/ui/primitives";
 import { cloudApiConfigured } from "@/lib/whatsapp";
 import { getLabIdentity } from "@/lib/lab-identity";
 import { updateLabIdentity } from "@/app/actions/settings";
+import { labCodeId } from "@/lib/db/lab";
+import { getAdminDb } from "@/lib/license/server";
+import { connHost } from "@/lib/sync/protocol";
+import { LabDbCard } from "@/components/LabDbCard";
 
 const field = "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
 
@@ -29,7 +33,9 @@ function Row({ label, value, ok }: { label: string; value: string; ok?: boolean 
 
 export default async function SettingsPage() {
   const identity = await getLabIdentity();
-  const hostedDb = !!process.env.DATABASE_URL;
+  const lid = await labCodeId();
+  const own = lid ? await getAdminDb(lid).catch(() => null) : null;
+  const hostedDb = !!process.env.DATABASE_URL || !!own;
   const aiOn = !!process.env.ANTHROPIC_API_KEY;
   const waCloud = cloudApiConfigured();
 
@@ -57,11 +63,13 @@ export default async function SettingsPage() {
         <div className="mb-2 font-semibold">قاعدة البيانات</div>
         <Row
           label="وضع التخزين"
-          value={hostedDb ? "قاعدة مستضافة (دائمة)" : "PGlite (عرض مؤقّت)"}
+          value={own ? "قاعدة المختبر الخاصة" : hostedDb ? "قاعدة مستضافة (دائمة)" : "PGlite (عرض مؤقّت)"}
           ok={hostedDb}
         />
         <Row label="النموذج" value="Postgres" />
       </Card>
+
+      {lid && <LabDbCard host={own ? connHost(own.conn) : ""} by={own?.by ?? ""} />}
 
       <Card className="mb-4">
         <div className="mb-2 font-semibold">الميزات</div>

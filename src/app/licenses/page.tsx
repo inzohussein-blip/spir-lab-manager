@@ -9,6 +9,7 @@ import {
 import { LICENSE_MODULES, DEFAULT_MODULES, moduleLabel, type LicenseModule } from "@/lib/license/modules";
 import { SUPABASE_SQL } from "@/lib/sync/protocol";
 import { SYNC_ERRORS } from "@/components/local/SyncPanel";
+import { adminDbError } from "@/lib/db/labErrors";
 
 /** «إدارة الرموز» — the owner's page: one code per lab, bound to one device, with a period and stations. */
 
@@ -22,6 +23,8 @@ interface Row {
   sync: { kind: "supabase" | "postgres"; host: string; by: "owner" | "device"; at: number } | null;
   /** The device's last report about its sync. */
   sync_last_at: number | null; sync_pending: number; sync_error: string; sync_reported_at: number | null;
+  /** The full admin panel's own database (no secrets). */
+  admin_db: { host: string; by: "owner" | "lab"; at: number } | null;
 }
 interface Ev { license_id: string; at: number; kind: string; detail: string }
 interface Storage { source: "license-db" | "app-db" | "embedded"; ok: boolean; codes?: number; roundTripMs?: number; error?: string; keySealed?: boolean }
@@ -54,6 +57,7 @@ const EVENT_LABEL: Record<string, string> = {
   created: "إنشاء الرمز", activated: "تفعيل على جهاز", moved: "تفعيل على جهاز جديد", extended: "تمديد", stopped: "إيقاف",
   resumed: "إعادة تفعيل", device_reset: "فك ربط الجهاز", modules: "تغيير المحطات", renamed: "تعديل الاسم",
   paid: "تسجيل الدفع", unpaid: "إلغاء الدفع", message: "رسالة للمختبر", new_code: "رمز جديد", sync: "قاعدة بيانات المختبر",
+  admin_db: "قاعدة لوحة الإدارة",
 };
 const eventDetail = (e: Ev) => (e.kind === "modules" ? e.detail.split(",").filter(Boolean).map(moduleLabel).join("، ") || "لا شيء" : e.detail);
 
@@ -188,6 +192,7 @@ export default function LicensesPage() {
   const [backupMsg, setBackupMsg] = useState("");
   const [testing, setTesting] = useState(false);
   const [dbFor, setDbFor] = useState<Row | null>(null);
+  const [adminDbFor, setAdminDbFor] = useState<Row | null>(null);
   // The page's sections (like the lab station's pages), kept in the address (#codes, #new…) so a reload stays.
   const [section, setSection] = useState<Section>(() => (typeof window !== "undefined" ? sectionOf(window.location.hash) : "codes"));
   const [menu, setMenu] = useState(false);
@@ -437,6 +442,14 @@ export default function LicensesPage() {
                   </button>
                   {r.sync && <SyncHealth r={r} now={now} />}
                 </div>
+                {(r.modules.includes("admin") || r.admin_db) && (
+                  <div data-testid="admin-db" className="min-w-0">
+                    <div className="text-[10px] text-muted">لوحة الإدارة</div>
+                    <button onClick={() => setAdminDbFor(r)} aria-label="قاعدة لوحة الإدارة" className="block max-w-full truncate text-start font-medium hover:underline" title={r.admin_db ? r.admin_db.host : "قاعدة الموقع المشتركة"}>
+                      {r.admin_db ? <>قاعدة خاصة{r.admin_db.by === "lab" ? " (من المختبر)" : ""}</> : <span className="text-muted">قاعدة الموقع</span>}
+                    </button>
+                  </div>
+                )}
               </div>
               <div className="mt-3 text-xs text-muted">المحطات — التغيير يصل للجهاز عند اتصاله بالإنترنت:</div>
               <ModuleChips value={r.modules} onChange={(m) => change(r, { action: "modules", modules: m })} />
@@ -581,6 +594,7 @@ export default function LicensesPage() {
         <div className="mx-auto max-w-5xl">{main}</div>
       </main>
       {dbFor && <DbModal row={dbFor} rows={all} onClose={() => setDbFor(null)} onSaved={() => { setDbFor(null); load(); }} />}
+      {adminDbFor && <AdminDbModal row={adminDbFor} rows={all} onClose={() => setAdminDbFor(null)} onSaved={() => { setAdminDbFor(null); load(); }} />}
     </div>
   );
 }
@@ -928,6 +942,85 @@ function DbModal({ row, rows, onClose, onSaved }: { row: Row; rows: Row[]; onClo
               <button disabled={busy || !canTry} onClick={() => go("sync_set")} className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-50">حفظ وربط</button>
             </>
           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** «قاعدة لوحة الإدارة» for one code: the full admin panel on the lab's own PostgreSQL. */
+function AdminDbModal({ row, rows, onClose, onSaved }: { row: Row; rows: Row[]; onClose: () => void; onSaved: () => void }) {
+  const [source, setSource] = useState<"typed" | "sync" | "copy">("typed");
+  const [conn, setConn] = useState("");
+  const [from, setFrom] = useState("");
+  const [first, setFirst] = useState({ username: "", password: "" });
+  const [needsAdmin, setNeedsAdmin] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const syncPg = row.sync?.kind === "postgres" ? row.sync.host : "";
+  const others = rows.filter((r) => r.id !== row.id && r.admin_db);
+  const target = () => source === "sync" ? { fromSync: true } : source === "copy" ? { from } : { conn: conn.trim() };
+  const ready = source === "sync" ? !!syncPg : source === "copy" ? !!from : !!conn.trim() || !!row.admin_db;
+  async function go(op: "test" | "set" | "unlink") {
+    setBusy(true); setMsg(null);
+    const d = op === "unlink" ? await post({ op: "admin_db_set", id: row.id, conn: null })
+      : await post({ op: op === "test" ? "admin_db_test" : "admin_db_set", id: row.id, ...target(), ...(op === "set" && first.username ? { first } : {}) });
+    setBusy(false);
+    if (!d.ok) {
+      if (d.error === "no_admin") setNeedsAdmin(true);
+      setMsg({ ok: false, text: adminDbError(d.error) }); return;
+    }
+    if (op === "test") {
+      setNeedsAdmin(!d.users);
+      setMsg({ ok: true, text: `✓ الاتصال يعمل والجداول جاهزة — المستخدمون: ${d.users ?? 0}${d.users ? "" : " (أدخل حساب المدير الأول قبل الحفظ)"}` });
+      return;
+    }
+    onSaved();
+  }
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/40 p-4" onClick={onClose}>
+      <div role="dialog" aria-label="قاعدة لوحة الإدارة" data-testid="admin-db-modal" onClick={(e) => e.stopPropagation()} className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-pop)]">
+        <h2 className="flex items-center gap-2 text-lg font-bold"><Server className="size-5 text-brand" /> قاعدة لوحة الإدارة — {row.lab_name}</h2>
+        <p className="mt-1 text-xs leading-relaxed text-muted">
+          تعمل لوحة الإدارة الكاملة لهذا المختبر على قاعدة PostgreSQL خاصة به بدل قاعدة الموقع المشتركة: المرضى والطلبات والنتائج والفواتير والمستخدمون.
+          تُنشأ الجداول تلقائياً عند أول اتصال. يُحفظ الرابط مشفّراً بـ AUTH_SECRET ولا يُعرض مرة أخرى.
+          يمكن لمدير المختبر ضبطها أيضاً من «الإعدادات» داخل لوحة الإدارة.
+        </p>
+        <div className="mt-3 rounded-lg bg-canvas px-3 py-2 text-xs">
+          الحالية: {row.admin_db ? <b dir="ltr">{row.admin_db.host}</b> : <b>قاعدة الموقع المشتركة</b>}
+          {row.admin_db?.by === "lab" && <span className="text-muted"> — ضبطها المختبر</span>}
+        </div>
+        <div className="mt-3 inline-flex flex-wrap rounded-lg border border-line p-0.5 text-xs">
+          {([["typed", "رابط اتصال"], ...(syncPg ? [["sync", "قاعدة المزامنة نفسها"]] : []), ...(others.length ? [["copy", "قاعدة رمز آخر"]] : [])] as [typeof source, string][]).map(([k, l]) => (
+            <button key={k} onClick={() => { setSource(k); setMsg(null); }} className={`rounded-md px-3 py-1 ${source === k ? "bg-brand text-white" : "hover:bg-canvas"}`}>{l}</button>
+          ))}
+        </div>
+        {source === "typed" && (
+          <div className="mt-3 space-y-1">
+            <input dir="ltr" aria-label="رابط قاعدة لوحة الإدارة" placeholder={row.admin_db ? `(محفوظ: ${row.admin_db.host} — اتركه فارغاً للإبقاء)` : "postgresql://user:password@host:5432/db"} value={conn} onChange={(e) => setConn(e.target.value)} className={inp} />
+            <p className="text-[11px] text-muted">أي PostgreSQL: Neon أو Supabase (Connect ← Connection string) أو Railway أو خادم خاص. يُفضَّل قاعدة فارغة مخصّصة للمختبر.</p>
+          </div>
+        )}
+        {source === "sync" && <p className="mt-3 text-xs text-muted">تستخدم القاعدة التي تزامن محطة هذا المختبر (<span dir="ltr">{syncPg}</span>) — جداول اللوحة بجانب جدول المزامنة دون تداخل.</p>}
+        {source === "copy" && (
+          <select value={from} onChange={(e) => setFrom(e.target.value)} aria-label="قاعدة رمز آخر" className="mt-3 rounded-lg border border-line bg-surface px-2 py-1 text-sm">
+            <option value="">— اختر —</option>
+            {others.map((o) => <option key={o.id} value={o.id}>{o.lab_name}{o.device_name ? ` — ${o.device_name}` : ""} ({o.admin_db!.host})</option>)}
+          </select>
+        )}
+        <div className={`mt-4 rounded-lg border p-3 ${needsAdmin ? "border-amber-300 bg-amber-50/50" : "border-line"}`}>
+          <div className="text-xs font-semibold">حساب المدير الأول <span className="font-normal text-muted">— للقاعدة الجديدة فقط (تُترك فارغة إن كان فيها مستخدمون)</span></div>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            <input dir="ltr" aria-label="اسم مستخدم المدير" placeholder="admin" value={first.username} onChange={(e) => setFirst({ ...first, username: e.target.value })} className={inp} />
+            <input dir="ltr" type="password" aria-label="كلمة مرور المدير" placeholder="6 أحرف على الأقل" value={first.password} onChange={(e) => setFirst({ ...first, password: e.target.value })} className={inp} />
+          </div>
+        </div>
+        {msg && <p className={`mt-3 text-sm ${msg.ok ? "text-teal-700" : "text-red-700"}`} data-testid="admin-db-msg">{msg.text}</p>}
+        <div className="mt-4 flex flex-wrap justify-end gap-2">
+          <button onClick={onClose} className="rounded-lg border border-line px-4 py-2 text-sm hover:bg-canvas">إغلاق</button>
+          {row.admin_db && <button disabled={busy} onClick={() => { if (confirm("إرجاع لوحة هذا المختبر إلى قاعدة الموقع؟ تبقى بيانات قاعدته كما هي.")) go("unlink"); }} className="rounded-lg border border-red-200 px-4 py-2 text-sm text-red-700 hover:bg-red-50 disabled:opacity-50">إرجاع لقاعدة الموقع</button>}
+          <button disabled={busy || !ready} onClick={() => go("test")} className="rounded-lg border border-line px-4 py-2 text-sm hover:bg-canvas disabled:opacity-50">اختبار الاتصال</button>
+          <button disabled={busy || !ready} onClick={() => go("set")} className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-50">حفظ</button>
         </div>
       </div>
     </div>

@@ -3,11 +3,12 @@ import {
   licensingEnabled, passwordSet, durableStorage, storageStatus, attemptsBlocked, noteAttempt, clearAttempts,
   logOwnerSignIn, ownerSignIns, signingKeySealed,
   twoFactorStatus, twoFactorRequired, checkOwnerCode, startTwoFactorSetup, confirmTwoFactor, disableTwoFactor, exportCodes, importCodes, listLicenses, listEvents, createLicense, updateLicense, getContact, setContact, type LicenseAction,
-  getSyncConfig, setSyncConfig, cleanSyncConfig,
+  getSyncConfig, setSyncConfig, cleanSyncConfig, getAdminDb,
 } from "@/lib/license/server";
 import { LabDbError, probe } from "@/lib/sync/pg";
 import { SupaError, supaProbe, supaSignIn } from "@/lib/sync/supabase";
 import { connHost, type SyncConfig } from "@/lib/sync/protocol";
+import { cleanFirstAdmin, linkAdminDb, resolveAdminConn, testAdminDb } from "@/lib/license/adminDb";
 import { passwordMatches, startOwnerSession, endOwnerSession, isOwner, ipOf } from "@/lib/license/owner";
 
 /** Owner endpoints for the code manager (/licenses). */
@@ -115,6 +116,21 @@ export async function POST(req: NextRequest) {
     if (b.op === "sync_test") return json(tested);
     const err = await setSyncConfig(id, cfg, "owner");
     return err ? json({ ok: false, error: err }, 400) : json(tested);
+  }
+  // The full admin panel's own database for a code (the connection string never comes back).
+  if (b.op === "admin_db_test" || b.op === "admin_db_set") {
+    const id = String(b.id ?? "");
+    if (b.op === "admin_db_set" && b.conn === null) {
+      const r = await linkAdminDb(id, null, "owner");
+      return json(r, r.ok ? 200 : 400);
+    }
+    const conn = b.from ? (await getAdminDb(String(b.from)))?.conn ?? null : await resolveAdminConn(id, b.conn, !!b.fromSync);
+    if (!conn) return json({ ok: false, error: "bad_config" }, 400);
+    if (b.op === "admin_db_test") { const r = await testAdminDb(conn); return json(r, r.ok ? 200 : 502); }
+    const first = cleanFirstAdmin(b.first);
+    if (first === "bad") return json({ ok: false, error: "bad_account" }, 400);
+    const r = await linkAdminDb(id, conn, "owner", first);
+    return json(r, r.ok ? 200 : r.error === "no_admin" ? 409 : 502);
   }
   return json({ ok: false, error: "bad_request" }, 400);
 }
