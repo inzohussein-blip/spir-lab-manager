@@ -33,8 +33,8 @@ interface Ev { license_id: string; at: number; kind: string; detail: string }
 interface Storage { source: "license-db" | "app-db" | "embedded"; ok: boolean; codes?: number; roundTripMs?: number; error?: string; keySealed?: boolean }
 interface SignIn { at: number; ok: boolean; ip: string; agent: string }
 interface TwoFactor { enabled: boolean; broken: boolean; forcedOff: boolean; canSetup: boolean }
-type Prefs = { defaultDays: number; defaultModules: LicenseModule[]; trialDays: number; soonDays: number };
-const DEFAULT_PREFS: Prefs = { defaultDays: 365, defaultModules: [...DEFAULT_MODULES], trialDays: 7, soonDays: 14 };
+type Prefs = { defaultDays: number; defaultModules: LicenseModule[]; trialDays: number; soonDays: number; adminNeedsOwnDb: boolean };
+const DEFAULT_PREFS: Prefs = { defaultDays: 365, defaultModules: [...DEFAULT_MODULES], trialDays: 7, soonDays: 14, adminNeedsOwnDb: true };
 type Data = { enabled: boolean; owner: boolean; needsDb?: boolean; storage?: Storage; licenses?: Row[]; events?: Ev[]; signIns?: SignIn[]; twoFactor?: TwoFactor; contact?: string; prefs?: Prefs; version?: string; now?: number };
 const agentLabel = (ua: string) => {
   const os = /Windows/.test(ua) ? "Windows" : /Android/.test(ua) ? "Android" : /iPhone|iPad/.test(ua) ? "iOS" : /Mac OS/.test(ua) ? "Mac" : /Linux/.test(ua) ? "Linux" : "";
@@ -55,6 +55,11 @@ const PERIODS = [{ d: 30, l: "شهر" }, { d: 90, l: "3 أشهر" }, { d: 180, l
 const fmt = (ms: number | null) => (ms ? new Date(ms).toLocaleDateString("en-CA") : "—");
 const fmtTime = (ms: number | null) => (ms ? new Date(ms).toLocaleString("ar-IQ-u-nu-latn") : "—");
 const deviceOf = (r: Row) => r.device_name || r.device_label || (r.device_id ? "مربوط" : "");
+/** Where a code's full admin panel keeps its data (see lib/db/lab.ts). */
+type Place = "own" | "site" | "waiting" | "none";
+const placeOf = (r: Row, needsOwn: boolean): Place =>
+  r.admin_db ? "own" : !r.modules.includes("admin") ? "none" : needsOwn && !r.is_trial ? "waiting" : "site";
+const PLACE_LABEL: Record<Place, string> = { own: "قاعدة خاصة", site: "قسم مستقل في قاعدة الموقع", waiting: "بانتظار قاعدة خاصة", none: "" };
 const amount = (p: string) => { const n = Number(p.replace(/[^\d.]/g, "")); return p.trim() && Number.isFinite(n) ? n : 0; };
 
 const EVENT_LABEL: Record<string, string> = {
@@ -163,14 +168,14 @@ function statusMessage(r: Row, now: number) {
 
 function copyText(t: string, done: () => void) { navigator.clipboard?.writeText(t).then(done).catch(() => window.prompt("انسخ النص:", t)); }
 
-function exportCsv(rows: Row[], now: number, soonMs?: number) {
+function exportCsv(rows: Row[], now: number, soonMs?: number, needsOwn = true) {
   const cell = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const head = ["المختبر", "ملاحظة", "آخر 4 خانات", "الحالة", "تجريبي", "المدة (يوم)", "التفعيل", "الانتهاء", "الجهاز", "آخر اتصال", "الإصدار", "المحطات", "المبلغ", "مدفوع", "تاريخ الدفع", "رسالة للمختبر", "أُنشئ", "قاعدة لوحة الإدارة", ...(STATION_SYNC ? ["قاعدة المزامنة", "آخر مزامنة"] : [])];
   const lines = [head.map(cell).join(",")];
   for (const r of rows) {
     lines.push([r.lab_name, r.note, r.code_hint, status(r, now, soonMs).t, r.is_trial ? "نعم" : "", r.duration_days, fmt(r.activated_at), fmt(r.expires_at), deviceOf(r),
       fmtTime(r.last_seen_at), r.app_version, r.modules.map(moduleLabel).join("، "), r.price, r.paid ? "نعم" : "لا", fmt(r.paid_at), r.message, fmt(r.created_at),
-      r.admin_db ? r.admin_db.host : r.modules.includes("admin") ? "قاعدة الموقع" : "",
+      r.admin_db ? r.admin_db.host : PLACE_LABEL[placeOf(r, needsOwn)],
       ...(STATION_SYNC ? [r.sync ? `${r.sync.kind === "postgres" ? "PostgreSQL" : "Supabase"} — ${r.sync.host}` : "", fmtTime(r.sync_last_at)] : [])].map(cell).join(","));
   }
   const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
@@ -398,7 +403,7 @@ export default function LicensesPage() {
           <option value="seen">آخر اتصال</option>
           <option value="name">الاسم</option>
         </select>
-        <button onClick={() => exportCsv(rows, now, soonMs)} disabled={!rows.length} className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-surface disabled:opacity-50">
+        <button onClick={() => exportCsv(rows, now, soonMs, prefs.adminNeedsOwnDb)} disabled={!rows.length} className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-surface disabled:opacity-50">
           <Download className="size-4" /> تصدير CSV
         </button>
         <button onClick={load} title="تحديث" className="grid size-9 shrink-0 place-items-center rounded-lg border border-line hover:bg-surface"><RefreshCw className="size-4" /></button>
@@ -461,8 +466,10 @@ export default function LicensesPage() {
                 {(r.modules.includes("admin") || r.admin_db) && (
                   <div data-testid="admin-db" className="min-w-0">
                     <div className="text-[10px] text-muted">قاعدة البيانات</div>
-                    <button onClick={() => setAdminDbFor({ row: r })} aria-label="قاعدة لوحة الإدارة" className="block max-w-full truncate text-start font-medium hover:underline" title={r.admin_db ? r.admin_db.host : "قاعدة الموقع المشتركة"}>
-                      {r.admin_db ? <>قاعدة خاصة{r.admin_db.by === "lab" ? " (من المختبر)" : ""}</> : <span className="text-muted">قاعدة الموقع</span>}
+                    <button onClick={() => setAdminDbFor({ row: r })} aria-label="قاعدة لوحة الإدارة" className="block max-w-full truncate text-start font-medium hover:underline" title={r.admin_db ? r.admin_db.host : PLACE_LABEL[placeOf(r, prefs.adminNeedsOwnDb)]}>
+                      {r.admin_db ? <>قاعدة خاصة{r.admin_db.by === "lab" ? " (من المختبر)" : ""}</>
+                        : placeOf(r, prefs.adminNeedsOwnDb) === "waiting" ? <span className="text-amber-700">بانتظار قاعدة خاصة</span>
+                        : <span className="text-muted">قسم في قاعدة الموقع</span>}
                     </button>
                   </div>
                 )}
@@ -582,7 +589,7 @@ export default function LicensesPage() {
         <>
           <SectionTitle icon={<HardDrive className="size-6" />} title="قواعد البيانات"
             desc="قاعدة لوحة الإدارة الكاملة لكل عميل: اربطها أو غيّرها أو افحصها من هنا. المحطات تعمل على أجهزتها ولا تحتاج قاعدة." />
-          <Databases rows={all} now={now} onOpen={(row, provider) => setAdminDbFor({ row, provider })} onReset={setResetFor} onChecked={load} />
+          <Databases rows={all} now={now} needsOwn={prefs.adminNeedsOwnDb} onOpen={(row, provider) => setAdminDbFor({ row, provider })} onReset={setResetFor} onChecked={load} />
         </>
       )}
 
@@ -620,7 +627,7 @@ export default function LicensesPage() {
         <div className="mx-auto max-w-5xl">{main}</div>
       </main>
       {dbFor && <DbModal row={dbFor} rows={all} onClose={() => setDbFor(null)} onSaved={() => { setDbFor(null); load(); }} />}
-      {adminDbFor && <AdminDbModal row={adminDbFor.row} provider={adminDbFor.provider} rows={all} onClose={() => setAdminDbFor(null)} onSaved={() => { setAdminDbFor(null); load(); }} />}
+      {adminDbFor && <AdminDbModal row={adminDbFor.row} provider={adminDbFor.provider} needsOwn={prefs.adminNeedsOwnDb} rows={all} onClose={() => setAdminDbFor(null)} onSaved={() => { setAdminDbFor(null); load(); }} />}
       {resetFor && <ResetAdminModal row={resetFor} onClose={() => setResetFor(null)} />}
     </div>
   );
@@ -982,8 +989,8 @@ const providerOfRow = (r: Row): ProviderId | null => (r.admin_db ? r.admin_db.pr
 /** A saved database is checked again when the owner opens the list and its last check is older than this. */
 const RECHECK_MS = 30 * 60_000;
 
-function Databases({ rows, now, onOpen, onReset, onChecked }: {
-  rows: Row[]; now: number; onOpen: (r: Row, p?: ProviderId) => void; onReset: (r: Row) => void; onChecked: () => void;
+function Databases({ rows, now, needsOwn, onOpen, onReset, onChecked }: {
+  rows: Row[]; now: number; needsOwn: boolean; onOpen: (r: Row, p?: ProviderId) => void; onReset: (r: Row) => void; onChecked: () => void;
 }) {
   const [tab, setTab] = useState<DbTab>("all");
   const [q, setQ] = useState("");
@@ -1034,16 +1041,25 @@ function Databases({ rows, now, onOpen, onReset, onChecked }: {
       ? <span className="text-teal-700">✓ تعمل — آخر فحص {fmtShort(s.at)}</span>
       : <span className="text-red-700">✗ لا تستجيب ({adminDbError(s.error)}) — {fmtShort(s.at)}</span>;
   };
+  async function importShared(r: Row) {
+    if (!window.confirm(`نقل بيانات لوحة الإدارة القديمة المشتركة (من قبل فصل المختبرات) إلى «${r.lab_name}»؟\nاستخدمه للمختبر الذي كان يعمل عليها فقط — تُنسخ كلها، والسجلات الموجودة تبقى كما هي.`)) return;
+    setChecks((c) => ({ ...c, [r.id]: { busy: true } }));
+    const d = await post({ op: "admin_db_import_shared", id: r.id });
+    setChecks((c) => ({ ...c, [r.id]: d.ok ? { ok: true, text: `✓ نُقلت البيانات القديمة: ${d.copied?.rows ?? 0} سجلاً` } : { ok: false, text: adminDbError(d.error) } }));
+  }
   const tabs: [DbTab, string][] = [["all", "الكل"], ...PROVIDERS.map((p) => [p.id, p.name] as [DbTab, string])];
   const candidates = clients.filter((r) => r.modules.includes("admin"));
 
   return (
     <>
-      <div className="mb-4 grid gap-3 sm:grid-cols-4">
-        {([["عملاء بلوحة الإدارة", candidates.length, ""], ["بقاعدة خاصة", own.length, ""], ["على قاعدة الموقع", candidates.filter((r) => !r.admin_db).length, ""], ["لا تستجيب", down.length, down.length ? "text-red-700" : ""]] as const).map(([k, v, tone]) => (
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        {([["عملاء بلوحة الإدارة", candidates.length, ""], ["بقاعدة خاصة", own.length, ""],
+          ["أقسام في قاعدة الموقع", candidates.filter((r) => placeOf(r, needsOwn) === "site").length, ""],
+          ["بانتظار قاعدة", candidates.filter((r) => placeOf(r, needsOwn) === "waiting").length, candidates.some((r) => placeOf(r, needsOwn) === "waiting") ? "text-amber-700" : ""],
+          ["لا تستجيب", down.length, down.length ? "text-red-700" : ""]] as const).map(([k, v, tone]) => (
           <div key={k} className="rounded-2xl border border-line bg-surface p-4 shadow-[var(--shadow-card)]">
             <div className="text-xs text-muted">{k}</div>
-            <div className={`mt-1 text-2xl font-bold tabular-nums ${tone}`} data-testid={k === "لا تستجيب" ? "db-down-count" : undefined}>{v}</div>
+            <div className={`mt-1 text-2xl font-bold tabular-nums ${tone}`} data-testid={k === "لا تستجيب" ? "db-down-count" : k === "بانتظار قاعدة" ? "db-waiting-count" : undefined}>{v}</div>
           </div>
         ))}
       </div>
@@ -1102,17 +1118,22 @@ function Databases({ rows, now, onOpen, onReset, onChecked }: {
                   <div className="mt-0.5 text-xs text-muted" data-testid="db-state">
                     {r.admin_db && p
                       ? <>{providerById(p).name}: <span dir="ltr" className="font-mono">{r.admin_db.host}</span> · {r.admin_db.by === "lab" ? "ضبطها المختبر" : "ضبطتها أنت"} · {fmt(r.admin_db.at)}</>
-                      : "على قاعدة الموقع المشتركة"}
+                      : placeOf(r, needsOwn) === "waiting"
+                        ? <span className="text-amber-700">بانتظار قاعدة خاصة — لوحة الإدارة مقفلة حتى الربط</span>
+                        : <>قسم مستقل في قاعدة الموقع{r.is_trial ? " (رمز تجريبي)" : ""} — لا يرى بيانات غيره</>}
                   </div>
-                  {r.admin_db && <div data-testid="db-check" className="mt-1 text-xs">{lastCheck(r)}</div>}
+                  {(r.admin_db || checks[r.id]) && <div data-testid="db-check" className="mt-1 text-xs">{lastCheck(r)}</div>}
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {r.admin_db && (
+                    <button disabled={checks[r.id]?.busy} onClick={() => check(r).then(onChecked)} className={`${small} disabled:opacity-50`}>
+                      {checks[r.id]?.busy ? <RefreshCw className="size-3.5 animate-spin" /> : <Check className="size-3.5" />} فحص
+                    </button>
+                  )}
+                  {placeOf(r, needsOwn) !== "waiting" && placeOf(r, needsOwn) !== "none" && (
                     <>
-                      <button disabled={checks[r.id]?.busy} onClick={() => check(r).then(onChecked)} className={`${small} disabled:opacity-50`}>
-                        {checks[r.id]?.busy ? <RefreshCw className="size-3.5 animate-spin" /> : <Check className="size-3.5" />} فحص
-                      </button>
                       <button onClick={() => onReset(r)} className={small}><KeyRound className="size-3.5" /> كلمة مرور المدير</button>
+                      <button onClick={() => importShared(r)} className={small} title="بيانات لوحة الإدارة المشتركة من قبل فصل المختبرات"><Download className="size-3.5" /> البيانات القديمة</button>
                     </>
                   )}
                   <button onClick={() => onOpen(r, tab === "all" ? undefined : tab)} className="inline-flex items-center gap-1 rounded-lg bg-brand px-3 py-1 text-xs font-semibold text-white hover:bg-brand-dark">
@@ -1172,7 +1193,7 @@ function PrefsCard({ prefs, onSaved }: { prefs: Prefs; onSaved: () => void }) {
   async function save() {
     const defaultDays = p.days === -1 ? Number(p.custom) : p.days;
     if (!defaultDays || defaultDays < 1) { setMsg("حدّد المدة."); return; }
-    const d = await post({ op: "prefs", prefs: { defaultDays, defaultModules: p.defaultModules, trialDays: p.trialDays, soonDays: p.soonDays } });
+    const d = await post({ op: "prefs", prefs: { defaultDays, defaultModules: p.defaultModules, trialDays: p.trialDays, soonDays: p.soonDays, adminNeedsOwnDb: p.adminNeedsOwnDb } });
     setMsg(d.ok ? "✓ حُفظت الإعدادات" : "تعذّر الحفظ.");
     if (d.ok) onSaved();
   }
@@ -1197,6 +1218,16 @@ function PrefsCard({ prefs, onSaved }: { prefs: Prefs; onSaved: () => void }) {
       </div>
       <div className="mt-3 text-sm font-medium">المحطات المفعّلة في الرمز الجديد</div>
       <ModuleChips value={p.defaultModules} onChange={(m) => setP({ ...p, defaultModules: m })} />
+      <label data-testid="needs-own-db" className="mt-4 flex items-start gap-2 rounded-lg border border-line p-3 text-sm">
+        <input type="checkbox" checked={p.adminNeedsOwnDb} onChange={(e) => setP({ ...p, adminNeedsOwnDb: e.target.checked })} aria-label="لوحة الإدارة تحتاج قاعدة خاصة" className="mt-1" />
+        <span>
+          <b>لوحة الإدارة الكاملة تحتاج قاعدة بيانات خاصة لكل مختبر</b>
+          <span className="mt-0.5 block text-xs text-muted">
+            لا تُفتح لوحة الإدارة لرمز مدفوع حتى تُربط قاعدته (منك في «قواعد البيانات» أو من المختبر نفسه). الرموز التجريبية تعمل في قسم مستقل من قاعدة الموقع.
+            عند الإيقاف يعمل كل مختبر بلا قاعدة خاصة في قسمه المستقل من قاعدة الموقع. في الحالتين لا يرى مختبر بيانات غيره.
+          </span>
+        </span>
+      </label>
       <div className="mt-4 flex items-center gap-3">
         <button onClick={save} className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark">حفظ الإعدادات</button>
         {msg && <span data-testid="prefs-msg" className="text-xs text-brand-dark">{msg}</span>}
@@ -1207,9 +1238,10 @@ function PrefsCard({ prefs, onSaved }: { prefs: Prefs; onSaved: () => void }) {
 
 /** «قاعدة لوحة الإدارة» for one code: the full admin panel on the lab's own PostgreSQL, linked through
  *  the chosen provider's own interface (its steps, its connection string, advice before saving). */
-function AdminDbModal({ row, rows, provider: initial, onClose, onSaved }: {
-  row: Row; rows: Row[]; provider?: ProviderId; onClose: () => void; onSaved: () => void;
+function AdminDbModal({ row, rows, provider: initial, needsOwn, onClose, onSaved }: {
+  row: Row; rows: Row[]; provider?: ProviderId; needsOwn: boolean; onClose: () => void; onSaved: () => void;
 }) {
+  const locksWithout = needsOwn && !row.is_trial;
   const savedProvider = row.admin_db ? row.admin_db.provider ?? providerOf(row.admin_db.host) : null;
   const [provider, setProvider] = useState<ProviderId>(initial ?? savedProvider ?? "neon");
   const [conn, setConn] = useState("");
@@ -1236,7 +1268,7 @@ function AdminDbModal({ row, rows, provider: initial, onClose, onSaved }: {
     }
     if (op === "test") {
       setNeedsAdmin(!d.users);
-      setMsg({ ok: true, text: `✓ الاتصال يعمل والجداول جاهزة — المستخدمون: ${d.users ?? 0}${d.users ? "" : " (أدخل حساب المدير الأول، أو انسخ بيانات قاعدة الموقع، قبل الحفظ)"}` });
+      setMsg({ ok: true, text: `✓ الاتصال يعمل والجداول جاهزة — المستخدمون: ${d.users ?? 0}${d.users ? "" : " (أدخل حساب المدير الأول، أو انسخ بيانات لوحته الحالية، قبل الحفظ)"}` });
       return;
     }
     if (d.copied) window.alert(`نُسخت البيانات: ${d.copied.rows} سجلاً من ${d.copied.tables} جدولاً.`);
@@ -1251,7 +1283,7 @@ function AdminDbModal({ row, rows, provider: initial, onClose, onSaved }: {
           تُنشأ الجداول تلقائياً عند أول اتصال. يُحفظ الرابط مشفّراً بـ AUTH_SECRET ولا يُعرض مرة أخرى.
         </p>
         <div className="mt-3 rounded-lg bg-canvas px-3 py-2 text-xs">
-          الحالية: {row.admin_db ? <b dir="ltr">{row.admin_db.host}</b> : <b>قاعدة الموقع المشتركة</b>}
+          الحالية: {row.admin_db ? <b dir="ltr">{row.admin_db.host}</b> : <b>{PLACE_LABEL[placeOf(row, needsOwn)] || "قسم مستقل في قاعدة الموقع"}</b>}
           {row.admin_db?.by === "lab" && <span className="text-muted"> — ضبطها المختبر</span>}
         </div>
 
@@ -1283,8 +1315,7 @@ function AdminDbModal({ row, rows, provider: initial, onClose, onSaved }: {
         <label data-testid="copy-site" className="mt-2 flex items-start gap-2 rounded-lg border border-line p-3 text-xs">
           <input type="checkbox" checked={copy} onChange={(e) => setCopy(e.target.checked)} aria-label="نسخ بيانات قاعدة الموقع" className="mt-0.5" />
           <span>
-            <b className="text-sm">انسخ بيانات لوحته الحالية إليها</b> — من {row.admin_db ? <>قاعدته الحالية (<span dir="ltr">{row.admin_db.host}</span>)</> : "قاعدة الموقع"}: المرضى والطلبات والنتائج والفواتير والمخزون والمستخدمون، ليكمل المختبر من حيث توقّف. السجلات الموجودة في القاعدة الجديدة لا تتغيّر.
-            {!row.admin_db && <span className="mt-1 block text-amber-700">قاعدة الموقع مشتركة: إن كانت مختبرات أخرى تعمل عليها تُنسخ بياناتها أيضاً. استخدمه فقط إن كان هذا المختبر وحده عليها.</span>}
+            <b className="text-sm">انسخ بيانات لوحته الحالية إليها</b> — من {row.admin_db ? <>قاعدته الحالية (<span dir="ltr">{row.admin_db.host}</span>)</> : "قسمه في قاعدة الموقع"}: المرضى والطلبات والنتائج والفواتير والمخزون والمستخدمون، ليكمل المختبر من حيث توقّف. السجلات الموجودة في القاعدة الجديدة لا تتغيّر.
           </span>
         </label>
         <div className={`mt-2 rounded-lg border p-3 ${needsAdmin ? "border-amber-300 bg-amber-50/50" : "border-line"}`}>
@@ -1297,7 +1328,7 @@ function AdminDbModal({ row, rows, provider: initial, onClose, onSaved }: {
         {msg && <p className={`mt-3 text-sm ${msg.ok ? "text-teal-700" : "text-red-700"}`} data-testid="admin-db-msg">{msg.text}</p>}
         <div className="mt-4 flex flex-wrap justify-end gap-2">
           <button onClick={onClose} className="rounded-lg border border-line px-4 py-2 text-sm hover:bg-canvas">إغلاق</button>
-          {row.admin_db && <button disabled={busy} onClick={() => { if (confirm("إرجاع لوحة هذا المختبر إلى قاعدة الموقع؟ تبقى بيانات قاعدته كما هي.")) go("unlink"); }} className="rounded-lg border border-red-200 px-4 py-2 text-sm text-red-700 hover:bg-red-50 disabled:opacity-50">إرجاع لقاعدة الموقع</button>}
+          {row.admin_db && <button disabled={busy} onClick={() => { if (confirm(locksWithout ? "إلغاء ربط قاعدة هذا المختبر؟ تُقفل لوحة الإدارة عنده حتى تُربط قاعدة أخرى، وتبقى بيانات قاعدته كما هي." : "إرجاع لوحة هذا المختبر إلى قسمه في قاعدة الموقع؟ تبقى بيانات قاعدته كما هي.")) go("unlink"); }} className="rounded-lg border border-red-200 px-4 py-2 text-sm text-red-700 hover:bg-red-50 disabled:opacity-50">{locksWithout ? "إلغاء ربط القاعدة" : "إرجاع لقسمه في قاعدة الموقع"}</button>}
           <button disabled={busy || !ready} onClick={() => go("test")} className="rounded-lg border border-line px-4 py-2 text-sm hover:bg-canvas disabled:opacity-50">اختبار الاتصال</button>
           <button disabled={busy || !ready} onClick={() => go("set")} className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-50">{busy ? "جارٍ…" : "حفظ"}</button>
         </div>

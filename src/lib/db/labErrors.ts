@@ -14,5 +14,7 @@ export const ADMIN_DB_ERRORS: Record<string, string> = {
   no_code: "هذه الميزة لجهاز مفعّل برمز مختبر يتضمّن لوحة الإدارة الكاملة.",
   forbidden: "للمدير فقط.",
   owner_set: "قاعدة هذه اللوحة ضبطها صاحب الرموز — يغيّرها من صفحة الرموز.",
+  needs_db: "لوحة الإدارة لهذا المختبر تحتاج قاعدة بيانات خاصة به قبل أن تُفتح.",
+  needs_db_rule: "لوحة الإدارة تحتاج قاعدة بيانات خاصة — لا يمكن إرجاعها إلى قاعدة الموقع.",
 };
 export const adminDbError = (code?: string) => ADMIN_DB_ERRORS[code ?? ""] ?? ADMIN_DB_ERRORS.db;

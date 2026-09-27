@@ -8,7 +8,8 @@ import {
 import { LabDbError, probe } from "@/lib/sync/pg";
 import { SupaError, supaProbe, supaSignIn } from "@/lib/sync/supabase";
 import { connHost, type SyncConfig } from "@/lib/sync/protocol";
-import { checkSavedAdminDb, cleanFirstAdmin, linkAdminDb, resetAdminPassword, resolveAdminConn, testAdminDb } from "@/lib/license/adminDb";
+import { checkSavedAdminDb, cleanFirstAdmin, importShared, linkAdminDb, resetAdminPassword, resolveAdminConn, testAdminDb } from "@/lib/license/adminDb";
+import { forgetAdminDb } from "@/lib/db/lab";
 import { passwordMatches, startOwnerSession, endOwnerSession, isOwner, ipOf } from "@/lib/license/owner";
 
 /** Owner endpoints for the code manager (/licenses). */
@@ -83,7 +84,7 @@ export async function POST(req: NextRequest) {
   if (b.op === "totp_enable") return (await confirmTwoFactor(String(b.code ?? ""))) ? json({ ok: true }) : json({ ok: false, error: "wrong_code" }, 400);
   if (b.op === "totp_disable") return (await disableTwoFactor(String(b.code ?? ""))) ? json({ ok: true }) : json({ ok: false, error: "wrong_code" }, 400);
   if (b.op === "contact") { await setContact(String(b.contact ?? "")); return json({ ok: true }); }
-  if (b.op === "prefs") return json({ ok: true, prefs: await setPrefs(b.prefs) });
+  if (b.op === "prefs") { const prefs = await setPrefs(b.prefs); forgetAdminDb(); return json({ ok: true, prefs }); }
 
   // The lab's own database: see it (never the password or the connection string), test it, link it.
   if (b.op === "sync_get") {
@@ -137,6 +138,10 @@ export async function POST(req: NextRequest) {
     if (first === "bad") return json({ ok: false, error: "bad_account" }, 400);
     const r = await linkAdminDb(id, conn, "owner", first, b.copy === true);
     return json(r, r.ok ? 200 : r.error === "no_admin" ? 409 : 502);
+  }
+  if (b.op === "admin_db_import_shared") {
+    const r = await importShared(String(b.id ?? ""));
+    return json(r, r.ok ? 200 : 400);
   }
   if (b.op === "admin_db_reset") {
     const r = await resetAdminPassword(String(b.id ?? ""), b.account);

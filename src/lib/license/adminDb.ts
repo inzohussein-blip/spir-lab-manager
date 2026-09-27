@@ -1,5 +1,5 @@
 import "server-only";
-import { copyInto, forgetAdminDb, prepareLabDb, resetLabAdmin } from "@/lib/db/lab";
+import { copyInto, forgetAdminDb, prepareLabDb, resetLabAdmin, targetForCode } from "@/lib/db/lab";
 import { LabDbError } from "@/lib/sync/pg";
 import { isPostgresUrl } from "@/lib/sync/protocol";
 import { getAdminDb, getSyncConfig, recordAdminDbCheck, setAdminDb } from "./server";
@@ -31,7 +31,7 @@ const errOf = (e: unknown) => (e instanceof LabDbError ? e.code : "db");
 
 export async function testAdminDb(conn: string): Promise<AdminDbResult> {
   try {
-    return { ok: true, users: (await prepareLabDb(conn)).users };
+    return { ok: true, users: (await prepareLabDb({ conn })).users };
   } catch (e) {
     return { ok: false, error: errOf(e) };
   }
@@ -54,22 +54,38 @@ export async function checkSavedAdminDb(id: string): Promise<AdminDbResult> {
   return r;
 }
 
-/** The owner sets a new password for an admin of the lab (created when the name is new). */
+/** The owner sets a new password for an admin of the lab (created when the name is new) — in
+ *  the lab's own database or its section of the site's. */
 export async function resetAdminPassword(id: string, v: unknown): Promise<{ ok: true; created: boolean } | { ok: false; error: string }> {
   const a = cleanFirstAdmin(v);
   if (!a || a === "bad") return { ok: false, error: "bad_account" };
-  const saved = await getAdminDb(id);
-  if (!saved) return { ok: false, error: "bad_config" };
   try {
-    return { ok: true, ...(await resetLabAdmin(saved.conn, a.username, a.password!)) };
+    const t = await targetForCode(id);
+    if (!t.where) return { ok: false, error: "needs_db" };
+    return { ok: true, ...(await resetLabAdmin(t.where, a.username, a.password!)) };
   } catch (e) {
     return { ok: false, error: errOf(e) };
   }
 }
 
-/** Save it for the code (null: back to the site's database). With `copy`, what the panel's
- *  current database holds (the site's, or the lab's previous one) is copied into it first. */
-export async function linkAdminDb(id: string, conn: string | null, by: "owner" | "lab", first?: FirstAdmin | null, copy = false): Promise<AdminDbResult> {
+/** Bring the site's old shared data (from before each lab had its own section) into a code's
+ *  place — for the lab that used the panel then. Records already there are kept. */
+export async function importShared(id: string): Promise<AdminDbResult> {
+  try {
+    const t = await targetForCode(id);
+    if (!t.where) return { ok: false, error: "needs_db" };
+    const copied = await copyInto(t.where, { schema: "public" });
+    return { ok: true, users: (await prepareLabDb(t.where)).users, copied };
+  } catch (e) {
+    return { ok: false, error: errOf(e) };
+  }
+}
+
+/** Save it for the code (null: back to its section of the site's database). With `copy`, what
+ *  the panel's current place holds (its section, or its previous database) is copied into it
+ *  first. `allowNoAdmin`: the lab sets it from the panel's first screen and creates its first
+ *  admin right after (see the login's first-run form). */
+export async function linkAdminDb(id: string, conn: string | null, by: "owner" | "lab", first?: FirstAdmin | null, copy = false, allowNoAdmin = false): Promise<AdminDbResult> {
   if (!conn) {
     const err = await setAdminDb(id, null, by);
     forgetAdminDb(id);
@@ -78,14 +94,14 @@ export async function linkAdminDb(id: string, conn: string | null, by: "owner" |
   let prepared: { users: number; created: boolean };
   let copied: { tables: number; rows: number } | undefined;
   try {
-    await prepareLabDb(conn);
-    const current = copy ? (await getAdminDb(id))?.conn ?? null : null;
-    if (copy && current !== conn) copied = await copyInto(conn, current);
-    prepared = await prepareLabDb(conn, first ?? undefined);
+    await prepareLabDb({ conn });
+    const current = copy ? (await targetForCode(id)).where : null;
+    if (current && !("conn" in current && current.conn === conn)) copied = await copyInto({ conn }, current);
+    prepared = await prepareLabDb({ conn }, first ?? undefined);
   } catch (e) {
     return { ok: false, error: errOf(e) };
   }
-  if (!prepared.users) return { ok: false, error: "no_admin" };
+  if (!prepared.users && !allowNoAdmin) return { ok: false, error: "no_admin" };
   const err = await setAdminDb(id, conn, by);
   forgetAdminDb(id);
   return err ? { ok: false, error: err } : { ok: true, users: prepared.users, created: prepared.created, copied };

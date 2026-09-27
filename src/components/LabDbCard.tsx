@@ -18,7 +18,7 @@ export function LabDbCard({ host, by }: { host: string; by: "owner" | "lab" | ""
 
   async function run(op: "test" | "save" | "site") {
     if (op === "save" && !confirm("نقل لوحة الإدارة إلى هذه القاعدة؟ ستحتاج لتسجيل الدخول من جديد. البيانات الحالية لا تُنقل تلقائياً.")) return;
-    if (op === "site" && !confirm("إرجاع لوحة الإدارة إلى قاعدة الموقع؟ ستحتاج لتسجيل الدخول من جديد، وتبقى بيانات قاعدتك كما هي.")) return;
+    if (op === "site" && !confirm("إرجاع لوحة الإدارة إلى قسم مختبرك في قاعدة الموقع؟ ستحتاج لتسجيل الدخول من جديد، وتبقى بيانات قاعدتك كما هي.")) return;
     setBusy(true); setMsg(null);
     const r = op === "test" ? await testLabDb(conn) : await saveLabDb(op === "site" ? null : conn, op === "save" && copy);
     setBusy(false);
@@ -35,7 +35,7 @@ export function LabDbCard({ host, by }: { host: string; by: "owner" | "lab" | ""
         تُنشأ الجداول تلقائياً، ويُنسخ حسابك إليها إن كانت فارغة. يُحفظ الرابط مشفّراً على الخادم ولا يُعرض مرة أخرى.
       </p>
       <div className="mb-3 rounded-lg bg-canvas px-3 py-2 text-xs">
-        الحالية: {host ? <b dir="ltr">{host}</b> : <b>قاعدة الموقع المشتركة</b>}
+        الحالية: {host ? <b dir="ltr">{host}</b> : <b>قسم مستقل لمختبرك في قاعدة الموقع</b>}
         {by === "owner" && <span className="text-muted"> — ضبطها صاحب الرموز</span>}
       </div>
       {locked ? (
@@ -55,7 +55,7 @@ export function LabDbCard({ host, by }: { host: string; by: "owner" | "lab" | ""
           <div className="mt-3 flex flex-wrap gap-2">
             <button disabled={busy || (!conn.trim() && !host)} onClick={() => run("test")} className="rounded-lg border border-line px-4 py-2 text-sm hover:bg-canvas disabled:opacity-50">اختبار الاتصال</button>
             <button disabled={busy || !conn.trim()} onClick={() => run("save")} className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-50">حفظ ونقل اللوحة إليها</button>
-            {host && <button disabled={busy} onClick={() => run("site")} className="rounded-lg border border-red-200 px-4 py-2 text-sm text-red-700 hover:bg-red-50 disabled:opacity-50">إرجاع لقاعدة الموقع</button>}
+            {host && <button disabled={busy} onClick={() => run("site")} className="rounded-lg border border-red-200 px-4 py-2 text-sm text-red-700 hover:bg-red-50 disabled:opacity-50">إرجاع لقسم المختبر في قاعدة الموقع</button>}
           </div>
         </>
       )}

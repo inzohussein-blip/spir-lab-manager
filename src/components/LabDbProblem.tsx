@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { DatabaseZap } from "lucide-react";
 import { adminDbError } from "@/lib/db/labErrors";
+import { NeedsDbGate } from "./NeedsDbGate";
 
 /** Shown instead of the admin panel while the lab's own database does not answer. */
 export function LabDbProblem({ code, host }: { code: string; host: string }) {
+  if (code === "needs_db") return <NeedsDbGate />;
   return (
     <div className="flex min-h-screen items-center justify-center bg-canvas p-4">
       <div data-testid="lab-db-problem" className="w-full max-w-md rounded-2xl border border-line bg-surface p-7 text-center shadow-sm">

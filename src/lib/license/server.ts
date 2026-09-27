@@ -153,8 +153,11 @@ export interface OwnerPrefs {
   trialDays: number;
   /** A code is «قارب على الانتهاء» this many days before its end. */
   soonDays: number;
+  /** The full admin panel opens for a paid code only once it has a database of its own
+   *  (trial codes work in their own section of the site's database). */
+  adminNeedsOwnDb: boolean;
 }
-export const DEFAULT_PREFS: OwnerPrefs = { defaultDays: 365, defaultModules: [...DEFAULT_MODULES], trialDays: 7, soonDays: 14 };
+export const DEFAULT_PREFS: OwnerPrefs = { defaultDays: 365, defaultModules: [...DEFAULT_MODULES], trialDays: 7, soonDays: 14, adminNeedsOwnDb: true };
 const within = (v: unknown, min: number, max: number, dflt: number) => {
   const n = Math.round(Number(v));
   return Number.isFinite(n) && n >= min && n <= max ? n : dflt;
@@ -166,6 +169,7 @@ export function cleanPrefs(v: unknown): OwnerPrefs {
     defaultModules: Array.isArray(p.defaultModules) ? cleanModules(p.defaultModules) : [...DEFAULT_PREFS.defaultModules],
     trialDays: within(p.trialDays, 1, 60, DEFAULT_PREFS.trialDays),
     soonDays: within(p.soonDays, 1, 90, DEFAULT_PREFS.soonDays),
+    adminNeedsOwnDb: typeof p.adminNeedsOwnDb === "boolean" ? p.adminNeedsOwnDb : DEFAULT_PREFS.adminNeedsOwnDb,
   };
 }
 export async function getPrefs(): Promise<OwnerPrefs> {
@@ -610,6 +614,13 @@ export async function setAdminDb(id: string, conn: string | null, by: "owner" | 
     [id, JSON.stringify(sealText(JSON.stringify({ conn, by }), secret, adminDbAad(id))), JSON.stringify(info)]);
   await logEvent(id, "admin_db", `${info.host}${by === "lab" ? " (من المختبر)" : ""}`);
   return null;
+}
+
+/** Where a code's admin panel works (see lib/db/lab.ts): its own database, or — unless the owner
+ *  requires one for paid codes — its own section of the site's. */
+export async function adminDbRoute(id: string): Promise<{ conn: string | null; trial: boolean; requireOwn: boolean }> {
+  const [own, row, prefs] = await Promise.all([getAdminDb(id), getLicense(id), getPrefs()]);
+  return { conn: own?.conn ?? null, trial: !!row?.is_trial, requireOwn: prefs.adminNeedsOwnDb };
 }
 
 /** The last check of a code's admin-panel database (the owner's «فحص», or the panel in use). */

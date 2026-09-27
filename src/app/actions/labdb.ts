@@ -3,7 +3,7 @@
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { destroySession } from "@/lib/auth/session";
 import { queryOne } from "@/lib/db";
-import { labCodeId } from "@/lib/db/lab";
+import { labCodeId, targetForCode } from "@/lib/db/lab";
 import { linkAdminDb, resolveAdminConn, testAdminDb, type AdminDbResult } from "@/lib/license/adminDb";
 import { getAdminDb } from "@/lib/license/server";
 import { logAudit } from "@/lib/audit";
@@ -35,6 +35,9 @@ export async function saveLabDb(conn: string | null, copy = false): Promise<Admi
   if ("error" in a) return { ok: false, error: a.error };
   let r: AdminDbResult;
   if (conn === null) {
+    const { adminDbRoute } = await import("@/lib/license/server");
+    const route = await adminDbRoute(a.lid);
+    if (route.requireOwn && !route.trial) return { ok: false, error: "needs_db_rule" };
     await logAudit("settings.lab_db", "settings", null, { to: "site" });
     r = await linkAdminDb(a.lid, null, "lab");
   } else {
@@ -83,4 +86,15 @@ export async function importDefaultTests(): Promise<{ ok: true; added: number; t
   );
   await logAudit("tests.import_defaults", "test_catalog", null, { added: added?.n ?? 0 });
   return { ok: true, added: added?.n ?? 0, total: rows.length };
+}
+
+/** The panel's first screen for a code that needs a database of its own: the lab links one
+ *  (it then creates its first admin at the sign-in page). Only while the code has none. */
+export async function connectFromGate(conn: string): Promise<AdminDbResult> {
+  const lid = await labCodeId();
+  if (!lid) return { ok: false, error: "no_code" };
+  if ((await targetForCode(lid)).where) return { ok: false, error: "forbidden" };
+  const c = await resolveAdminConn(lid, conn);
+  if (!c) return { ok: false, error: "bad_config" };
+  return linkAdminDb(lid, c, "lab", null, false, true);
 }

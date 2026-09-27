@@ -18,7 +18,7 @@ const g = globalThis as unknown as { __labPools?: Map<string, { pool: Promise<Po
 const pools = (g.__labPools ??= new Map());
 
 export class LabDbError extends Error {
-  constructor(public code: "bad_url" | "private_host" | "unreachable" | "auth" | "tls" | "db", message: string) { super(message); }
+  constructor(public code: "bad_url" | "private_host" | "unreachable" | "auth" | "tls" | "db" | "needs_db", message: string) { super(message); }
 }
 
 /** Private, loopback and link-local addresses are refused (this server is not a way into its own
