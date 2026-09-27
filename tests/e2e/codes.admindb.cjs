@@ -14,6 +14,7 @@ const ROUTES = ['/', '/appointments', '/audit', '/calendar', '/insights', '/inve
   if (!PG) { console.log('SKIP codes.admindb.cjs — set E2E_PG_URL'); ok(!process.env.CI, 'E2E_PG_URL is set in CI'); return done(); }
   const db = await freshDb('admindb');
   const db2 = await freshDb('admindb2');
+  const db3 = await freshDb('admindb3');
   const pgPass = new URL(PG).password;
   const b = await launch();
   const errs = [];
@@ -66,8 +67,29 @@ const ROUTES = ['/', '/appointments', '/audit', '/calendar', '/insights', '/inve
   await card.locator('button[aria-label="قاعدة لوحة الإدارة"]').click();
   const modal = o.locator('[data-testid="admin-db-modal"]');
   const msg = () => modal.locator('[data-testid="admin-db-msg"]').innerText();
+  // One interface per provider: its steps, and advice on the link before it is tried.
+  const conn = modal.locator('input[aria-label="رابط قاعدة لوحة الإدارة"]');
+  const advice = () => modal.locator('[data-testid="conn-advice"]').innerText();
+  ok(await modal.locator('[data-provider]').count() === 4, 'the window offers Neon, Supabase, Railway and another PostgreSQL');
+  await modal.locator('[data-provider="neon"]').click();
+  ok((await modal.locator('[data-guide="neon"]').innerText()).includes('Connection pooling'), 'Neon: its own steps');
+  await conn.fill('postgresql://u:p@ep-cool-1.us-east-2.aws.neon.tech/neondb?sslmode=require');
+  ok((await advice()).includes('-pooler'), 'Neon: a direct (not pooled) link is flagged');
+  await modal.locator('[data-provider="supabase"]').click();
+  ok((await modal.locator('[data-guide="supabase"]').innerText()).includes('Transaction pooler'), 'Supabase: its own steps');
+  await conn.fill('postgresql://postgres:[YOUR-PASSWORD]@db.abcdefgh.supabase.co:5432/postgres');
+  ok((await advice()).includes('IPv6') && (await advice()).includes('[YOUR-PASSWORD]'), 'Supabase: the direct link and the missing password are flagged');
+  await modal.locator('[data-provider="railway"]').click();
+  await conn.fill('postgresql://postgres:x@postgres.railway.internal:5432/railway');
+  ok((await advice()).includes('DATABASE_PUBLIC_URL'), 'Railway: the internal address is flagged');
+  await modal.locator('[data-provider="postgres"]').click();
+  await modal.locator('button:has-text("إدخال الحقول")').click();
+  await modal.locator('input[aria-label="الخادم"]').fill('db.example.org');
+  await modal.locator('input[aria-label="اسم المستخدم"]').fill('lab');
+  await modal.locator('input[aria-label="كلمة المرور"]').fill('p@ss');
+  ok((await conn.inputValue()).startsWith('postgresql://lab:p%40ss@db.example.org:5432/'), 'another PostgreSQL: the fields write the link');
   const bad = new URL(db.url); bad.password = 'wrong-pass';
-  await modal.locator('input[aria-label="رابط قاعدة لوحة الإدارة"]').fill(bad.toString());
+  await conn.fill(bad.toString());
   await modal.locator('button:has-text("اختبار الاتصال")').click();
   ok(((await waitFor(() => msg(), 15000)) || '').includes('تعذّر الدخول'), 'wrong password → «تعذّر الدخول»');
   await modal.locator('input[aria-label="رابط قاعدة لوحة الإدارة"]').fill(db.url);
@@ -122,21 +144,86 @@ const ROUTES = ['/', '/appointments', '/audit', '/calendar', '/insights', '/inve
   await p.goto(B + '/patients');
   ok((await p.content()).includes('محمد عبدالله السالم'), 'and sees the site\'s data again');
 
-  // ── «قواعد البيانات»: every client's admin-panel database in one place ──
+  // ── «قواعد البيانات»: every client's admin-panel database in one place, a tab per provider ──
   await o.goto(B + '/licenses#databases'); await o.reload(); await o.waitForSelector('[data-testid="db-list"]', { timeout: 15000 });
   const item = o.locator(`li[data-db-lab="${LAB}"]`);
   ok((await item.locator('[data-testid="db-state"]').innerText()).includes('قاعدة الموقع'), 'databases section: the client is listed, on the site\'s database');
-  await item.locator('button:has-text("ربط قاعدة")').click();
+  ok(await o.locator('[data-provider-tab]').count() === 5, 'databases section: tabs — all, Neon, Supabase, Railway, other PostgreSQL');
+  for (const [t, word] of [['neon', 'console.neon.tech'], ['supabase', 'Transaction pooler'], ['railway', 'DATABASE_PUBLIC_URL']]) {
+    await o.click(`[data-provider-tab="${t}"]`);
+    ok((await o.locator('[data-testid="provider-panel"]').innerText()).includes(word), `${t} tab: its own steps to link a client`);
+  }
+  await o.click('[data-provider-tab="postgres"]');
+  const fromTab = await o.locator('select[aria-label="العميل"] option', { hasText: LAB }).getAttribute('value');
+  await o.locator('select[aria-label="العميل"]').selectOption(fromTab);
+  await o.click('button:has-text("متابعة الربط")');
+  ok(await modal.locator('[data-provider="postgres"][aria-selected="true"]').count() === 1, 'linking from a provider tab opens that provider\'s interface');
   await modal.locator('input[aria-label="رابط قاعدة لوحة الإدارة"]').fill(db.url);
   await modal.locator('button:has-text("حفظ")').click();
-  await waitFor(async () => (await item.locator('[data-testid="db-state"]').innerText()).includes('قاعدة خاصة'), 15000);
-  ok((await item.locator('[data-testid="db-state"]').innerText()).includes('ضبطتها أنت'), 'databases section: linked from here (the database already has its admin)');
+  await waitFor(async () => (await item.locator('[data-testid="db-state"]').innerText()).includes('ضبطتها أنت'), 15000);
+  ok((await item.locator('[data-testid="db-state"]').innerText()).includes('PostgreSQL آخر'), 'databases section: linked, listed under its provider');
+  ok((await item.locator('[data-testid="db-check"]').innerText()).includes('تعمل'), 'the link starts as a successful check');
   await item.locator('button:has-text("فحص")').click();
-  ok(((await waitFor(async () => { const t = await item.locator('[data-testid="db-check"]').innerText().catch(() => ''); return t.includes('تعمل') && t; }, 20000)) || '').includes('1 مستخدم'), 'databases section: «فحص» — works, 1 user');
+  ok(((await waitFor(async () => { const t = await item.locator('[data-testid="db-check"]').innerText().catch(() => ''); return t.includes('مستخدم') && t; }, 20000)) || '').includes('1 مستخدم'), 'databases section: «فحص» — works, 1 user');
+
+  // The owner sets a new password for the lab's admin (in the lab's own database).
+  await item.locator('button:has-text("كلمة مرور المدير")').click();
+  const rm = o.locator('[data-testid="reset-admin-modal"]');
+  await rm.locator('input[aria-label="اسم مستخدم المدير"]').fill('labadmin');
+  await rm.locator('input[aria-label="كلمة المرور الجديدة"]').fill('new-pass-2');
+  await rm.locator('input[aria-label="تأكيد كلمة المرور"]').fill('new-pass-2');
+  await rm.locator('button:has-text("حفظ كلمة المرور")').click();
+  ok(((await waitFor(() => rm.locator('[data-testid="reset-admin-msg"]').innerText().catch(() => ''), 15000)) || '').includes('تغيّرت كلمة المرور'), 'owner: the lab admin\'s password changed');
+  await rm.locator('button:has-text("إغلاق")').click();
+  await p.goto(B + '/'); await p.waitForURL((u) => u.pathname === '/login', { timeout: 15000 }).catch(() => {});
+  ok(!(await signIn('labadmin', 'lab-pass-1')), 'the old password no longer opens the panel');
+  ok(await signIn('labadmin', 'new-pass-2'), 'the new password does');
+
+  // Settings in the panel: the built-in test list for a new database.
+  await p.goto(B + '/settings'); await p.waitForSelector('[data-testid="import-tests-card"]', { timeout: 15000 });
+  await p.click('button:has-text("استيراد قائمة الفحوصات الافتراضية")');
+  const imported = (await waitFor(() => p.locator('[data-testid="import-tests-msg"]').innerText().catch(() => ''), 20000)) || '';
+  const nTests = (await db.query(`select count(*)::int as n from test_catalog`))[0].n;
+  ok(imported.includes('أُضيف') && nTests >= 40, `default tests imported into the lab's database (${nTests})`);
+  await p.click('button:has-text("استيراد قائمة الفحوصات الافتراضية")');
+  ok(((await waitFor(async () => { const t = await p.locator('[data-testid="import-tests-msg"]').innerText().catch(() => ''); return t.includes('أُضيف 0') && t; }, 20000)) || '').length > 0
+    && (await db.query(`select count(*)::int as n from test_catalog`))[0].n === nTests, 'importing again adds nothing (same codes kept)');
+
+  // The lab's database stops answering mid-use: a plain message, and the owner's list shows it.
+  const dbName = new URL(db.url).pathname.slice(1);
+  const { Client } = require('pg');
+  const su = new Client({ connectionString: PG }); await su.connect();
+  await su.query(`alter database ${dbName} allow_connections false`);
+  await su.query(`select pg_terminate_backend(pid) from pg_stat_activity where datname = $1`, [dbName]);
+  await p.goto(B + '/patients');
+  ok(!!(await waitFor(() => p.locator('[data-testid="lab-db-down"], [data-testid="lab-db-problem"]').count(), 20000)), 'database down mid-use: «قاعدة بيانات المختبر لا تستجيب»');
+  await o.goto(B + '/licenses#databases'); await o.reload(); await o.waitForSelector('[data-testid="db-list"]', { timeout: 15000 });
+  ok(((await waitFor(async () => { const t = await item.locator('[data-testid="db-check"]').innerText(); return t.includes('لا تستجيب') && t; }, 30000)) || '').length > 0, 'owner\'s list: the database is marked as not answering');
+  ok((await o.locator('[data-testid="badge-databases"]').innerText()) === '1' && (await o.locator('[data-testid="db-down-count"]').innerText()) === '1', 'side menu and summary count it');
+  await su.query(`alter database ${dbName} allow_connections true`); await su.end();
+  await p.goto(B + '/patients'); await p.waitForTimeout(500);
+  ok(await p.locator('[data-testid="lab-db-down"], [data-testid="lab-db-problem"]').count() === 0, 'back up: the panel works again');
+  await item.locator('button:has-text("فحص")').click();
+  await waitFor(async () => (await item.locator('[data-testid="db-check"]').innerText()).includes('تعمل'), 20000);
+  ok(await o.locator('[data-testid="badge-databases"]').count() === 0, 'checked again: no longer counted');
+  errs.length = 0; // the error page above is expected
+
   await item.locator('button:has-text("تغيير")').click();
   await modal.locator('button:has-text("إرجاع لقاعدة الموقع")').click();
   await waitFor(async () => (await item.locator('[data-testid="db-state"]').innerText()).includes('قاعدة الموقع'), 15000);
   ok((await item.locator('[data-testid="db-state"]').innerText()).includes('قاعدة الموقع'), 'databases section: back to the site\'s database');
+  await p.goto(B + '/'); await p.waitForURL((u) => u.pathname === '/login', { timeout: 15000 }).catch(() => {});
+  ok(await signIn('admin', 'admin123'), 'the device signs in on the site\'s database again');
+
+  // Linking with «انسخ بيانات لوحته الحالية»: the site's data comes along.
+  const cp = await api({ op: 'admin_db_set', id: c.row.id, conn: db3.url, copy: true });
+  ok(cp.ok && cp.copied && cp.copied.rows > 0, `copy: ${cp.copied ? cp.copied.rows + ' records from ' + cp.copied.tables + ' tables' : JSON.stringify(cp)}`);
+  const p3 = await db3.query(`select count(*)::int as n from patients where full_name = 'محمد عبدالله السالم'`);
+  const a3 = await db3.query(`select count(*)::int as n from app_users where username = 'admin'`);
+  ok(p3[0].n === 1 && a3[0].n === 1, 'the lab\'s new database has the site\'s patients and accounts');
+  const again = await api({ op: 'admin_db_set', id: c.row.id, conn: db3.url, copy: true });
+  ok(again.ok && !again.copied, 'saving the same database again copies nothing');
+  ok((await api({ op: 'admin_db_set', id: c.row.id, conn: null })).ok, 'back on the site\'s database');
   await p.goto(B + '/patients');
   ok((await p.content()).includes('محمد عبدالله السالم'), 'the device is on the site\'s database again');
 
@@ -159,6 +246,6 @@ const ROUTES = ['/', '/appointments', '/audit', '/calendar', '/insights', '/inve
 
   ok(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.join(' | ') : ''));
   await b.close();
-  await db.drop().catch(() => {}); await db2.drop().catch(() => {});
+  await db.drop().catch(() => {}); await db2.drop().catch(() => {}); await db3.drop().catch(() => {});
   done();
 })().catch((e) => { console.error(e); process.exit(1); });

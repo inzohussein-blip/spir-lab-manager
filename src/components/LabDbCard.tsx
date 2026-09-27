@@ -4,12 +4,14 @@ import { useState } from "react";
 import { Server } from "lucide-react";
 import { saveLabDb, testLabDb } from "@/app/actions/labdb";
 import { adminDbError } from "@/lib/db/labErrors";
-
-const field = "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
+import { providerOf, type ProviderId } from "@/lib/db/providers";
+import { ConnInput, ProviderGuide, ProviderPicker } from "@/components/DbProviders";
 
 /** Settings → «قاعدة بيانات المختبر الخاصة»: the admin panel on the lab's own PostgreSQL. */
 export function LabDbCard({ host, by }: { host: string; by: "owner" | "lab" | "" }) {
   const [conn, setConn] = useState("");
+  const [provider, setProvider] = useState<ProviderId>(host ? providerOf(host) : "neon");
+  const [copy, setCopy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const locked = by === "owner";
@@ -18,7 +20,7 @@ export function LabDbCard({ host, by }: { host: string; by: "owner" | "lab" | ""
     if (op === "save" && !confirm("نقل لوحة الإدارة إلى هذه القاعدة؟ ستحتاج لتسجيل الدخول من جديد. البيانات الحالية لا تُنقل تلقائياً.")) return;
     if (op === "site" && !confirm("إرجاع لوحة الإدارة إلى قاعدة الموقع؟ ستحتاج لتسجيل الدخول من جديد، وتبقى بيانات قاعدتك كما هي.")) return;
     setBusy(true); setMsg(null);
-    const r = op === "test" ? await testLabDb(conn) : await saveLabDb(op === "site" ? null : conn);
+    const r = op === "test" ? await testLabDb(conn) : await saveLabDb(op === "site" ? null : conn, op === "save" && copy);
     setBusy(false);
     if (!r.ok) { setMsg({ ok: false, text: adminDbError(r.error) }); return; }
     if (op === "test") { setMsg({ ok: true, text: `✓ الاتصال يعمل والجداول جاهزة — المستخدمون فيها: ${r.users}${r.users ? "" : " (سيُنسخ حسابك إليها عند الحفظ)"}` }); return; }
@@ -40,8 +42,15 @@ export function LabDbCard({ host, by }: { host: string; by: "owner" | "lab" | ""
         <p className="text-xs text-muted">لتغييرها تواصل مع صاحب الرموز.</p>
       ) : (
         <>
-          <input dir="ltr" aria-label="رابط قاعدة المختبر" value={conn} onChange={(e) => setConn(e.target.value)}
-            placeholder={host ? `(محفوظ: ${host} — اتركه فارغاً للإبقاء)` : "postgresql://user:password@host:5432/db"} className={field} />
+          <div className="space-y-3">
+            <ProviderPicker value={provider} onChange={setProvider} />
+            <ProviderGuide id={provider} />
+            <ConnInput provider={provider} value={conn} onChange={setConn} label="رابط قاعدة المختبر" savedHost={host || undefined} />
+            <label className="flex items-start gap-2 rounded-lg border border-line p-3 text-xs">
+              <input type="checkbox" checked={copy} onChange={(e) => setCopy(e.target.checked)} aria-label="نسخ بيانات قاعدة الموقع" className="mt-0.5" />
+              <span><b className="text-sm">انسخ بيانات لوحتي الحالية إليها</b> — ليكمل المختبر من حيث توقّف. السجلات الموجودة في القاعدة الجديدة لا تتغيّر.</span>
+            </label>
+          </div>
           {msg && <p data-testid="lab-db-msg" className={`mt-2 text-sm ${msg.ok ? "text-teal-700" : "text-red-700"}`}>{msg.text}</p>}
           <div className="mt-3 flex flex-wrap gap-2">
             <button disabled={busy || (!conn.trim() && !host)} onClick={() => run("test")} className="rounded-lg border border-line px-4 py-2 text-sm hover:bg-canvas disabled:opacity-50">اختبار الاتصال</button>

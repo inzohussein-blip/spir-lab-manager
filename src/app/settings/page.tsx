@@ -6,6 +6,8 @@ import { labCodeId } from "@/lib/db/lab";
 import { getAdminDb } from "@/lib/license/server";
 import { connHost } from "@/lib/sync/protocol";
 import { LabDbCard } from "@/components/LabDbCard";
+import { ImportTestsCard } from "@/components/ImportTestsCard";
+import { queryOne } from "@/lib/db";
 
 const field = "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
 
@@ -36,6 +38,7 @@ export default async function SettingsPage() {
   const lid = await labCodeId();
   const own = lid ? await getAdminDb(lid).catch(() => null) : null;
   const hostedDb = !!process.env.DATABASE_URL || !!own;
+  const tests = (await queryOne<{ n: number }>(`select count(*)::int as n from test_catalog`).catch(() => null))?.n ?? 0;
   const aiOn = !!process.env.ANTHROPIC_API_KEY;
   const waCloud = cloudApiConfigured();
 
@@ -68,6 +71,8 @@ export default async function SettingsPage() {
         />
         <Row label="النموذج" value="Postgres" />
       </Card>
+
+      <ImportTestsCard count={tests} />
 
       {lid && <LabDbCard host={own ? connHost(own.conn) : ""} by={own?.by ?? ""} />}
 

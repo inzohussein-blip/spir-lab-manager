@@ -7,7 +7,7 @@ import { cookies } from "next/headers";
 import { adminCookieLid } from "@/lib/license/adminCookie";
 import { ADMIN_LICENSE_COOKIE } from "@/lib/license/modules";
 import { LabDbError, checkHost, sslFor, toLabError } from "@/lib/sync/pg";
-import type { Db } from "./index";
+import { getMainDb, type Db } from "./index";
 
 /**
  * A lab's own database for the full admin panel («قاعدة لوحة الإدارة»).
@@ -37,6 +37,10 @@ const g = globalThis as unknown as {
 };
 const configs = (g.__adminDbCfg ??= new Map());
 const pools = (g.__adminDbPools ??= new Map());
+/** When a lab's database last dropped a query for connection trouble (by connection-string hash). */
+const failures = ((g as { __adminDbFail?: Map<string, number> }).__adminDbFail ??= new Map());
+/** When a lab's database state was last written to its code (so the owner sees it), by code. */
+const reported = ((g as { __adminDbReported?: Map<string, { at: number; ok: boolean }> }).__adminDbReported ??= new Map());
 
 /** How long a code's setting is trusted before it is read again (every server instance). */
 const CONFIG_TTL_MS = 20_000;
@@ -171,10 +175,97 @@ export async function labDb(conn: string): Promise<Db> {
         // Connection trouble is told apart from an error in the query itself.
         const e = toLabError(err);
         if (e.code === "db") throw err;
+        failures.set(hash(conn), Date.now());
         throw e;
       }
     },
   };
+}
+
+/** Set (or create) an admin account in a lab's database — the owner's way back in for a lab. */
+export async function resetLabAdmin(conn: string, username: string, password: string): Promise<{ created: boolean }> {
+  try {
+    const pool = await labPool(conn);
+    const r = await pool.query(
+      `insert into app_users (username, password_hash, full_name, role, is_active)
+       values ($1, crypt($2, gen_salt('bf')), 'مدير المختبر', 'admin', true)
+       on conflict (username) do update set password_hash = excluded.password_hash, role = 'admin', is_active = true
+       returning (xmax = 0) as created`,
+      [username, password]
+    );
+    return { created: !!r.rows[0]?.created };
+  } catch (err) {
+    throw toLabError(err);
+  }
+}
+
+/** Tables that belong to the codes or to the machinery, never copied between databases. */
+const NOT_COPIED = /^(lab_admin_migrations|lab_sync_records|station_licenses|license_.*)$/;
+const COPY_BATCH = 500;
+
+/**
+ * Copy what the panel's current database holds (the site's, or the lab's previous one) into a
+ * lab's database (records already there are kept).
+ * Tables go parents first; the lab's own triggers (result flags, stock deduction) are paused so
+ * copied results do not act twice. All or nothing.
+ */
+export async function copyInto(conn: string, fromConn: string | null): Promise<{ tables: number; rows: number }> {
+  const pool = await labPool(conn);
+  const main = fromConn ? await labDb(fromConn) : await getMainDb();
+  const tablesOf = async (q: (sql: string) => Promise<{ rows: Record<string, unknown>[] }>) =>
+    new Set((await q(`select table_name as t from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE'`)).rows.map((r) => String(r.t)));
+  const colsOf = async (q: (sql: string, p: unknown[]) => Promise<{ rows: Record<string, unknown>[] }>, t: string) =>
+    (await q(`select column_name as c from information_schema.columns where table_schema = 'public' and table_name = $1 order by ordinal_position`, [t])).rows.map((r) => String(r.c));
+  const mainQ = (sql: string, p?: unknown[]) => main.query<Record<string, unknown>>(sql, p);
+  const labQ = (sql: string, p?: unknown[]) => pool.query(sql, p);
+
+  const inMain = await tablesOf(mainQ);
+  const tables = [...(await tablesOf(labQ))].filter((t) => inMain.has(t) && !NOT_COPIED.test(t));
+  // Parents before children (foreign keys between these tables).
+  const edges = (await labQ(`select conrelid::regclass::text as child, confrelid::regclass::text as parent
+    from pg_constraint where contype = 'f' and connamespace = 'public'::regnamespace`)).rows
+    .map((r) => [String(r.child).replace(/^public\./, ""), String(r.parent).replace(/^public\./, "")] as const);
+  const order: string[] = [];
+  const seen = new Set<string>();
+  const visit = (t: string, path: Set<string>) => {
+    if (seen.has(t) || path.has(t)) return;
+    path.add(t);
+    for (const [c, p] of edges) if (c === t && p !== t && tables.includes(p)) visit(p, path);
+    path.delete(t);
+    seen.add(t); order.push(t);
+  };
+  for (const t of [...tables].sort()) visit(t, new Set());
+
+  const client = await pool.connect();
+  let rows = 0;
+  try {
+    await client.query("begin");
+    for (const t of order) await client.query(`alter table "${t}" disable trigger user`);
+    for (const t of order) {
+      const labCols = new Set(await colsOf(labQ, t));
+      const cols = (await colsOf(mainQ, t)).filter((c) => labCols.has(c));
+      if (!cols.length) continue;
+      const list = cols.map((c) => `"${c}"`).join(", ");
+      for (let off = 0; ; off += COPY_BATCH) {
+        const page = (await main.query<Record<string, unknown>>(`select ${list} from "${t}" order by 1 limit ${COPY_BATCH} offset ${off}`)).rows;
+        if (!page.length) break;
+        const r = await client.query(
+          `insert into "${t}" (${list}) select ${list} from jsonb_populate_recordset(null::"${t}", $1::jsonb) on conflict do nothing`,
+          [JSON.stringify(page)]
+        );
+        rows += r.rowCount ?? 0;
+        if (page.length < COPY_BATCH) break;
+      }
+    }
+    for (const t of order) await client.query(`alter table "${t}" enable trigger user`);
+    await client.query("commit");
+  } catch (err) {
+    await client.query("rollback").catch(() => undefined);
+    throw toLabError(err);
+  } finally {
+    client.release();
+  }
+  return { tables: order.length, rows };
 }
 
 /** Prepare a database for a lab (tables, and the first admin when it has no users yet). */
@@ -212,11 +303,33 @@ export async function labDbProblem(): Promise<{ code: LabDbError["code"]; host: 
   let t: LabDbTarget | null = null;
   try {
     t = await labTarget();
-    if (t) await labPool(t.conn);
+    if (!t) return null;
+    const pool = await labPool(t.conn);
+    // After a recent drop, ask the database again rather than trust the pool.
+    const k = hash(t.conn);
+    if (Date.now() - (failures.get(k) ?? 0) < 60_000) {
+      await pool.query("select 1");
+      failures.delete(k);
+    }
+    void report(t.lid, true, "");
     return null;
   } catch (err) {
     let host = "";
     try { host = t ? new URL(t.conn).hostname : ""; } catch { /* none */ }
-    return { code: toLabError(err).code, host };
+    const code = toLabError(err).code;
+    if (t) void report(t.lid, false, code);
+    return { code, host };
   }
+}
+
+/** Tell the owner's list how a lab's database is doing: at once when it changes, otherwise at
+ *  most every 30 minutes (per server instance). Never fails the request. */
+async function report(lid: string, ok: boolean, error: string) {
+  const last = reported.get(lid);
+  if (last && last.ok === ok && Date.now() - last.at < 30 * 60_000) return;
+  reported.set(lid, { at: Date.now(), ok });
+  try {
+    const { recordAdminDbCheck } = await import("@/lib/license/server");
+    await recordAdminDbCheck(lid, ok, error);
+  } catch { /* the owner's list is only a view */ }
 }

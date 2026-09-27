@@ -8,7 +8,7 @@ import {
 import { LabDbError, probe } from "@/lib/sync/pg";
 import { SupaError, supaProbe, supaSignIn } from "@/lib/sync/supabase";
 import { connHost, type SyncConfig } from "@/lib/sync/protocol";
-import { cleanFirstAdmin, linkAdminDb, resolveAdminConn, testAdminDb } from "@/lib/license/adminDb";
+import { checkSavedAdminDb, cleanFirstAdmin, linkAdminDb, resetAdminPassword, resolveAdminConn, testAdminDb } from "@/lib/license/adminDb";
 import { passwordMatches, startOwnerSession, endOwnerSession, isOwner, ipOf } from "@/lib/license/owner";
 
 /** Owner endpoints for the code manager (/licenses). */
@@ -125,13 +125,22 @@ export async function POST(req: NextRequest) {
       const r = await linkAdminDb(id, null, "owner");
       return json(r, r.ok ? 200 : 400);
     }
+    // «فحص» of the saved database: the result is kept for the list.
+    if (b.op === "admin_db_test" && !b.from && !b.fromSync && !String(b.conn ?? "").trim()) {
+      const r = await checkSavedAdminDb(id);
+      return json(r, r.ok ? 200 : 502);
+    }
     const conn = b.from ? (await getAdminDb(String(b.from)))?.conn ?? null : await resolveAdminConn(id, b.conn, !!b.fromSync);
     if (!conn) return json({ ok: false, error: "bad_config" }, 400);
     if (b.op === "admin_db_test") { const r = await testAdminDb(conn); return json(r, r.ok ? 200 : 502); }
     const first = cleanFirstAdmin(b.first);
     if (first === "bad") return json({ ok: false, error: "bad_account" }, 400);
-    const r = await linkAdminDb(id, conn, "owner", first);
+    const r = await linkAdminDb(id, conn, "owner", first, b.copy === true);
     return json(r, r.ok ? 200 : r.error === "no_admin" ? 409 : 502);
+  }
+  if (b.op === "admin_db_reset") {
+    const r = await resetAdminPassword(String(b.id ?? ""), b.account);
+    return json(r, r.ok ? 200 : 400);
   }
   return json({ ok: false, error: "bad_request" }, 400);
 }

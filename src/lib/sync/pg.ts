@@ -81,6 +81,8 @@ export function toLabError(err: unknown): LabDbError {
   if (e?.code === "28P01" || e?.code === "28000" || /password authentication/i.test(msg)) return new LabDbError("auth", msg);
   if (/self[- ]signed|certificate|does not support SSL|SSL|TLS/i.test(msg)) return new LabDbError("tls", msg);
   if (/ECONNREFUSED|ENOTFOUND|ETIMEDOUT|timeout|EAI_AGAIN|ECONNRESET/i.test(msg) || e?.code?.startsWith?.("E")) return new LabDbError("unreachable", msg);
+  // The server is there but not serving this database (shut down, dropped, closed to connections, full).
+  if (/^(08|57P0[1-3]|3D000|53300)/.test(e?.code ?? "") || /Connection terminated|not currently accepting connections/i.test(msg)) return new LabDbError("unreachable", msg);
   return new LabDbError("db", msg);
 }
 
