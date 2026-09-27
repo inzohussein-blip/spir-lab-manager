@@ -1,12 +1,14 @@
 "use client";
 
+import { SyncPanel } from "@/components/local/SyncPanel";
 import { kvFlush } from "@/lib/local/kv";
 import { useEffect, useRef, useState } from "react";
-import { Settings, Check, Image as ImageIcon, Download, Upload, Trash2, Stethoscope, Plus, Pencil, X, Smartphone, History, ListCollapse, ClipboardList, QrCode as QrCodeIcon } from "lucide-react";
+import { Settings, Check, Image as ImageIcon, Download, Upload, Trash2, Stethoscope, Plus, Pencil, X, Smartphone, History, ListCollapse, ClipboardList, QrCode as QrCodeIcon, Hash } from "lucide-react";
 import { labQrCode, QR_TITLE_DEFAULT, QR_HINT_DEFAULT } from "@/lib/station/labQr";
 import { LabQrCard } from "@/components/station/ReportSheet";
 import {
   getSettings, saveSettings, normalizeUrl, exportBackup, importBackup, getDoctors, saveDoctors, markBackupNow, daysSinceBackup, getVisits, storageUsage, requestPersistentStorage, uid, type StorageUsage,
+  getDeviceTag, setDeviceTag,
   type StationSettings, type StationDoctor,
 } from "@/lib/station/store";
 import { InstallButton } from "@/components/station/InstallButton";
@@ -35,10 +37,12 @@ export default function StationSettingsPage() {
   const [hasData, setHasData] = useState(false);
   const [usage, setUsage] = useState<StorageUsage | null>(null);
   const [persisted, setPersisted] = useState<boolean | null>(null);
+  const [tag, setTag] = useState("");
+  const [tagSaved, setTagSaved] = useState(false);
   const overdue = hasData && (since === null || since >= 7);
 
   useEffect(() => {
-    setS(getSettings()); setDoctors(getDoctors());
+    setS(getSettings()); setDoctors(getDoctors()); setTag(getDeviceTag());
     setSince(daysSinceBackup()); setHasData(getVisits().length > 0);
     storageUsage().then(setUsage);
     requestPersistentStorage().then(setPersisted);
@@ -446,6 +450,23 @@ export default function StationSettingsPage() {
         </p>
         {msg && <p className="mt-1 text-xs text-muted">{msg}</p>}
       </div>
+
+      {/* This device's letter in its sample numbers (kept on this device only) */}
+      <div className="mt-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]" data-testid="device-tag">
+        <div className="mb-1 flex items-center gap-2 text-sm font-semibold"><Hash className="size-4" /> حرف هذا الجهاز في رقم العينة</div>
+        <p className="mb-3 text-xs text-muted">
+          اختياري، لمختبر فيه أكثر من جهاز: لكل جهاز حرفه فلا يتكرر رقم العينة حتى لو عملت الأجهزة بدون إنترنت في الوقت نفسه. يبقى على هذا الجهاز فقط.
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <input value={tag} onChange={(e) => { setTag(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 2)); setTagSaved(false); }}
+            dir="ltr" aria-label="حرف الجهاز" placeholder="A" className="w-20 rounded-lg border border-line bg-surface px-3 py-2 text-center font-mono text-sm uppercase outline-none focus:border-brand" />
+          <button onClick={() => { setDeviceTag(tag); setTagSaved(true); }} className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white hover:bg-brand-dark"><Check className="size-4" /> حفظ</button>
+          <span className="text-xs text-muted">مثال: <span dir="ltr" className="font-mono">LAB-{new Date().toLocaleDateString("en-CA").replace(/-/g, "")}-{tag}001</span></span>
+          {tagSaved && <span className="text-xs text-brand-dark">تم الحفظ.</span>}
+        </div>
+      </div>
+
+      <SyncPanel />
 
       {/* Install as app (PWA) — Lab Station only */}
       <div className="mt-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">

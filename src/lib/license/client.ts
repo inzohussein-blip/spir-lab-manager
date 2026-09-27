@@ -5,6 +5,7 @@
  */
 import { ACT_KEY, ACTIVATION_SCRIPT } from "@/lib/local/activation";
 import type { LicenseModule, LicensePayload } from "./modules";
+import type { DeviceSync } from "@/lib/sync/protocol";
 
 const DEVICE_KEY = "local.device.v1";
 const LIC_KEY = "local.license.v1";
@@ -33,6 +34,8 @@ interface Stored {
   blocked?: { error: string; at: number };
   /** The app version last reported to the server — a new version reports at once. */
   version?: string;
+  /** The lab's own database, when the code is linked to one (see lib/sync). */
+  sync?: DeviceSync | null;
 }
 
 export type LicenseState =
@@ -133,8 +136,8 @@ export async function evaluate(module?: LicenseModule): Promise<LicenseState> {
   return { kind: "need" };
 }
 
-function store(d: { token: string; pub: JsonWebKey; now?: number; message?: string }) {
-  write(LIC_KEY, JSON.stringify({ token: d.token, pub: d.pub, checkedAt: Date.now(), message: d.message || "", version: APP_VERSION } satisfies Stored));
+function store(d: { token: string; pub: JsonWebKey; now?: number; message?: string; sync?: DeviceSync | null }) {
+  write(LIC_KEY, JSON.stringify({ token: d.token, pub: d.pub, checkedAt: Date.now(), message: d.message || "", version: APP_VERSION, sync: d.sync ?? null } satisfies Stored));
   write(ACT_KEY, "activated");
   if (d.now) write(SEEN_KEY, String(d.now)); // the server's clock resets a wrongly set one
 }
@@ -159,9 +162,9 @@ export async function activateCode(code: string): Promise<ActivateResult> {
 /** Refresh from the server when online (at most every few hours unless forced, or at once after
  *  an app update so the owner sees the new version). A server that is down, slow or answering
  *  with an error changes nothing — only a real refusal (stopped, expired, moved, deleted) locks. */
-export async function refreshLicense(force = false): Promise<void> {
+export async function refreshLicense(force = false, maxAge = REFRESH_MS): Promise<void> {
   const s = readJson<Stored>(LIC_KEY);
-  if (!s || (!force && Date.now() - s.checkedAt < REFRESH_MS && s.version === APP_VERSION)) return;
+  if (!s || (!force && Date.now() - s.checkedAt < maxAge && s.version === APP_VERSION)) return;
   const p = await verify(s);
   if (!p) return;
   try {
@@ -180,4 +183,17 @@ export async function refreshLicense(force = false): Promise<void> {
 /** The provider's current note for this lab (empty when none). */
 export function providerMessage(): string {
   return readJson<Stored>(LIC_KEY)?.message?.trim() ?? "";
+}
+
+/** The lab's database this code is linked to (set in /licenses, or by the lab from its settings). */
+export function licenseSync(): DeviceSync | null {
+  const s = readJson<Stored>(LIC_KEY);
+  return s && !s.blocked ? s.sync ?? null : null;
+}
+/** Who this device is to the server (for the lab-database calls): its code's id and device id. */
+export async function licenseIdentity(): Promise<{ lid: string; device: string } | null> {
+  const s = readJson<Stored>(LIC_KEY);
+  if (!s || s.blocked) return null;
+  const p = await verify(s);
+  return p && p.dev === deviceId() ? { lid: p.lid, device: p.dev } : null;
 }

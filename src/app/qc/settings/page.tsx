@@ -1,5 +1,6 @@
 "use client";
 
+import { SyncPanel } from "@/components/local/SyncPanel";
 import { ThemeCard } from "@/components/local/LocalTheme";
 import { THEME_KEYS } from "@/lib/local/theme";
 import { useEffect, useRef, useState } from "react";
@@ -60,6 +61,7 @@ export default function QcSettingsPage() {
         </div>
         {msg && <p className="mt-2 text-xs text-brand-dark">{msg}</p>}
       </div>
+      <SyncPanel />
     </div>
   );
 }

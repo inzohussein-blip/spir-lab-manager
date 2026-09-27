@@ -4,8 +4,8 @@
 const { spawnSync } = require('node:child_process');
 const path = require('node:path');
 const SUITES = {
-  plain: ['station.entry.cjs', 'station.storage.cjs', 'station.offline.cjs', 'station.outage.cjs', 'station.options.cjs', 'station.forms.cjs', 'stations.flows.cjs', 'pages.crawl.cjs', 'admin.crawl.cjs'],
-  codes: ['codes.core.cjs', 'codes.manager.cjs', 'codes.2fa.cjs', 'codes.offline.cjs'],
+  plain: ['station.entry.cjs', 'station.storage.cjs', 'station.offline.cjs', 'station.outage.cjs', 'station.options.cjs', 'station.forms.cjs', 'stations.flows.cjs', 'pages.crawl.cjs', 'admin.crawl.cjs', 'sync.supabase.cjs', 'training.images.cjs'],
+  codes: ['codes.core.cjs', 'codes.manager.cjs', 'codes.2fa.cjs', 'codes.offline.cjs', 'codes.sync.cjs'],
 };
 // A file that hangs is stopped and counted as failed, so the other files still run.
 const LIMIT_MIN = 10;

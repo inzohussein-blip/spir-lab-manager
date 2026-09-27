@@ -17,6 +17,8 @@ export interface MediaRecord {
 }
 export type MediaMeta = Omit<MediaRecord, "blob"> & { size: number; type: string };
 
+import { isStaticImage } from "./staticImages";
+
 const DB_NAME = "training-media";
 const STORE = "images";
 
@@ -101,6 +103,7 @@ export async function deleteImage(id: string): Promise<void> {
 // ── Object-URL cache for <img> display ───────────────────────────────────────
 const urlCache = new Map<string, string>();
 export async function imageUrl(id: string): Promise<string | null> {
+  if (isStaticImage(id)) return encodeURI(id); // one of the project's own images: served with the app
   const hit = urlCache.get(id);
   if (hit) return hit;
   const rec = await getImage(id);

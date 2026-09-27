@@ -6,6 +6,8 @@ import {
   FlaskConical, Download, ChevronDown, MessageSquare, History, Wallet, MessageSquareText, Database, Upload, ShieldCheck, Smartphone, Phone,
 } from "lucide-react";
 import { LICENSE_MODULES, DEFAULT_MODULES, moduleLabel, type LicenseModule } from "@/lib/license/modules";
+import { SUPABASE_SQL } from "@/lib/sync/protocol";
+import { SYNC_ERRORS } from "@/components/local/SyncPanel";
 
 /** «إدارة الرموز» — the owner's page: one code per lab, bound to one device, with a period and stations. */
 
@@ -15,6 +17,10 @@ interface Row {
   activated_at: number | null; expires_at: number | null; last_seen_at: number | null; created_at: number;
   price: string; paid: boolean; paid_at: number | null; message: string; device_name: string; is_trial: boolean;
   app_version: string;
+  /** The lab's own database (no secrets). */
+  sync: { kind: "supabase" | "postgres"; host: string; by: "owner" | "device"; at: number } | null;
+  /** The device's last report about its sync. */
+  sync_last_at: number | null; sync_pending: number; sync_error: string; sync_reported_at: number | null;
 }
 interface Ev { license_id: string; at: number; kind: string; detail: string }
 interface Storage { source: "license-db" | "app-db" | "embedded"; ok: boolean; codes?: number; roundTripMs?: number; error?: string; keySealed?: boolean }
@@ -46,7 +52,7 @@ const amount = (p: string) => { const n = Number(p.replace(/[^\d.]/g, "")); retu
 const EVENT_LABEL: Record<string, string> = {
   created: "إنشاء الرمز", activated: "تفعيل على جهاز", moved: "تفعيل على جهاز جديد", extended: "تمديد", stopped: "إيقاف",
   resumed: "إعادة تفعيل", device_reset: "فك ربط الجهاز", modules: "تغيير المحطات", renamed: "تعديل الاسم",
-  paid: "تسجيل الدفع", unpaid: "إلغاء الدفع", message: "رسالة للمختبر", new_code: "رمز جديد",
+  paid: "تسجيل الدفع", unpaid: "إلغاء الدفع", message: "رسالة للمختبر", new_code: "رمز جديد", sync: "قاعدة بيانات المختبر",
 };
 const eventDetail = (e: Ev) => (e.kind === "modules" ? e.detail.split(",").filter(Boolean).map(moduleLabel).join("، ") || "لا شيء" : e.detail);
 
@@ -130,11 +136,12 @@ function copyText(t: string, done: () => void) { navigator.clipboard?.writeText(
 
 function exportCsv(rows: Row[], now: number) {
   const cell = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-  const head = ["المختبر", "ملاحظة", "آخر 4 خانات", "الحالة", "تجريبي", "المدة (يوم)", "التفعيل", "الانتهاء", "الجهاز", "آخر اتصال", "الإصدار", "المحطات", "المبلغ", "مدفوع", "تاريخ الدفع", "رسالة للمختبر", "أُنشئ"];
+  const head = ["المختبر", "ملاحظة", "آخر 4 خانات", "الحالة", "تجريبي", "المدة (يوم)", "التفعيل", "الانتهاء", "الجهاز", "آخر اتصال", "الإصدار", "المحطات", "المبلغ", "مدفوع", "تاريخ الدفع", "رسالة للمختبر", "أُنشئ", "قاعدة البيانات", "آخر مزامنة"];
   const lines = [head.map(cell).join(",")];
   for (const r of rows) {
     lines.push([r.lab_name, r.note, r.code_hint, status(r, now).t, r.is_trial ? "نعم" : "", r.duration_days, fmt(r.activated_at), fmt(r.expires_at), deviceOf(r),
-      fmtTime(r.last_seen_at), r.app_version, r.modules.map(moduleLabel).join("، "), r.price, r.paid ? "نعم" : "لا", fmt(r.paid_at), r.message, fmt(r.created_at)].map(cell).join(","));
+      fmtTime(r.last_seen_at), r.app_version, r.modules.map(moduleLabel).join("، "), r.price, r.paid ? "نعم" : "لا", fmt(r.paid_at), r.message, fmt(r.created_at),
+      r.sync ? `${r.sync.kind === "postgres" ? "PostgreSQL" : "Supabase"} — ${r.sync.host}` : "", fmtTime(r.sync_last_at)].map(cell).join(","));
   }
   const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -161,6 +168,7 @@ export default function LicensesPage() {
   const [test, setTest] = useState<Storage | null>(null);
   const [backupMsg, setBackupMsg] = useState("");
   const [testing, setTesting] = useState(false);
+  const [dbFor, setDbFor] = useState<Row | null>(null);
 
   const load = useCallback(async () => {
     const r = await fetch("/api/license/admin", { cache: "no-store" });
@@ -424,6 +432,7 @@ export default function LicensesPage() {
                   </button>
                   {/* Less frequent actions: one size of square icon buttons, named by their tooltip */}
                   {r.device_id && <IconBtn label="نقل لجهاز جديد" onClick={() => change(r, { action: "reset_device" }, "فك ربط الجهاز؟ يستطيع المختبر بعدها إدخال نفس الرمز على جهاز جديد، والمدة تستمر كما هي.")}><MonitorSmartphone className="size-4" /></IconBtn>}
+                  <IconBtn label="قاعدة بيانات المختبر" onClick={() => setDbFor(r)}><Database className="size-4" /></IconBtn>
                   <IconBtn label="رمز جديد" onClick={() => change(r, { action: "new_code" }, "إنشاء رمز جديد لهذا المختبر؟ الرمز القديم لا يعمل بعدها لتفعيل جهاز، والجهاز الحالي يستمر.")}><KeyRound className="size-4" /></IconBtn>
                   <IconBtn label="تعديل الاسم" onClick={() => { const lab = window.prompt("اسم المختبر:", r.lab_name); if (lab == null) return; const note = window.prompt("ملاحظة:", r.note) ?? r.note; change(r, { action: "rename", lab, note }); }}><Pencil className="size-4" /></IconBtn>
                   {r.status === "active"
@@ -433,12 +442,19 @@ export default function LicensesPage() {
                 </div>
               </div>
               <TimeLeft r={r} now={now} bar={st.bar} />
-              <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 border-t border-line pt-3 text-xs sm:grid-cols-5">
+              <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 border-t border-line pt-3 text-xs sm:grid-cols-3 lg:grid-cols-6">
                 <Info k="الجهاز" v={deviceOf(r) || "لم يُربط بعد"} />
                 <Info k="آخر اتصال" v={fmtShort(r.last_seen_at)} mono />
                 <VersionInfo r={r} current={data.version} />
                 <Info k="الرمز" v={`…${r.code_hint}`} mono />
                 <Info k="أُنشئ" v={fmt(r.created_at)} mono />
+                <div data-testid="lab-db" className="min-w-0">
+                  <div className="text-[10px] text-muted">قاعدة البيانات</div>
+                  <button onClick={() => setDbFor(r)} className="block max-w-full truncate text-start font-medium hover:underline" title={r.sync ? r.sync.host : "غير مربوط — البيانات على الجهاز فقط"}>
+                    {r.sync ? <>{r.sync.kind === "postgres" ? "PostgreSQL" : "Supabase"}{r.sync.by === "device" ? " (من الجهاز)" : ""}</> : <span className="text-muted">على الجهاز فقط</span>}
+                  </button>
+                  {r.sync && <SyncHealth r={r} now={now} />}
+                </div>
               </div>
               <div className="mt-3 text-xs text-muted">المحطات — التغيير يصل للجهاز عند اتصاله بالإنترنت:</div>
               <ModuleChips value={r.modules} onChange={(m) => change(r, { action: "modules", modules: m })} />
@@ -452,6 +468,8 @@ export default function LicensesPage() {
           );
         })}
       </div>
+
+      {dbFor && <DbModal row={dbFor} rows={all} onClose={() => setDbFor(null)} onSaved={() => { setDbFor(null); load(); }} />}
 
       {/* Backup of the codes */}
       <Panel tone="sky" icon={<Database className="size-5" />} title="نسخة احتياطية للرموز"
@@ -567,6 +585,27 @@ function Details({ r, evs, onChange }: { r: Row; evs: Ev[]; onChange: (c: Record
           </ul>
         )}
       </div>
+    </div>
+  );
+}
+
+/** How the device's sync goes, from its last report: an error, a stale sync, or when it last synced. */
+const SYNC_SHORT: Record<string, string> = {
+  auth: "فشل الدخول إلى القاعدة", no_table: "الجدول غير موجود في القاعدة", unreachable: "القاعدة لا ترد", tls: "مشكلة شهادة TLS",
+  needs_join: "بانتظار اختيار طريقة الربط على الجهاز", no_code: "الجهاز بلا رمز صالح", private_host: "عنوان داخلي مرفوض", db: "خطأ في القاعدة",
+};
+const SYNC_STALE = DAY;
+function SyncHealth({ r, now }: { r: Row; now: number }) {
+  if (!r.device_id) return <div className="text-[11px] text-muted">يبدأ بعد التفعيل</div>;
+  if (!r.sync_reported_at) return <div className="text-[11px] text-muted" data-testid="sync-health">لم يُبلّغ الجهاز بعد</div>;
+  if (r.sync_error && r.sync_error !== "offline") {
+    return <div className="truncate text-[11px] text-red-700" data-testid="sync-health" title={fmtShort(r.sync_reported_at)}>⚠️ {SYNC_SHORT[r.sync_error] ?? SYNC_SHORT.db}</div>;
+  }
+  const stale = !r.sync_last_at || now - r.sync_last_at > SYNC_STALE;
+  return (
+    <div className={`truncate text-[11px] ${stale ? "text-amber-700" : "text-teal-700"}`} data-testid="sync-health">
+      {stale ? "⚠️ " : "✓ "}آخر مزامنة <span dir="ltr" className="font-mono tabular-nums">{fmtShort(r.sync_last_at)}</span>
+      {r.sync_pending > 0 && <> · ينتظر <span className="tabular-nums">{r.sync_pending}</span></>}
     </div>
   );
 }
@@ -738,5 +777,109 @@ function TwoFactorCard({ tf, reload }: { tf?: TwoFactor; reload: () => void }) {
       )}
       {msg && <p className="mt-2 text-xs text-brand-dark">{msg}</p>}
     </Panel>
+  );
+}
+
+/** «قاعدة بيانات المختبر» for one code: the lab's own Supabase or PostgreSQL, sent to its device. */
+function DbModal({ row, rows, onClose, onSaved }: { row: Row; rows: Row[]; onClose: () => void; onSaved: () => void }) {
+  const [kind, setKind] = useState<"none" | "supabase" | "postgres">(row.sync?.kind ?? "none");
+  const [f, setF] = useState({ url: "", anonKey: "", email: "", password: "", conn: "" });
+  const [savedHost, setSavedHost] = useState(row.sync?.kind === "postgres" ? row.sync.host : "");
+  const [hasSaved, setHasSaved] = useState(!!row.sync);
+  /** Which kind is saved: an empty password / connection string keeps that one only. */
+  const [savedKind, setSavedKind] = useState(row.sync?.kind ?? "");
+  const [from, setFrom] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    post({ op: "sync_get", id: row.id }).then((d) => {
+      const c = d?.config;
+      if (!c) { setHasSaved(false); setSavedKind(""); return; }
+      setHasSaved(true); setSavedKind(c.kind);
+      if (c.kind === "supabase") setF((x) => ({ ...x, url: c.url ?? "", anonKey: c.anonKey ?? "", email: c.email ?? "" }));
+      else setSavedHost(c.host ?? "");
+    });
+  }, [row.id]);
+  const others = rows.filter((r) => r.id !== row.id && r.sync);
+  const config = () => kind === "supabase"
+    ? { kind, url: f.url.trim(), anonKey: f.anonKey.trim(), email: f.email.trim(), password: f.password }
+    : { kind, conn: f.conn.trim() };
+  async function go(op: "sync_test" | "sync_set" | "unlink" | "copy") {
+    setBusy(true); setMsg(null);
+    const d = op === "unlink" ? await post({ op: "sync_set", id: row.id, config: null })
+      : op === "copy" ? await post({ op: "sync_copy", id: row.id, from })
+      : await post({ op, id: row.id, config: config() });
+    setBusy(false);
+    if (!d.ok) { setMsg({ ok: false, text: SYNC_ERRORS[d.error] ?? SYNC_ERRORS.db }); return; }
+    if (op === "sync_test") { setMsg({ ok: true, text: `✓ الاتصال يعمل — في القاعدة ${d.records ?? 0} سجلاً.` }); return; }
+    onSaved();
+  }
+  const canTry = kind === "supabase" ? f.url && f.anonKey && f.email && (f.password || savedKind === "supabase") : kind === "postgres" && (f.conn.trim() || (savedKind === "postgres" && savedHost));
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/40 p-4" onClick={onClose}>
+      <div role="dialog" aria-label="قاعدة بيانات المختبر" data-testid="db-modal" onClick={(e) => e.stopPropagation()} className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-pop)]">
+        <h2 className="flex items-center gap-2 text-lg font-bold"><Database className="size-5 text-brand" /> قاعدة بيانات المختبر — {row.lab_name}</h2>
+        <p className="mt-1 text-xs leading-relaxed text-muted">
+          يبقى جهاز المختبر يعمل ويحفظ على نفسه حتى بدون إنترنت، ويزامن بياناته مع قاعدة بيانات خاصة بالمختبر.
+          اربط كل رموز المختبر الواحد (كل أجهزته) بالقاعدة نفسها لتتشارك الزيارات والمراجعين. يصل الربط للجهاز عند اتصاله بالإنترنت.
+          تُزامَن النصوص فقط (الصور تبقى على كل جهاز). تُحفظ بيانات الاتصال مشفّرة بـ AUTH_SECRET.
+        </p>
+        <div className="mt-3 inline-flex rounded-lg border border-line p-0.5 text-xs">
+          {([["none", "بدون (على الجهاز فقط)"], ["supabase", "Supabase"], ["postgres", "PostgreSQL"]] as const).map(([k, l]) => (
+            <button key={k} onClick={() => { setKind(k); setMsg(null); }} className={`rounded-md px-3 py-1 ${kind === k ? "bg-brand text-white" : "hover:bg-canvas"}`}>{l}</button>
+          ))}
+        </div>
+        {kind === "supabase" && (
+          <div className="mt-3 space-y-2">
+            <ol className="list-inside list-decimal space-y-0.5 text-xs text-muted">
+              <li>مشروع Supabase خاص بالمختبر ← SQL Editor ← الصق سكربت الإعداد ونفّذه.</li>
+              <li>Authentication ← Users ← أضف مستخدماً للمختبر (بريد وكلمة مرور).</li>
+              <li>Project Settings ← API: Project URL و anon key.</li>
+            </ol>
+            <button type="button" onClick={() => copyText(SUPABASE_SQL, () => { setCopied(true); setTimeout(() => setCopied(false), 2000); })} className={small}>
+              {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />} نسخ سكربت الإعداد (SQL)
+            </button>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <input dir="ltr" aria-label="Project URL" placeholder="https://xxxx.supabase.co" value={f.url} onChange={(e) => setF({ ...f, url: e.target.value })} className={inp} />
+              <input dir="ltr" aria-label="anon key" placeholder="anon key" value={f.anonKey} onChange={(e) => setF({ ...f, anonKey: e.target.value })} className={inp} />
+              <input dir="ltr" aria-label="بريد مستخدم المختبر" placeholder="lab@example.com" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} className={inp} />
+              <input dir="ltr" type="password" aria-label="كلمة مرور مستخدم المختبر" placeholder={savedKind === "supabase" ? "(محفوظة — اتركها فارغة للإبقاء)" : "كلمة المرور"} value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} className={inp} />
+            </div>
+          </div>
+        )}
+        {kind === "postgres" && (
+          <div className="mt-3 space-y-2">
+            <input dir="ltr" aria-label="رابط الاتصال" placeholder={savedKind === "postgres" && savedHost ? `(محفوظ: ${savedHost} — اتركه فارغاً للإبقاء)` : "postgresql://user:password@host:5432/db"} value={f.conn} onChange={(e) => setF({ ...f, conn: e.target.value })} className={inp} />
+            <p className="text-[11px] text-muted">أي PostgreSQL: Neon أو Supabase (Connection string) أو Railway أو خادم خاص. يتصل الخادم بالقاعدة وينشئ الجدول بنفسه، ولا يصل الرابط إلى الجهاز.</p>
+          </div>
+        )}
+        {kind === "none" && <p className="mt-3 text-sm text-muted">{hasSaved ? "الحفظ يلغي ربط هذا الرمز بقاعدته — تبقى البيانات على الجهاز وفي القاعدة كما هي." : "بيانات هذا المختبر على جهازه فقط."}</p>}
+
+        {others.length > 0 && (
+          <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-3 text-xs">
+            <span className="text-muted">أو استخدم قاعدة رمز آخر (جهاز آخر للمختبر نفسه):</span>
+            <select value={from} onChange={(e) => setFrom(e.target.value)} aria-label="نسخ من رمز" className="rounded-lg border border-line bg-surface px-2 py-1">
+              <option value="">— اختر —</option>
+              {others.map((o) => <option key={o.id} value={o.id}>{o.lab_name}{o.device_name ? ` — ${o.device_name}` : ""} ({o.sync!.kind === "postgres" ? "PostgreSQL" : "Supabase"})</option>)}
+            </select>
+            <button disabled={busy || !from} onClick={() => go("copy")} className={`${small} disabled:opacity-50`}><Copy className="size-3.5" /> ربط بها</button>
+          </div>
+        )}
+
+        {msg && <p className={`mt-3 text-sm ${msg.ok ? "text-teal-700" : "text-red-700"}`} data-testid="db-msg">{msg.text}</p>}
+        <div className="mt-4 flex flex-wrap justify-end gap-2">
+          <button onClick={onClose} className="rounded-lg border border-line px-4 py-2 text-sm hover:bg-canvas">إغلاق</button>
+          {kind === "none" ? (
+            hasSaved && <button disabled={busy} onClick={() => go("unlink")} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50">إلغاء الربط</button>
+          ) : (
+            <>
+              <button disabled={busy || !canTry} onClick={() => go("sync_test")} className="rounded-lg border border-line px-4 py-2 text-sm hover:bg-canvas disabled:opacity-50">اختبار الاتصال</button>
+              <button disabled={busy || !canTry} onClick={() => go("sync_set")} className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-50">حفظ وربط</button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }

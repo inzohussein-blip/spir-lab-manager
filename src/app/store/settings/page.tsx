@@ -1,5 +1,6 @@
 "use client";
 
+import { SyncPanel } from "@/components/local/SyncPanel";
 import { kvFlush } from "@/lib/local/kv";
 import { ThemeCard } from "@/components/local/LocalTheme";
 import { THEME_KEYS } from "@/lib/local/theme";
@@ -50,6 +51,7 @@ export default function StoreSettingsPage() {
         </div>
         {msg && <p className="mt-2 text-xs text-muted">{msg}</p>}
       </div>
+      <SyncPanel />
     </div>
   );
 }

@@ -129,6 +129,8 @@ const K_PATIENTS = "station.patients.v1";
 const K_STOCK = "station.stock.v1";
 const K_DOCTORS = "station.doctors.v1";
 const K_BACKUP_AT = "station.backupAt.v1";
+/** This device's letter in its sample numbers (kept on the device, never synced). */
+const K_DEVICE_TAG = "station.deviceTag.v1";
 const K_CATALOG_VER = "station.catalogVersion.v1";
 /** One-time fix: the urine test's built-in range text became English ("Normal"). */
 const K_FIX_GUE = "station.fixGueNormal.v1";
@@ -494,14 +496,32 @@ export function localYmd(ms: number = Date.now()): string {
   return new Date(ms).toLocaleDateString("en-CA");
 }
 
-// ── Sample-number counter (LAB-YYYYMMDD-NNN) ─────────────────────────────────
+// ── Sample-number counter (LAB-YYYYMMDD-NNN, or LAB-YYYYMMDD-A001 with a device letter) ──
+/** One or two letters/digits for this device (empty: none). With several devices working
+ *  without internet at the same time, each its own letter keeps their numbers apart. */
+export function getDeviceTag(): string {
+  const t = read<string>(K_DEVICE_TAG, "");
+  return typeof t === "string" && /^[A-Z0-9]{1,2}$/.test(t) ? t : "";
+}
+export function setDeviceTag(tag: string): void {
+  const t = tag.trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 2);
+  write(K_DEVICE_TAG, t);
+}
 export function nextAccession(): string {
   const d = new Date();
   const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
-  const c = read<{ day: string; n: number }>(K_COUNTER, { day: "", n: 0 });
-  const n = c.day === ymd ? c.n + 1 : 1;
-  write(K_COUNTER, { day: ymd, n });
-  return `LAB-${ymd}-${String(n).padStart(3, "0")}`;
+  const tag = getDeviceTag();
+  const c = read<{ day: string; n: number; tag?: string }>(K_COUNTER, { day: "", n: 0 });
+  // The counter is this device's; with the lab's devices synced, today's visits from the others
+  // count too, so a number already given elsewhere is not handed out again.
+  const prefix = `LAB-${ymd}-${tag}`;
+  const seen = getVisits().reduce((m, v) => {
+    const rest = v.accession?.startsWith(prefix) ? v.accession.slice(prefix.length) : "";
+    return /^\d+$/.test(rest) ? Math.max(m, Number(rest)) : m;
+  }, 0);
+  const n = Math.max(c.day === ymd && (c.tag ?? "") === tag ? c.n : 0, seen) + 1;
+  write(K_COUNTER, { day: ymd, n, tag });
+  return `${prefix}${String(n).padStart(3, "0")}`;
 }
 
 // ── Backup: export / import the whole station ────────────────────────────────

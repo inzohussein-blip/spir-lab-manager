@@ -72,7 +72,8 @@ self.addEventListener("fetch", (event) => {
     if (isLocal(url.pathname)) event.respondWith(navigate(req, url));
     return;
   }
-  if (url.pathname.startsWith("/_next/static/") || EXTRA.includes(url.pathname)) {
+  // The project's own images (public/lab-images) are part of the app, like its scripts.
+  if (url.pathname.startsWith("/_next/static/") || EXTRA.includes(url.pathname) || url.pathname.startsWith("/lab-images/")) {
     event.respondWith(cacheFirst(req));
   }
 });
@@ -223,6 +224,12 @@ async function prepare(tell) {
           const a = "/_next/" + m[1];
           if (!assets.has(a)) optional.add(a);
           add(a);
+        }
+        // The project's own images (public/lab-images): their list is written into the scripts at build.
+        const plain = js.replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16))); // Arabic names may be escaped
+        for (const m of plain.matchAll(/\/lab-images\/[^"'\\\n]+?\.(?:png|jpe?g|webp|gif|svg|avif)/gi)) {
+          if (!assets.has(m[0])) optional.add(m[0]);
+          add(m[0]);
         }
       }
       if (/\/webpack-[^/]+\.js$/.test(u)) {
