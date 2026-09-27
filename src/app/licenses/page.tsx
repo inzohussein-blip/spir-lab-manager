@@ -761,6 +761,8 @@ function DbModal({ row, rows, onClose, onSaved }: { row: Row; rows: Row[]; onClo
   const [f, setF] = useState({ url: "", anonKey: "", email: "", password: "", conn: "" });
   const [savedHost, setSavedHost] = useState(row.sync?.kind === "postgres" ? row.sync.host : "");
   const [hasSaved, setHasSaved] = useState(!!row.sync);
+  /** Which kind is saved: an empty password / connection string keeps that one only. */
+  const [savedKind, setSavedKind] = useState(row.sync?.kind ?? "");
   const [from, setFrom] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -768,8 +770,8 @@ function DbModal({ row, rows, onClose, onSaved }: { row: Row; rows: Row[]; onClo
   useEffect(() => {
     post({ op: "sync_get", id: row.id }).then((d) => {
       const c = d?.config;
-      if (!c) { setHasSaved(false); return; }
-      setHasSaved(true);
+      if (!c) { setHasSaved(false); setSavedKind(""); return; }
+      setHasSaved(true); setSavedKind(c.kind);
       if (c.kind === "supabase") setF((x) => ({ ...x, url: c.url ?? "", anonKey: c.anonKey ?? "", email: c.email ?? "" }));
       else setSavedHost(c.host ?? "");
     });
@@ -788,7 +790,7 @@ function DbModal({ row, rows, onClose, onSaved }: { row: Row; rows: Row[]; onClo
     if (op === "sync_test") { setMsg({ ok: true, text: `✓ الاتصال يعمل — في القاعدة ${d.records ?? 0} سجلاً.` }); return; }
     onSaved();
   }
-  const canTry = kind === "supabase" ? f.url && f.anonKey && f.email && (f.password || hasSaved) : kind === "postgres" && (f.conn.trim() || savedHost);
+  const canTry = kind === "supabase" ? f.url && f.anonKey && f.email && (f.password || savedKind === "supabase") : kind === "postgres" && (f.conn.trim() || (savedKind === "postgres" && savedHost));
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/40 p-4" onClick={onClose}>
       <div role="dialog" aria-label="قاعدة بيانات المختبر" data-testid="db-modal" onClick={(e) => e.stopPropagation()} className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-pop)]">
@@ -817,13 +819,13 @@ function DbModal({ row, rows, onClose, onSaved }: { row: Row; rows: Row[]; onClo
               <input dir="ltr" aria-label="Project URL" placeholder="https://xxxx.supabase.co" value={f.url} onChange={(e) => setF({ ...f, url: e.target.value })} className={inp} />
               <input dir="ltr" aria-label="anon key" placeholder="anon key" value={f.anonKey} onChange={(e) => setF({ ...f, anonKey: e.target.value })} className={inp} />
               <input dir="ltr" aria-label="بريد مستخدم المختبر" placeholder="lab@example.com" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} className={inp} />
-              <input dir="ltr" type="password" aria-label="كلمة مرور مستخدم المختبر" placeholder={hasSaved ? "(محفوظة — اتركها فارغة للإبقاء)" : "كلمة المرور"} value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} className={inp} />
+              <input dir="ltr" type="password" aria-label="كلمة مرور مستخدم المختبر" placeholder={savedKind === "supabase" ? "(محفوظة — اتركها فارغة للإبقاء)" : "كلمة المرور"} value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} className={inp} />
             </div>
           </div>
         )}
         {kind === "postgres" && (
           <div className="mt-3 space-y-2">
-            <input dir="ltr" aria-label="رابط الاتصال" placeholder={savedHost ? `(محفوظ: ${savedHost} — اتركه فارغاً للإبقاء)` : "postgresql://user:password@host:5432/db"} value={f.conn} onChange={(e) => setF({ ...f, conn: e.target.value })} className={inp} />
+            <input dir="ltr" aria-label="رابط الاتصال" placeholder={savedKind === "postgres" && savedHost ? `(محفوظ: ${savedHost} — اتركه فارغاً للإبقاء)` : "postgresql://user:password@host:5432/db"} value={f.conn} onChange={(e) => setF({ ...f, conn: e.target.value })} className={inp} />
             <p className="text-[11px] text-muted">أي PostgreSQL: Neon أو Supabase (Connection string) أو Railway أو خادم خاص. يتصل الخادم بالقاعدة وينشئ الجدول بنفسه، ولا يصل الرابط إلى الجهاز.</p>
           </div>
         )}
