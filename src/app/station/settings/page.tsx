@@ -1,5 +1,6 @@
 "use client";
 
+import { SyncPanel } from "@/components/local/SyncPanel";
 import { kvFlush } from "@/lib/local/kv";
 import { useEffect, useRef, useState } from "react";
 import { Settings, Check, Image as ImageIcon, Download, Upload, Trash2, Stethoscope, Plus, Pencil, X, Smartphone, History, ListCollapse, ClipboardList, QrCode as QrCodeIcon } from "lucide-react";
@@ -446,6 +447,8 @@ export default function StationSettingsPage() {
         </p>
         {msg && <p className="mt-1 text-xs text-muted">{msg}</p>}
       </div>
+
+      <SyncPanel />
 
       {/* Install as app (PWA) — Lab Station only */}
       <div className="mt-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">

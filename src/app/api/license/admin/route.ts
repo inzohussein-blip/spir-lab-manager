@@ -3,7 +3,11 @@ import {
   licensingEnabled, passwordSet, durableStorage, storageStatus, attemptsBlocked, noteAttempt, clearAttempts,
   logOwnerSignIn, ownerSignIns, signingKeySealed,
   twoFactorStatus, twoFactorRequired, checkOwnerCode, startTwoFactorSetup, confirmTwoFactor, disableTwoFactor, exportCodes, importCodes, listLicenses, listEvents, createLicense, updateLicense, getContact, setContact, type LicenseAction,
+  getSyncConfig, setSyncConfig, cleanSyncConfig,
 } from "@/lib/license/server";
+import { LabDbError, probe } from "@/lib/sync/pg";
+import { SupaError, supaProbe, supaSignIn } from "@/lib/sync/supabase";
+import { connHost, type SyncConfig } from "@/lib/sync/protocol";
 import { passwordMatches, startOwnerSession, endOwnerSession, isOwner, ipOf } from "@/lib/license/owner";
 
 /** Owner endpoints for the code manager (/licenses). */
@@ -78,5 +82,49 @@ export async function POST(req: NextRequest) {
   if (b.op === "totp_enable") return (await confirmTwoFactor(String(b.code ?? ""))) ? json({ ok: true }) : json({ ok: false, error: "wrong_code" }, 400);
   if (b.op === "totp_disable") return (await disableTwoFactor(String(b.code ?? ""))) ? json({ ok: true }) : json({ ok: false, error: "wrong_code" }, 400);
   if (b.op === "contact") { await setContact(String(b.contact ?? "")); return json({ ok: true }); }
+
+  // The lab's own database: see it (never the password or the connection string), test it, link it.
+  if (b.op === "sync_get") {
+    const s = await getSyncConfig(String(b.id ?? ""));
+    if (!s) return json({ ok: true, config: null });
+    const c = s.cfg;
+    return json({ ok: true, by: s.by, config: c.kind === "postgres" ? { kind: "postgres", host: connHost(c.conn) } : { kind: "supabase", url: c.url, anonKey: c.anonKey, email: c.email } });
+  }
+  // Several devices of one lab: link this code to the same database as another code.
+  if (b.op === "sync_copy") {
+    const from = await getSyncConfig(String(b.from ?? ""));
+    if (!from) return json({ ok: false, error: "bad_config" }, 400);
+    const err = await setSyncConfig(String(b.id ?? ""), from.cfg, "owner");
+    return err ? json({ ok: false, error: err }, 400) : json({ ok: true });
+  }
+  if (b.op === "sync_test" || b.op === "sync_set") {
+    const id = String(b.id ?? "");
+    if (b.op === "sync_set" && b.config == null) {
+      const err = await setSyncConfig(id, null, "owner");
+      return err ? json({ ok: false, error: err }, 400) : json({ ok: true });
+    }
+    // Left empty in the form: keep what is saved (the owner never sees it again).
+    const saved = id ? await getSyncConfig(id) : null;
+    const raw = { ...(b.config as Record<string, unknown>) };
+    if (saved?.cfg.kind === "supabase" && raw.kind === "supabase" && !raw.password) raw.password = saved.cfg.password;
+    if (saved?.cfg.kind === "postgres" && raw.kind === "postgres" && !raw.conn) raw.conn = saved.cfg.conn;
+    const cfg = cleanSyncConfig(raw);
+    if (!cfg) return json({ ok: false, error: "bad_config" }, 400);
+    const tested = await testSync(cfg);
+    if (!tested.ok) return json(tested, 502);
+    if (b.op === "sync_test") return json(tested);
+    const err = await setSyncConfig(id, cfg, "owner");
+    return err ? json({ ok: false, error: err }, 400) : json(tested);
+  }
   return json({ ok: false, error: "bad_request" }, 400);
+}
+
+/** Open the lab's database as its devices will: sign-in and table for Supabase, connection for PostgreSQL. */
+async function testSync(cfg: SyncConfig): Promise<{ ok: true; records: number } | { ok: false; error: string }> {
+  try {
+    if (cfg.kind === "postgres") return { ok: true, records: (await probe(cfg.conn)).records };
+    return { ok: true, records: (await supaProbe(cfg, await supaSignIn(cfg))).records };
+  } catch (e) {
+    return { ok: false, error: e instanceof LabDbError || e instanceof SupaError ? e.code : "db" };
+  }
 }

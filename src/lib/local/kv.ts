@@ -23,6 +23,24 @@ const PREFIXES = ["station.", "purchasing.", "training.", "qc.", "roster."];
 /** Kept in localStorage: read by the inline script that sets the theme before the page paints. */
 const isTheme = (k: string) => k.endsWith(".theme.v1");
 const isData = (k: string) => PREFIXES.some((p) => k.startsWith(p)) && !isTheme(k);
+/** Station data that stays on this device when the lab syncs its devices (a session unlock,
+ *  this device's last backup / recent items, its own sample counter). */
+const DEVICE_ONLY = new Set(["training.unlocked", "station.backupAt.v1", "station.counter.v1", "training.recent.v1"]);
+/** Keys the lab's devices share through the lab's database (lib/sync). */
+export const isSyncedKey = (k: string) => isData(k) && !DEVICE_ONLY.has(k);
+
+/** Who changed a value: this page ("local"), or another tab / the lab's database ("external"). */
+export type KvOrigin = "local" | "external";
+type KvListener = (k: string, prev: string | null, next: string | null, origin: KvOrigin) => void;
+const listeners = new Set<KvListener>();
+/** Follow changes to the station data (the sync uses it to know what this device changed). */
+export function onKvChange(fn: KvListener): () => void { listeners.add(fn); return () => { listeners.delete(fn); }; }
+const notify = (k: string, prev: string | null, next: string | null, origin: KvOrigin) => {
+  if (prev === next) return;
+  for (const fn of listeners) { try { fn(k, prev, next, origin); } catch { /* a listener never breaks a save */ } }
+};
+/** Fired when records arrived from the lab's other devices (pages may offer to refresh). */
+export const KV_REMOTE_EVENT = "lab-kv-remote";
 /** Records a lab may enter in an older saved copy; merged in by id when both sides have them. */
 const RECORDS = new Set(["station.visits.v1", "station.patients.v1"]);
 
@@ -97,7 +115,9 @@ export function kvReady(): Promise<boolean> {
         chan = new BroadcastChannel("lab-kv");
         chan.onmessage = (e: MessageEvent<{ k: string; v: string | null }>) => {
           if (!mem || typeof e.data?.k !== "string") return;
+          const prev = mem.get(e.data.k) ?? null;
           if (e.data.v == null) mem.delete(e.data.k); else mem.set(e.data.k, e.data.v);
+          notify(e.data.k, prev, e.data.v, "external");
         };
       }
       return true;
@@ -135,12 +155,25 @@ export function kvGet(k: string): string | null {
 }
 /** Returns false when the browser refused the write. */
 export function kvSet(k: string, v: string): boolean {
-  if (mem && isData(k)) { mem.set(k, v); persist(k, v); return true; }
+  if (mem && isData(k)) { const prev = mem.get(k) ?? null; mem.set(k, v); persist(k, v); notify(k, prev, v, "local"); return true; }
   try { localStorage.setItem(k, v); return true; } catch { return false; }
 }
 export function kvRemove(k: string): void {
-  if (mem && isData(k)) { mem.delete(k); persist(k, null); return; }
+  if (mem && isData(k)) { const prev = mem.get(k) ?? null; mem.delete(k); persist(k, null); notify(k, prev, null, "local"); return; }
   try { localStorage.removeItem(k); } catch { /* ignore */ }
+}
+/** Write what came from the lab's database (not a change of this device: not sent back). */
+export function kvApply(k: string, v: string | null): void {
+  if (!mem || !isData(k)) return;
+  const prev = mem.get(k) ?? null;
+  if (prev === v) return;
+  if (v == null) mem.delete(k); else mem.set(k, v);
+  persist(k, v);
+  notify(k, prev, v, "external");
+}
+/** Every synced key held on this device, with its value. */
+export function kvSyncedEntries(): [string, string][] {
+  return mem ? [...mem].filter(([k]) => isSyncedKey(k)) : [];
 }
 /** Approximate bytes kept under this prefix (UTF-16 ≈ 2 bytes a character). */
 export function kvBytes(prefix: string): number {

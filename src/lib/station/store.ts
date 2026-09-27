@@ -499,7 +499,11 @@ export function nextAccession(): string {
   const d = new Date();
   const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
   const c = read<{ day: string; n: number }>(K_COUNTER, { day: "", n: 0 });
-  const n = c.day === ymd ? c.n + 1 : 1;
+  // The counter is this device's; with the lab's devices synced, today's visits from the others
+  // count too, so a number already given elsewhere is not handed out again.
+  const prefix = `LAB-${ymd}-`;
+  const seen = getVisits().reduce((m, v) => (v.accession?.startsWith(prefix) ? Math.max(m, Number(v.accession.slice(prefix.length)) || 0) : m), 0);
+  const n = Math.max(c.day === ymd ? c.n : 0, seen) + 1;
   write(K_COUNTER, { day: ymd, n });
   return `LAB-${ymd}-${String(n).padStart(3, "0")}`;
 }

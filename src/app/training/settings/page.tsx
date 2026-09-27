@@ -1,5 +1,6 @@
 "use client";
 
+import { SyncPanel } from "@/components/local/SyncPanel";
 import { ThemeCard } from "@/components/local/LocalTheme";
 import { THEME_KEYS } from "@/lib/local/theme";
 import { LockGate } from "@/components/training/LockGate";
@@ -139,6 +140,7 @@ export default function TrainingSettingsPage() {
       <ThemeCard storageKey={THEME_KEYS.training} />
       <LockGate>
         <SettingsInner />
+        <SyncPanel />
       </LockGate>
     </div>
   );
