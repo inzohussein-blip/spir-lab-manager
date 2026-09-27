@@ -19,7 +19,7 @@ function SubmitBtn() {
 }
 
 /** The sign-in form; `demo` shows the demo account (the site's own database only). */
-export function LoginForm({ demo }: { demo: boolean }) {
+export function LoginForm({ demo, name, logo }: { demo: boolean; name: string; logo: string }) {
   const [state, action] = useFormState(loginAction, {});
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-canvas p-4">
@@ -27,10 +27,15 @@ export function LoginForm({ demo }: { demo: boolean }) {
       <div className="pointer-events-none absolute -bottom-24 -left-24 size-72 rounded-full bg-brand/10 blur-3xl" />
       <div className="relative w-full max-w-sm rounded-2xl border border-line bg-surface p-7 shadow-[var(--shadow-pop)]">
         <div className="mb-6 flex flex-col items-center gap-2 text-center">
-          <span className="grid size-14 place-items-center rounded-2xl bg-gradient-to-br from-brand to-brand-dark text-white shadow-lg">
-            <FlaskConical className="size-7" />
-          </span>
-          <h1 className="text-xl font-bold">مختبر التحليلات المرضية</h1>
+          {logo ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={logo} alt="" className="size-16 rounded-2xl bg-white object-contain p-1 ring-1 ring-line" />
+          ) : (
+            <span className="grid size-14 place-items-center rounded-2xl bg-gradient-to-br from-brand to-brand-dark text-white shadow-lg">
+              <FlaskConical className="size-7" />
+            </span>
+          )}
+          <h1 className="text-xl font-bold" data-testid="login-lab-name">{name}</h1>
           <p className="text-sm text-muted">تسجيل الدخول إلى لوحة الإدارة</p>
         </div>
         <form action={action} className="flex flex-col gap-3">

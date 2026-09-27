@@ -13,6 +13,7 @@ import {
 } from "@/lib/station/store";
 import { InstallButton } from "@/components/station/InstallButton";
 import { TableStyleCard } from "@/components/station/TableStyleCard";
+import { reportColors, tableStyleOf } from "@/lib/station/tableStyle";
 import { ThemeCard } from "@/components/local/LocalTheme";
 import { LABEL_SIZES, type LabelSize } from "@/components/station/TubeLabel";
 import { THEME_KEYS } from "@/lib/local/theme";
@@ -220,7 +221,7 @@ export default function StationSettingsPage() {
 
                 <div className="rounded-xl border border-dashed border-line bg-white p-3">
                   <div className="mb-2 text-xs font-medium text-muted">معاينة — جرّب مسحها بهاتفك من الشاشة</div>
-                  {code && <div className="flex" dir="ltr"><LabQrCard q={code} logo={s.labQrLogo !== false ? s.logo : undefined} /></div>}
+                  {code && <div className="flex" dir="ltr"><LabQrCard q={code} logo={s.labQrLogo !== false ? s.logo : undefined} colors={reportColors(tableStyleOf(s.reportTable))} /></div>}
                 </div>
 
                 <button onClick={() => save()} className="inline-flex w-fit items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark">
@@ -252,7 +253,7 @@ export default function StationSettingsPage() {
         </div>
       </div>
 
-      {/* Printed results table */}
+      {/* Printed report: the lab's colours and the results table */}
       <TableStyleCard settings={s} onChange={(t) => setOption({ reportTable: t })} />
 
       {/* Entry-screen options */}

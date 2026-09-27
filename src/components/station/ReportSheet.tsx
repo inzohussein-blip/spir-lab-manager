@@ -2,17 +2,13 @@
 
 import { useEffect, type CSSProperties } from "react";
 import { flagFor, rangeLabel, type Gender, type PrevResult, type StationSettings, type StationTest } from "@/lib/station/store";
-import { tableStyleOf, tableColors, DENSITY_PAD, GAP_PX, type TableStyle } from "@/lib/station/tableStyle";
+import { tableStyleOf, reportColors, PURPLE, GOLD, DENSITY_PAD, GAP_PX, type TableStyle } from "@/lib/station/tableStyle";
 import { Barcode, loadBarcode } from "@/components/station/Barcode";
 import { QrCode } from "@/components/station/QrCode";
 import { labQrCode, type LabQrCode } from "@/lib/station/labQr";
 import { FormReport } from "@/components/station/FormReport";
 import { isFormCode, decodeForm, formOptionsOf, type FormCode } from "@/lib/station/templates";
 
-// Lab identity colours (from the printed letterhead): purple + gold.
-const PURPLE = "#5a2a82";
-const GOLD = "#c9a227";
-const GOLD_DARK = "#9c7c1e";
 const exact = { WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as CSSProperties;
 
 export interface ReportRow {
@@ -78,6 +74,8 @@ export function ReportSheet({
   const gender = patient.gender;
   const ts = tableStyleOf(settings.reportTable);
   const pad = DENSITY_PAD[ts.density];
+  // The lab's colours (Settings → «التقرير المطبوع»; purple + gold unless changed).
+  const c = reportColors(ts);
 
   // Structured reports (urine / stool / semen / culture) print on their own page.
   const formRows = rows.filter((r) => isFormCode(r.test?.code));
@@ -99,7 +97,7 @@ export function ReportSheet({
 
   const header = (
     <>
-        {/* Letterhead — purple/gold identity */}
+        {/* Letterhead in the lab's colours */}
         <div className="flex items-center justify-between gap-4 pb-3">
           <div className="flex items-center gap-3">
             {settings.logo && (
@@ -107,8 +105,8 @@ export function ReportSheet({
               <img src={settings.logo} alt="" className="size-20 object-contain" />
             )}
             <div>
-              <h2 className="text-2xl font-extrabold leading-tight" style={{ color: PURPLE }}>{settings.labName}</h2>
-              {settings.labSubtitle && <p className="text-sm font-medium" style={{ color: GOLD_DARK }}>{settings.labSubtitle}</p>}
+              <h2 className="text-2xl font-extrabold leading-tight" style={{ color: c.title }}>{settings.labName}</h2>
+              {settings.labSubtitle && <p className="text-sm font-medium" style={{ color: c.subtitle }}>{settings.labSubtitle}</p>}
             </div>
           </div>
           {/* Date, then the patient's sample barcode and number under it */}
@@ -117,20 +115,20 @@ export function ReportSheet({
             {accession && (
               <div className="report-pbc mt-1 flex flex-col items-end">
                 <Barcode text={accession} className="block h-9 w-44 [&>svg]:h-full [&>svg]:w-full" />
-                <div className="font-mono text-[11px] font-bold" style={{ color: PURPLE }} dir="ltr">{accession}</div>
+                <div className="font-mono text-[11px] font-bold" style={{ color: c.title }} dir="ltr">{accession}</div>
               </div>
             )}
           </div>
         </div>
-        {/* Gold rule with a purple center accent */}
-        <div className="h-1 w-full rounded" style={{ background: `linear-gradient(90deg, ${GOLD} 0%, ${PURPLE} 50%, ${GOLD} 100%)`, ...exact }} />
+        {/* Accent rule with a main-colour center */}
+        <div className="h-1 w-full rounded" style={{ background: `linear-gradient(90deg, ${c.border} 0%, ${c.title} 50%, ${c.border} 100%)`, ...exact }} />
 
-        <div className="report-keep mt-4 grid grid-cols-2 gap-x-6 gap-y-1.5 rounded-lg border-2 p-3 text-sm sm:grid-cols-3" style={{ borderColor: GOLD }}>
-          <div><span style={{ color: PURPLE }} className="font-semibold">المريض:</span> <b>{patient.name || "—"}</b></div>
-          <div><span style={{ color: PURPLE }} className="font-semibold">الجنس:</span> {gender === "male" ? "ذكر" : gender === "female" ? "أنثى" : "—"}</div>
-          <div><span style={{ color: PURPLE }} className="font-semibold">العمر:</span> {patient.age || "—"}</div>
-          <div><span style={{ color: PURPLE }} className="font-semibold">الهاتف:</span> {patient.phone || "—"}</div>
-          {referrer && <div><span style={{ color: PURPLE }} className="font-semibold">الطبيب المُحيل:</span> {referrer}</div>}
+        <div className="report-keep mt-4 grid grid-cols-2 gap-x-6 gap-y-1.5 rounded-lg border-2 p-3 text-sm sm:grid-cols-3" style={{ borderColor: c.border }}>
+          <div><span style={{ color: c.title }} className="font-semibold">المريض:</span> <b>{patient.name || "—"}</b></div>
+          <div><span style={{ color: c.title }} className="font-semibold">الجنس:</span> {gender === "male" ? "ذكر" : gender === "female" ? "أنثى" : "—"}</div>
+          <div><span style={{ color: c.title }} className="font-semibold">العمر:</span> {patient.age || "—"}</div>
+          <div><span style={{ color: c.title }} className="font-semibold">الهاتف:</span> {patient.phone || "—"}</div>
+          {referrer && <div><span style={{ color: c.title }} className="font-semibold">الطبيب المُحيل:</span> {referrer}</div>}
         </div>
     </>
   );
@@ -219,7 +217,7 @@ export function ReportSheet({
                   <div className="mb-1 text-start">اعتمد النتائج:</div>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   {settings.signatureImage ? <img src={encodeURI(settings.signatureImage)} alt="التوقيع" className="mx-auto h-14 max-w-48 object-contain" /> : <div className="h-8" />}
-                  <div className="w-48 border-t pt-1 font-semibold text-gray-700" style={{ borderColor: GOLD }}>{settings.signatureName?.trim() || "التوقيع"}</div>
+                  <div className="w-48 border-t pt-1 font-semibold text-gray-700" style={{ borderColor: c.border }}>{settings.signatureName?.trim() || "التوقيع"}</div>
                   {settings.signatureTitle?.trim() && <div className="text-[10px] text-gray-500">{settings.signatureTitle}</div>}
                 </div>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -228,14 +226,14 @@ export function ReportSheet({
             ) : (
               <div>
                 <div className="mb-6">اعتمد النتائج:</div>
-                <div className="w-48 border-t pt-1 text-center text-gray-500" style={{ borderColor: GOLD }}>التوقيع / الختم</div>
+                <div className="w-48 border-t pt-1 text-center text-gray-500" style={{ borderColor: c.border }}>التوقيع / الختم</div>
               </div>
             )}
-            {qrCode && <LabQrCard q={qrCode} logo={qrLogo} />}
+            {qrCode && <LabQrCard q={qrCode} logo={qrLogo} colors={c} />}
           </div>
 
           {settings.footer && (
-            <div className="report-footer mt-4 rounded-md px-4 py-2 text-center text-xs font-medium text-white" style={{ background: PURPLE, ...exact }}>
+            <div className="report-footer mt-4 rounded-md px-4 py-2 text-center text-xs font-medium text-white" style={{ background: c.bar, ...exact }}>
               {settings.footer}
             </div>
           )}
@@ -252,7 +250,7 @@ export function ResultsTable({ ts, groups, empty = false, emptyText = "No tests 
   ts: TableStyle; groups: Group[]; empty?: boolean; emptyText?: string; gender: Gender; age?: string;
   prev?: Record<string, PrevResult>; printPrev?: boolean; paper?: "A4" | "A5";
 }) {
-  const c = tableColors(ts.intensity);
+  const c = reportColors(ts);
   const cols = printPrev ? 6 : 5;
   const py = DENSITY_PAD[ts.density].screen;
   const small = (ts.fontSize * 12) / 14; // header & group rows (text-xs at the original size)
@@ -328,13 +326,13 @@ export function ResultsTable({ ts, groups, empty = false, emptyText = "No tests 
   );
 }
 
-/** The printed QR code (left) with its caption (title + hint, right), in a small gold-edged card. */
-export function LabQrCard({ q, logo }: { q: LabQrCode; logo?: string }) {
+/** The printed QR code (left) with its caption (title + hint, right), in a small card edged in the accent colour. */
+export function LabQrCard({ q, logo, colors = { border: GOLD, title: PURPLE } }: { q: LabQrCode; logo?: string; colors?: { border: string; title: string } }) {
   return (
-    <div dir="ltr" className="report-qr flex items-center gap-2 rounded-lg border px-2 py-1.5" style={{ borderColor: GOLD }}>
+    <div dir="ltr" className="report-qr flex items-center gap-2 rounded-lg border px-2 py-1.5" style={{ borderColor: colors.border }}>
       <QrCode text={q.content} logo={logo} className="block size-[22mm]" />
       <div dir="rtl" className="max-w-[34mm] text-right leading-snug">
-        <div className="text-[11px] font-bold" style={{ color: PURPLE }}>{q.title}</div>
+        <div className="text-[11px] font-bold" style={{ color: colors.title }}>{q.title}</div>
         <div className="mt-0.5 text-[9.5px] text-gray-500">{q.hint}</div>
       </div>
     </div>

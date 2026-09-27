@@ -1,6 +1,7 @@
 import { PageHeader, Card, Button } from "@/components/ui/primitives";
 import { cloudApiConfigured } from "@/lib/whatsapp";
-import { getLabIdentity } from "@/lib/lab-identity";
+import { DEFAULT_LAB_NAME, getLabIdentity, labLogo } from "@/lib/lab-identity";
+import { LogoCard } from "@/components/LogoCard";
 import { updateLabIdentity } from "@/app/actions/settings";
 import { labCodeId } from "@/lib/db/lab";
 import { getAdminDb } from "@/lib/license/server";
@@ -47,9 +48,13 @@ export default async function SettingsPage() {
       <PageHeader title="الإعدادات" subtitle="حالة النظام والميزات" />
 
       <Card className="mb-4">
-        <div className="mb-1 font-semibold">بيانات الترويسة والطباعة</div>
-        <p className="mb-3 text-xs text-muted">تظهر في تقرير النتائج المطبوع ووصل استلام الطلب. اتركها فارغة لإخفائها.</p>
-        <form action={updateLabIdentity} className="flex flex-col gap-3">
+        <div className="mb-1 font-semibold">هوية المختبر والطباعة</div>
+        <p className="mb-3 text-xs text-muted">اسم مختبرك وشعاره يظهران في لوحة الإدارة وعلى تقرير النتائج ووصل الاستلام. الأسطر الأخرى تُترك فارغة لإخفائها.</p>
+        <form action={updateLabIdentity} className="flex flex-col gap-3" data-testid="identity-form">
+          <label className="text-sm font-medium">
+            اسم المختبر
+            <input name="name" defaultValue={identity.name} maxLength={120} placeholder={DEFAULT_LAB_NAME} className={`mt-1 ${field}`} />
+          </label>
           <label className="text-sm font-medium">
             السطر تحت اسم المختبر (المؤهّل / الوصف)
             <input name="subtitle" defaultValue={identity.subtitle} maxLength={300} className={`mt-1 ${field}`} />
@@ -60,6 +65,7 @@ export default async function SettingsPage() {
           </label>
           <div><Button>حفظ</Button></div>
         </form>
+        <LogoCard logo={labLogo(identity)} isDefault={!identity.logo} />
       </Card>
 
       <Card className="mb-4">

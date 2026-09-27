@@ -11,6 +11,7 @@ import { OfflineProvider } from "@/components/offline/OfflineProvider";
 import { labDbProblem } from "@/lib/db/lab";
 import { LabDbProblem } from "@/components/LabDbProblem";
 import { ErrorReporter } from "@/components/ErrorReporter";
+import { getLabIdentity, labName } from "@/lib/lab-identity";
 // Arabic UI font bundled with the app (no Google Fonts request) — works offline.
 import "@fontsource/ibm-plex-sans-arabic/arabic-400.css";
 import "@fontsource/ibm-plex-sans-arabic/arabic-500.css";
@@ -50,6 +51,9 @@ export default async function RootLayout({
   // The lab's own database (when its code has one) must answer before the panel can open.
   const dbProblem = !isBare || isLogin ? await labDbProblem() : null;
   const user = isBare || dbProblem ? null : await getCurrentUser();
+  // The lab's own name and logo on the panel (Settings → «هوية المختبر»).
+  const identity = user ? await getLabIdentity() : null;
+  const lab = identity ? { name: labName(identity), logo: identity.logo } : { name: "", logo: "" };
   // A sign-in that no longer holds here (expired, or made on the lab's previous database).
   if (!isBare && !dbProblem && !user && !pathname.startsWith("/verify") && (await cookies()).has("lab_session")) {
     redirect("/api/auth/reset");
@@ -80,9 +84,9 @@ export default async function RootLayout({
         ) : (
           <OfflineProvider>
           <div className="flex min-h-screen">
-            <Sidebar role={user.role} />
+            <Sidebar role={user.role} lab={lab} />
             <div className="flex min-w-0 flex-1 flex-col">
-              <Topbar user={user} />
+              <Topbar user={user} lab={lab} />
               <main className="flex-1 p-5 md:p-7">
                 {canAccess(pathname, user.role) ? (
                   children

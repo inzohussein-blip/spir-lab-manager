@@ -3,11 +3,12 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, X, FlaskConical } from "lucide-react";
+import { Menu, X } from "lucide-react";
+import { LabMark } from "@/components/Sidebar";
 import { navForRole } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 
-export function MobileNav({ role }: { role: string }) {
+export function MobileNav({ role, lab }: { role: string; lab: { name: string; logo: string } }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const groups = navForRole(role);
@@ -39,10 +40,8 @@ export function MobileNav({ role }: { role: string }) {
           >
             <div className="flex items-center justify-between px-5 py-4">
               <div className="flex items-center gap-2.5 font-bold">
-                <span className="grid size-9 place-items-center rounded-xl bg-gradient-to-br from-brand to-brand-dark text-white">
-                  <FlaskConical className="size-5" />
-                </span>
-                مختبر التحليلات المرضية
+                <LabMark lab={lab} className="size-9 shrink-0 rounded-xl" />
+                <span className="line-clamp-2">{lab.name}</span>
               </div>
               <button onClick={() => setOpen(false)} className="grid size-8 place-items-center rounded-lg hover:bg-canvas">
                 <X className="size-5" />
