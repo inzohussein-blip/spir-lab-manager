@@ -1,5 +1,8 @@
 "use client";
 
+import { useEffect } from "react";
+import { reportError } from "@/components/ErrorReporter";
+
 export default function GlobalError({
   error,
   reset,
@@ -7,6 +10,7 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  useEffect(() => { reportError(error?.message || "app error", error?.digest ?? ""); }, [error]);
   return (
     <html lang="ar" dir="rtl">
       <body

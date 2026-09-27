@@ -1,8 +1,9 @@
 import "server-only";
-import { copyInto, forgetAdminDb, prepareLabDb, resetLabAdmin, targetForCode } from "@/lib/db/lab";
+import { copyInto, forgetAdminDb, prepareLabDb, readAllTables, resetLabAdmin, targetForCode } from "@/lib/db/lab";
+import { xlsx, type Sheet } from "@/lib/xlsx";
 import { LabDbError } from "@/lib/sync/pg";
 import { isPostgresUrl } from "@/lib/sync/protocol";
-import { getAdminDb, getSyncConfig, recordAdminDbCheck, setAdminDb } from "./server";
+import { getAdminDb, getSyncConfig, licenseLabName, noteLicenseEvent, recordAdminDbCheck, setAdminDb } from "./server";
 
 /**
  * Setting a lab's own database for its full admin panel — shared by the owner (/licenses) and the
@@ -105,4 +106,45 @@ export async function linkAdminDb(id: string, conn: string | null, by: "owner" |
   const err = await setAdminDb(id, conn, by);
   forgetAdminDb(id);
   return err ? { ok: false, error: err } : { ok: true, users: prepared.users, created: prepared.created, copied };
+}
+
+/** Readable names for the panel's tables on the export's sheets (others keep their own name). */
+const TABLE_AR: Record<string, string> = {
+  patients: "المرضى", test_orders: "الطلبات", test_order_items: "فحوص الطلبات", test_results: "النتائج", test_catalog: "كتالوج الفحوصات",
+  invoices: "الفواتير", invoice_items: "بنود الفواتير", payments: "الدفعات", products: "المخزون", stock_movements: "حركة المخزون",
+  suppliers: "الموردون", purchase_orders: "أوامر الشراء", purchase_order_items: "بنود الشراء", expenses: "المصروفات", staff: "الكادر",
+  shifts: "المناوبات", cover_shifts: "البدلاء", referrers: "الأطباء المحيلون", appointments: "المواعيد", reports: "التقارير",
+  qc_runs: "السيطرة النوعية", app_users: "المستخدمون", audit_log: "سجل التدقيق", lab_settings: "إعدادات المختبر", whatsapp_log: "سجل الرسائل",
+};
+
+/** The owner's export of a lab's admin-panel data as an Excel workbook (a sheet per table; account
+ *  passwords are left out). Nothing is written to the lab's own records. */
+export async function exportLabData(id: string): Promise<{ ok: true; file: string; name: string; tables: number; rows: number } | { ok: false; error: string }> {
+  try {
+    const lab = await licenseLabName(id);
+    if (lab == null) return { ok: false, error: "not_found" };
+    const t = await targetForCode(id);
+    if (!t.where) return { ok: false, error: "needs_db" };
+    const tables = await readAllTables(t.where);
+    const date = new Date().toISOString().slice(0, 10);
+    let rows = 0;
+    const sheets: Sheet[] = [{
+      name: "معلومات",
+      rows: [["المختبر", lab], ["تاريخ التصدير", date], ["المصدر", "conn" in t.where ? "قاعدة المختبر الخاصة" : "قسمه في قاعدة الموقع"], [],
+        ["الجدول", "عدد السجلات", "ملاحظة"],
+        ...tables.map((x) => [TABLE_AR[x.name] ?? x.name, x.rows.length, x.cut ? "أول 50000 سجل فقط" : ""])],
+    }];
+    for (const x of tables) {
+      const hide = x.name === "app_users" ? new Set(["password_hash"]) : new Set<string>();
+      const keep = x.cols.map((c, i) => [c, i] as const).filter(([c]) => !hide.has(c));
+      sheets.push({ name: TABLE_AR[x.name] ?? x.name, rows: [keep.map(([c]) => c), ...x.rows.map((r) => keep.map(([, i]) => r[i]))] });
+      rows += x.rows.length;
+    }
+    const file = Buffer.from(xlsx(sheets)).toString("base64");
+    await noteLicenseEvent(id, "data_export", `${tables.length} جدولاً · ${rows} سجلاً`);
+    // A plain file name (some browsers drop names with Arabic); the lab's name is on the first sheet.
+    return { ok: true, file, name: `lab-data-${id.replace(/[^\w]/g, "").slice(0, 8)}-${date}.xlsx`, tables: tables.length, rows };
+  } catch (e) {
+    return { ok: false, error: errOf(e) };
+  }
 }

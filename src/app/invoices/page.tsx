@@ -3,6 +3,7 @@ import { ReceiptText, Coins, Wallet } from "lucide-react";
 import { query, queryOne } from "@/lib/db";
 import { PageHeader, Card, StatTile } from "@/components/ui/primitives";
 import { money } from "@/lib/utils";
+import { Pager, pageOf } from "@/components/Pager";
 
 export const dynamic = "force-dynamic";
 
@@ -19,9 +20,11 @@ const statusTone: Record<string, string> = {
   void: "bg-gray-100 text-gray-500",
 };
 
+const PAGE = 200;
+
 export default async function InvoicesPage(
   props: {
-    searchParams: Promise<{ q?: string; status?: string }>;
+    searchParams: Promise<{ q?: string; status?: string; page?: string }>;
   }
 ) {
   const searchParams = await props.searchParams;
@@ -40,14 +43,15 @@ export default async function InvoicesPage(
   }
   const whereSql = where.length ? `where ${where.join(" and ")}` : "";
 
-  const [rows, totals] = await Promise.all([
+  const page = pageOf(searchParams.page);
+  const [found, totals] = await Promise.all([
     query<any>(
       `select inv.id, inv.invoice_no, inv.invoice_date, inv.total, inv.paid, inv.status,
               p.full_name
          from invoices inv
          left join patients p on p.id = inv.patient_id
          ${whereSql}
-        order by inv.created_at desc limit 200`,
+        order by inv.created_at desc limit ${PAGE + 1} offset ${(page - 1) * PAGE}`,
       params
     ),
     queryOne<any>(
@@ -58,6 +62,7 @@ export default async function InvoicesPage(
        from invoices`
     ),
   ]);
+  const rows = found.slice(0, PAGE);
 
   return (
     <div>
@@ -137,6 +142,7 @@ export default async function InvoicesPage(
           </tbody>
         </table>
       </Card>
+      <Pager page={page} hasMore={found.length > PAGE} path="/invoices" params={{ q, status }} />
     </div>
   );
 }

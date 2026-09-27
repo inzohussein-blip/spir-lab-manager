@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Plus, Search, UserRound, ClipboardPlus, Users } from "lucide-react";
 import { query } from "@/lib/db";
 import { PageHeader, Button, Card, EmptyState } from "@/components/ui/primitives";
+import { Pager, pageOf } from "@/components/Pager";
 
 export const dynamic = "force-dynamic";
 
@@ -23,14 +24,17 @@ function GenderChip({ gender }: { gender: string | null }) {
   return <span className="text-muted">—</span>;
 }
 
+const PAGE = 100;
+
 export default async function PatientsPage(
   props: {
-    searchParams: Promise<{ q?: string }>;
+    searchParams: Promise<{ q?: string; page?: string }>;
   }
 ) {
   const searchParams = await props.searchParams;
   const q = (searchParams.q || "").trim();
-  const patients = await query<Row>(
+  const page = pageOf(searchParams.page);
+  const rows = await query<Row>(
     `select p.id, p.full_name, p.gender, p.age_years, p.phone,
             count(o.id)::int as visits,
             to_char(max(o.order_date), 'YYYY-MM-DD') as last_visit
@@ -39,9 +43,10 @@ export default async function PatientsPage(
       ${q ? "where p.full_name ilike $1 or p.phone ilike $1" : ""}
       group by p.id
       order by max(o.order_date) desc nulls last, p.created_at desc
-      limit 100`,
+      limit ${PAGE + 1} offset ${(page - 1) * PAGE}`,
     q ? [`%${q}%`] : []
   );
+  const patients = rows.slice(0, PAGE);
 
   return (
     <div>
@@ -116,6 +121,7 @@ export default async function PatientsPage(
           </table>
         )}
       </Card>
+      <Pager page={page} hasMore={rows.length > PAGE} path="/patients" params={{ q }} />
     </div>
   );
 }

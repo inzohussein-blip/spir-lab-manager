@@ -730,7 +730,7 @@ function StationEntryPage() {
                         </div>
                         {t.normal.kind === "qual" && (
                           <div className="mt-1.5 flex flex-wrap gap-1">
-                            {["Negative", "+", "++", "+++"].map((v) => (
+                            {["Positive", "Negative", "+", "++", "+++"].map((v) => (
                               <button
                                 key={v}
                                 type="button"

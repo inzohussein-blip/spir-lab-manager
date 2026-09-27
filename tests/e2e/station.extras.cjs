@@ -45,6 +45,16 @@ const IMG = '/lab-images/test/أنبوب اختبار.png';
   await p.goto(B + '/station/trash'); await p.waitForSelector('[data-testid="trash-list"]', { timeout: 15000 });
   ok(await p.locator('li[data-trash]').count() === 0 && ((await kv(p, 'station.trash.v1')) || []).length === 0, 'items older than 30 days are removed');
 
+  // ── Qualitative results (e.g. viruses): quick choices Positive, Negative, +, ++, +++ ──
+  await p.goto(B + '/station'); await p.waitForSelector('input[placeholder="ابحث عن فحص…"]', { timeout: 20000 });
+  await p.fill('input[placeholder="ابحث عن فحص…"]', 'C-Reactive'); await p.waitForTimeout(100);
+  await p.locator('div.grid button:has(span.flex-1)').first().click();
+  await p.fill('input[placeholder="ابحث عن فحص…"]', '');
+  const labels = (await p.locator('button:text-is("Positive"), button:text-is("Negative"), button:text-is("+"), button:text-is("++"), button:text-is("+++")').allInnerTexts());
+  ok(JSON.stringify(labels) === JSON.stringify(['Positive', 'Negative', '+', '++', '+++']), `qualitative quick choices: ${labels.join(' ')}`);
+  await p.click('button:text-is("Positive")');
+  ok(await p.locator('[data-result-idx="0"]').inputValue() === 'Positive', '«Positive» fills the result');
+
   // ── A long visits list: drawn in parts, searched in full ──
   const many = Array.from({ length: 260 }, (_, i) => ({
     id: `bulk-${i}`, created_at: Date.now() - i * 60000, accession: `LAB-20260101-${String(i + 1).padStart(3, '0')}`,

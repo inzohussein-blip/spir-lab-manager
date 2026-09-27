@@ -13,6 +13,7 @@ const GRACE_KEY = "local.license.grace.v1";
 const SEEN_KEY = "local.license.seen.v1";
 const ENABLED_KEY = "local.license.enabled";
 const CONTACT_KEY = "local.license.contact";
+const SIGNUP_KEY = "local.license.signup";
 
 const DAY = 86_400_000;
 /** This app's version (set at build, next.config): sent with every check, shown in /licenses. */
@@ -67,15 +68,18 @@ function deviceLabel(): string {
 
 export const cachedContact = () => read(CONTACT_KEY) ?? "";
 export const cachedEnabled = () => read(ENABLED_KEY) === "1";
+/** Can a lab register itself here (the owner's «التسجيل الذاتي»)? */
+export const cachedSignup = () => read(SIGNUP_KEY) === "1";
 
 /** Ask the server whether lab codes are on (cached for offline opens). A server that is down
  *  or answers with an error changes nothing: the last answer keeps being used. */
 export async function fetchEnabled(): Promise<boolean> {
   try {
     const r = await fetch("/api/license", { cache: "no-store" });
-    const d = r.ok ? ((await r.json()) as { enabled?: unknown; contact?: unknown }) : null;
+    const d = r.ok ? ((await r.json()) as { enabled?: unknown; contact?: unknown; signup?: unknown }) : null;
     if (!d || typeof d.enabled !== "boolean") return cachedEnabled();
     write(ENABLED_KEY, d.enabled ? "1" : "0");
+    write(SIGNUP_KEY, d.signup === true ? "1" : "0");
     write(CONTACT_KEY, typeof d.contact === "string" ? d.contact : "");
     return d.enabled;
   } catch {
@@ -183,6 +187,12 @@ export async function refreshLicense(force = false, maxAge = REFRESH_MS): Promis
 /** The provider's current note for this lab (empty when none). */
 export function providerMessage(): string {
   return readJson<Stored>(LIC_KEY)?.message?.trim() ?? "";
+}
+
+/** When this device last heard from the server about its code (null: never / no code). */
+export function licenseCheckedAt(): number | null {
+  const s = readJson<Stored>(LIC_KEY);
+  return s?.checkedAt ?? null;
 }
 
 /** The lab's database this code is linked to (set in /licenses, or by the lab from its settings). */

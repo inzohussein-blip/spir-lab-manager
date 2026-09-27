@@ -36,17 +36,29 @@ export interface LabDbTarget {
 interface Store {
   tx<T>(fn: (c: TxConn) => Promise<T>): Promise<T>;
   query(sql: string, params?: unknown[]): Promise<{ rows: Record<string, unknown>[]; rowCount: number | null }>;
+  /** Close its connections (a lab's own database only; its section of the site's has none). */
+  close?: () => Promise<void>;
 }
 type Route = { conn: string | null; trial: boolean; requireOwn: boolean };
 interface Entry { store: Store; ready?: Promise<void> }
 const g = globalThis as unknown as {
   __adminDbRoute?: Map<string, { route: Route; at: number }>;
   __adminDbStores?: Map<string, Promise<Entry>>;
+  __adminDbUsed?: Map<string, number>;
   __adminDbFail?: Map<string, number>;
   __adminDbReported?: Map<string, { at: number; ok: boolean }>;
 };
 const routes = (g.__adminDbRoute ??= new Map());
 const stores = (g.__adminDbStores ??= new Map());
+/** When each lab's own database was last used on this server instance (by store key). */
+const lastUsed = (g.__adminDbUsed ??= new Map());
+
+/** Connections to labs' own databases are closed after this long unused, and at most this many
+ *  labs keep connections open on one server instance (the least recently used close first). */
+const IDLE_CLOSE_MS = Number(process.env.LAB_POOL_IDLE_MIN || 10) * 60_000;
+const MAX_OPEN = Number(process.env.LAB_POOLS_MAX || 25);
+/** A store used this recently may have a query in flight and is never closed. */
+const BUSY_MS = 60_000;
 /** When a lab's database last dropped a query for connection trouble (by store key). */
 const failures = (g.__adminDbFail ??= new Map());
 /** When a lab's database state was last written to its code (so the owner sees it), by code. */
@@ -126,6 +138,7 @@ async function ownStore(conn: string): Promise<Store> {
   });
   pool.on("error", () => undefined); // a dropped idle connection is replaced on the next query
   return {
+    close: () => pool.end().catch(() => undefined),
     query: async (sql, params) => { const r = await pool.query(sql, params as unknown[]); return { rows: r.rows, rowCount: r.rowCount }; },
     async tx(fn) {
       const c = await pool.connect();
@@ -206,8 +219,25 @@ async function ensureSchema(store: Store, schema?: string) {
 
 /** The store for a place, with the panel's tables ready. The site's shared section ("public") is
  *  read as it is (only to copy old data out of it). */
+/** Close the connections of labs' own databases left unused, and of the least recently used
+ *  ones beyond MAX_OPEN (they open again on the next request). */
+function closeIdle(now: number) {
+  const own = [...lastUsed.entries()].filter(([k]) => k.startsWith("own:")).sort((a, b) => a[1] - b[1]);
+  let open = own.length;
+  for (const [k, used] of own) {
+    const idle = now - used;
+    if (idle < BUSY_MS || (idle < IDLE_CLOSE_MS && open <= MAX_OPEN)) continue;
+    const p = stores.get(k);
+    stores.delete(k); lastUsed.delete(k); open--;
+    void p?.then((e) => e.store.close?.()).catch(() => undefined);
+  }
+}
+
 export async function storeOf(w: Where): Promise<Store> {
   const key = whereKey(w);
+  const now = Date.now();
+  closeIdle(now);
+  lastUsed.set(key, now);
   let p = stores.get(key);
   if (!p) {
     p = ("conn" in w ? ownStore(w.conn) : Promise.resolve(siteStore(w.schema))).then((store) => ({ store }));
@@ -361,6 +391,32 @@ export async function copyInto(target: Where, source: Where): Promise<{ tables: 
       for (const t of order) await c.exec(`alter table ${qi(t)} enable trigger user`);
       return { tables: order.length, rows };
     });
+  } catch (err) {
+    throw toLabError(err);
+  }
+}
+
+/** Rows read per table for an export (a larger table is cut, and says so). */
+const EXPORT_MAX_ROWS = 50_000;
+
+/** Every table of a lab's place, for the owner's export: columns and rows (as text or numbers). */
+export interface TableDump { name: string; cols: string[]; rows: (string | number | null)[][]; cut: boolean }
+export async function readAllTables(w: Where): Promise<TableDump[]> {
+  try {
+    const store = await storeOf(w);
+    const tables = (await store.query(
+      `select table_name as t from information_schema.tables where table_schema = current_schema() and table_type = 'BASE TABLE' order by 1`
+    )).rows.map((r) => String(r.t)).filter((t) => !NOT_COPIED.test(t));
+    const out: TableDump[] = [];
+    for (const t of tables) {
+      const r = await store.query(`select * from ${qi(t)} order by 1 limit ${EXPORT_MAX_ROWS + 1}`);
+      const cols = r.rows[0] ? Object.keys(r.rows[0]) : [];
+      const cell = (v: unknown): string | number | null =>
+        v == null ? null : typeof v === "number" ? v : typeof v === "boolean" ? (v ? "نعم" : "لا")
+        : v instanceof Date ? v.toISOString() : typeof v === "object" ? JSON.stringify(v) : String(v);
+      out.push({ name: t, cols, rows: r.rows.slice(0, EXPORT_MAX_ROWS).map((row) => cols.map((c) => cell(row[c]))), cut: r.rows.length > EXPORT_MAX_ROWS });
+    }
+    return out;
   } catch (err) {
     throw toLabError(err);
   }

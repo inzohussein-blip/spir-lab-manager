@@ -1,5 +1,6 @@
 import { query } from "@/lib/db";
 import { PageHeader, Card } from "@/components/ui/primitives";
+import { Pager, pageOf } from "@/components/Pager";
 
 export const dynamic = "force-dynamic";
 
@@ -23,11 +24,15 @@ function summarize(action: string, details: any): string {
   return "";
 }
 
-export default async function AuditPage() {
-  const rows = await query<any>(
+const PAGE = 200;
+
+export default async function AuditPage(props: { searchParams: Promise<{ page?: string }> }) {
+  const page = pageOf((await props.searchParams).page);
+  const found = await query<any>(
     `select action, entity, actor_name, details, created_at
-       from audit_log order by created_at desc limit 200`
+       from audit_log order by created_at desc limit ${PAGE + 1} offset ${(page - 1) * PAGE}`
   );
+  const rows = found.slice(0, PAGE);
 
   return (
     <div>
@@ -70,6 +75,7 @@ export default async function AuditPage() {
           </tbody>
         </table>
       </Card>
+      <Pager page={page} hasMore={found.length > PAGE} path="/audit" />
     </div>
   );
 }

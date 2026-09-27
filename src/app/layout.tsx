@@ -10,6 +10,7 @@ import { canAccess } from "@/lib/permissions";
 import { OfflineProvider } from "@/components/offline/OfflineProvider";
 import { labDbProblem } from "@/lib/db/lab";
 import { LabDbProblem } from "@/components/LabDbProblem";
+import { ErrorReporter } from "@/components/ErrorReporter";
 // Arabic UI font bundled with the app (no Google Fonts request) — works offline.
 import "@fontsource/ibm-plex-sans-arabic/arabic-400.css";
 import "@fontsource/ibm-plex-sans-arabic/arabic-500.css";
@@ -71,6 +72,7 @@ export default async function RootLayout({
       </head>
       <body className="min-h-screen">
         <Toaster position="top-center" richColors />
+        <ErrorReporter />
         {dbProblem ? (
           <LabDbProblem code={dbProblem.code} host={dbProblem.host} />
         ) : isBare || !user ? (

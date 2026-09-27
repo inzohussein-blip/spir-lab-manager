@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   KeyRound, LogOut, Plus, Copy, Check, Ban, Play, MonitorSmartphone, RefreshCw, Trash2, Pencil, ShieldAlert,
   FlaskConical, Download, ChevronDown, MessageSquare, History, Wallet, MessageSquareText, Database, Upload, ShieldCheck, Smartphone, Phone,
-  Server, Menu, X, ChevronLeft, HardDrive, Settings, Search, type LucideIcon,
+  Server, Menu, X, ChevronLeft, HardDrive, Settings, Search, Bug, FileSpreadsheet, Lock, type LucideIcon,
 } from "lucide-react";
 import { LICENSE_MODULES, DEFAULT_MODULES, moduleLabel, type LicenseModule } from "@/lib/license/modules";
 import { STATION_SYNC, SUPABASE_SQL } from "@/lib/sync/protocol";
@@ -28,13 +28,24 @@ interface Row {
   /** The full admin panel's own database (no secrets). */
   admin_db: { host: string; by: "owner" | "lab"; at: number; provider?: ProviderId } | null;
   admin_db_check: { at: number; ok: boolean; error: string } | null;
+  /** Devices allowed on the code, and the ones beyond the first (with «حساب واحد بعدة أجهزة»). */
+  max_devices: number;
+  devices: { device_id: string; label: string; activated_at: number; last_seen_at: number | null; app_version: string }[];
+  /** "signup": registered by the lab itself. */
+  source: string;
 }
 interface Ev { license_id: string; at: number; kind: string; detail: string }
 interface Storage { source: "license-db" | "app-db" | "embedded"; ok: boolean; codes?: number; roundTripMs?: number; error?: string; keySealed?: boolean }
 interface SignIn { at: number; ok: boolean; ip: string; agent: string }
 interface TwoFactor { enabled: boolean; broken: boolean; forcedOff: boolean; canSetup: boolean }
-type Prefs = { defaultDays: number; defaultModules: LicenseModule[]; trialDays: number; soonDays: number; adminNeedsOwnDb: boolean };
-const DEFAULT_PREFS: Prefs = { defaultDays: 365, defaultModules: [...DEFAULT_MODULES], trialDays: 7, soonDays: 14, adminNeedsOwnDb: true };
+type Prefs = {
+  defaultDays: number; defaultModules: LicenseModule[]; trialDays: number; soonDays: number; adminNeedsOwnDb: boolean;
+  multiDevice: boolean; selfSignup: boolean; errorLog: boolean; dataExport: boolean;
+};
+const DEFAULT_PREFS: Prefs = {
+  defaultDays: 365, defaultModules: [...DEFAULT_MODULES], trialDays: 7, soonDays: 14, adminNeedsOwnDb: true,
+  multiDevice: false, selfSignup: false, errorLog: false, dataExport: false,
+};
 type Data = { enabled: boolean; owner: boolean; needsDb?: boolean; storage?: Storage; licenses?: Row[]; events?: Ev[]; signIns?: SignIn[]; twoFactor?: TwoFactor; contact?: string; prefs?: Prefs; version?: string; now?: number };
 const agentLabel = (ua: string) => {
   const os = /Windows/.test(ua) ? "Windows" : /Android/.test(ua) ? "Android" : /iPhone|iPad/.test(ua) ? "iOS" : /Mac OS/.test(ua) ? "Mac" : /Linux/.test(ua) ? "Linux" : "";
@@ -66,11 +77,12 @@ const EVENT_LABEL: Record<string, string> = {
   created: "إنشاء الرمز", activated: "تفعيل على جهاز", moved: "تفعيل على جهاز جديد", extended: "تمديد", stopped: "إيقاف",
   resumed: "إعادة تفعيل", device_reset: "فك ربط الجهاز", modules: "تغيير المحطات", renamed: "تعديل الاسم",
   paid: "تسجيل الدفع", unpaid: "إلغاء الدفع", message: "رسالة للمختبر", new_code: "رمز جديد", sync: "قاعدة بيانات المختبر",
-  admin_db: "قاعدة لوحة الإدارة",
+  admin_db: "قاعدة لوحة الإدارة", device_added: "جهاز إضافي", device_removed: "إزالة جهاز", max_devices: "عدد الأجهزة",
+  data_export: "تصدير البيانات",
 };
 const eventDetail = (e: Ev) => (e.kind === "modules" ? e.detail.split(",").filter(Boolean).map(moduleLabel).join("، ") || "لا شيء" : e.detail);
 
-type Section = "codes" | "new" | "databases" | "settings" | "security" | "backup" | "system";
+type Section = "codes" | "new" | "databases" | "settings" | "errors" | "security" | "backup" | "system";
 const SECTIONS: { title: string; items: { id: Section; label: string; hint: string; icon: LucideIcon }[] }[] = [
   { title: "الرموز", items: [
     { id: "codes", label: "الرموز", hint: "المختبرات وأجهزتها", icon: KeyRound },
@@ -79,6 +91,7 @@ const SECTIONS: { title: string; items: { id: Section; label: string; hint: stri
   ] },
   { title: "الإعدادات", items: [
     { id: "settings", label: "الإعدادات العامة", hint: "المدد والمحطات الافتراضية والتواصل", icon: Settings },
+    { id: "errors", label: "سجل الأخطاء", hint: "أخطاء الموقع والمحطات", icon: Bug },
     { id: "security", label: "الأمان", hint: "التحقق بخطوتين وسجل الدخول", icon: ShieldCheck },
     { id: "backup", label: "النسخ الاحتياطي", hint: "تنزيل واسترجاع الرموز", icon: Database },
     { id: "system", label: "حالة النظام", hint: "التخزين والمفتاح والإصدار", icon: Server },
@@ -194,7 +207,7 @@ export default function LicensesPage() {
   const [err, setErr] = useState("");
   const [shown, setShown] = useState<{ row: Row; code: string } | null>(null);
   const [copied, setCopied] = useState("");
-  const [f, setF] = useState({ lab: "", days: 365, custom: "", note: "", modules: [...DEFAULT_MODULES] as LicenseModule[] });
+  const [f, setF] = useState({ lab: "", days: 365, custom: "", note: "", modules: [...DEFAULT_MODULES] as LicenseModule[], maxDevices: 1 });
   const [contact, setContact] = useState("");
   const prefsSeen = useRef(false);
   const [q, setQ] = useState("");
@@ -207,6 +220,7 @@ export default function LicensesPage() {
   const [dbFor, setDbFor] = useState<Row | null>(null);
   const [adminDbFor, setAdminDbFor] = useState<{ row: Row; provider?: ProviderId } | null>(null);
   const [resetFor, setResetFor] = useState<Row | null>(null);
+  const [exportFor, setExportFor] = useState<Row | null>(null);
   // The page's sections (like the lab station's pages), kept in the address (#codes, #new…) so a reload stays.
   const [section, setSection] = useState<Section>(() => (typeof window !== "undefined" ? sectionOf(window.location.hash) : "codes"));
   const [menu, setMenu] = useState(false);
@@ -248,8 +262,8 @@ export default function LicensesPage() {
     const days = trial ? prefs.trialDays : f.days === -1 ? Number(f.custom) : f.days;
     if (!f.lab.trim() || !days || days < 1) { setErr(f.lab.trim() ? "حدّد المدة." : "اكتب اسم المختبر."); return; }
     setErr("");
-    const d = await post({ op: "create", lab: f.lab, days, note: f.note, modules: f.modules, trial });
-    if (d.ok) { setShown({ row: d.row, code: d.code }); setF({ lab: "", days: prefs.defaultDays, custom: "", note: "", modules: [...prefs.defaultModules] }); load(); }
+    const d = await post({ op: "create", lab: f.lab, days, note: f.note, modules: f.modules, trial, maxDevices: prefs.multiDevice ? f.maxDevices : 1 });
+    if (d.ok) { setShown({ row: d.row, code: d.code }); setF({ lab: "", days: prefs.defaultDays, custom: "", note: "", modules: [...prefs.defaultModules], maxDevices: 1 }); load(); }
   }
   async function change(r: Row, c: Record<string, unknown>, confirmText?: string) {
     if (confirmText && !window.confirm(confirmText)) return;
@@ -424,6 +438,7 @@ export default function LicensesPage() {
                     <span className="text-lg font-bold">{r.lab_name}</span>
                     <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${st.c}`}>{st.t}</span>
                     {r.is_trial && <span className="rounded-full bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-700">تجريبي</span>}
+                    {r.source === "signup" && <span data-testid="signup-badge" className="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-700">تسجيل ذاتي</span>}
                     {r.price.trim() && <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${r.paid ? "bg-teal-50 text-brand-dark" : "bg-amber-50 text-amber-700"}`}>{r.paid ? "مدفوع" : "غير مدفوع"} · <span className="tabular-nums">{r.price}</span></span>}
                     {r.message && <span title={r.message} className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-xs text-sky-700"><MessageSquare className="size-3" /> رسالة</span>}
                   </div>
@@ -452,6 +467,7 @@ export default function LicensesPage() {
               <TimeLeft r={r} now={now} bar={st.bar} />
               <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 border-t border-line pt-3 text-xs sm:grid-cols-3 lg:grid-cols-6">
                 <Info k="الجهاز" v={deviceOf(r) || "لم يُربط بعد"} />
+                {prefs.multiDevice && <Info k="الأجهزة" v={`${(r.device_id ? 1 : 0) + r.devices.length} / ${r.max_devices}`} mono />}
                 <Info k="آخر اتصال" v={fmtShort(r.last_seen_at)} mono />
                 <VersionInfo r={r} current={data.version} />
                 <Info k="الرمز" v={`…${r.code_hint}`} mono />
@@ -481,7 +497,7 @@ export default function LicensesPage() {
                 aria-expanded={isOpen} className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-brand-dark hover:underline">
                 <ChevronDown className={`size-3.5 transition-transform ${isOpen ? "rotate-180" : ""}`} /> الدفع والجهاز والرسالة والسجل ({evs.length})
               </button>
-              {isOpen && <Details r={r} evs={evs} onChange={(c) => change(r, c)} />}
+              {isOpen && <Details r={r} evs={evs} multi={prefs.multiDevice} onChange={(c) => change(r, c)} />}
             </div>
           );
         })}
@@ -506,6 +522,11 @@ export default function LicensesPage() {
               {f.days === -1 && <input type="number" min={1} value={f.custom} onChange={(e) => setF({ ...f, custom: e.target.value })} placeholder="أيام" aria-label="عدد الأيام" className={`${inp} w-28`} />}
             </div>
           </label>
+          {prefs.multiDevice && (
+            <label className="text-sm font-medium">عدد الأجهزة
+              <input type="number" min={1} max={50} value={f.maxDevices} onChange={(e) => setF({ ...f, maxDevices: Math.max(1, Number(e.target.value) || 1) })} aria-label="عدد الأجهزة" className={`mt-1 ${inp}`} />
+            </label>
+          )}
           <label className="text-sm font-medium sm:col-span-2">ملاحظة (اختياري)<input value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} placeholder="المدينة، اسم المسؤول، رقم الهاتف…" className={`mt-1 ${inp}`} /></label>
         </div>
         <div className="mt-3 text-sm font-medium">المحطات المفعّلة</div>
@@ -589,7 +610,7 @@ export default function LicensesPage() {
         <>
           <SectionTitle icon={<HardDrive className="size-6" />} title="قواعد البيانات"
             desc="قاعدة لوحة الإدارة الكاملة لكل عميل: اربطها أو غيّرها أو افحصها من هنا. المحطات تعمل على أجهزتها ولا تحتاج قاعدة." />
-          <Databases rows={all} now={now} needsOwn={prefs.adminNeedsOwnDb} onOpen={(row, provider) => setAdminDbFor({ row, provider })} onReset={setResetFor} onChecked={load} />
+          <Databases rows={all} now={now} needsOwn={prefs.adminNeedsOwnDb} onExport={prefs.dataExport ? setExportFor : undefined} onOpen={(row, provider) => setAdminDbFor({ row, provider })} onReset={setResetFor} onChecked={load} />
         </>
       )}
 
@@ -608,6 +629,13 @@ export default function LicensesPage() {
         </>
       )}
 
+      {section === "errors" && (
+        <>
+          <SectionTitle icon={<Bug className="size-6" />} title="سجل الأخطاء" desc="الأخطاء التي ظهرت في الموقع والمحطات ولوحة الإدارة، مع المختبر والصفحة. يُحفظ آخر 2000 خطأ فقط أثناء تشغيل الخاصية." />
+          <ErrorsLog on={prefs.errorLog} />
+        </>
+      )}
+
       {section === "system" && (
         <>
           <SectionTitle icon={<Server className="size-6" />} title="حالة النظام" desc="أين تُحفظ الرموز، ومفتاح التوقيع، وإصدار الموقع." />
@@ -621,7 +649,7 @@ export default function LicensesPage() {
   return (
     <div className="min-h-screen bg-canvas md:flex">
       <OwnerNav section={section} go={go} total={counts.all} soon={soon} soonDays={prefs.soonDays}
-        dbDown={all.filter((r) => r.admin_db && r.admin_db_check && !r.admin_db_check.ok).length} open={menu} setOpen={setMenu}
+        dbDown={all.filter((r) => r.admin_db && r.admin_db_check && !r.admin_db_check.ok).length} showErrors={prefs.errorLog} open={menu} setOpen={setMenu}
         onLogout={async () => { await post({ op: "logout" }); load(); }} />
       <main className="min-w-0 flex-1 p-4 md:p-7">
         <div className="mx-auto max-w-5xl">{main}</div>
@@ -629,12 +657,14 @@ export default function LicensesPage() {
       {dbFor && <DbModal row={dbFor} rows={all} onClose={() => setDbFor(null)} onSaved={() => { setDbFor(null); load(); }} />}
       {adminDbFor && <AdminDbModal row={adminDbFor.row} provider={adminDbFor.provider} needsOwn={prefs.adminNeedsOwnDb} rows={all} onClose={() => setAdminDbFor(null)} onSaved={() => { setAdminDbFor(null); load(); }} />}
       {resetFor && <ResetAdminModal row={resetFor} onClose={() => setResetFor(null)} />}
+      {exportFor && <ExportModal row={exportFor} needCode={!!data.twoFactor?.enabled} onClose={() => setExportFor(null)} />}
     </div>
   );
 }
 
 /** Payment, device name, message to the lab and the code's history. */
-function Details({ r, evs, onChange }: { r: Row; evs: Ev[]; onChange: (c: Record<string, unknown>) => void }) {
+function Details({ r, evs, multi, onChange }: { r: Row; evs: Ev[]; multi: boolean; onChange: (c: Record<string, unknown>) => void }) {
+  const [maxDev, setMaxDev] = useState(r.max_devices);
   const [price, setPrice] = useState(r.price);
   const [paid, setPaid] = useState(r.paid);
   const [dev, setDev] = useState(r.device_name);
@@ -661,6 +691,26 @@ function Details({ r, evs, onChange }: { r: Row; evs: Ev[]; onChange: (c: Record
         ) : <p className="text-xs text-muted">لم يُربط بجهاز بعد.</p>}
         {r.device_label && <div className="mt-1 text-[11px] text-muted">النوع: {r.device_label}</div>}
       </div>
+      {multi && (
+        <div className="md:col-span-2" data-testid="devices">
+          <div className="mb-1 flex items-center gap-1 text-xs font-semibold"><MonitorSmartphone className="size-3.5" /> أجهزة المختبر على هذا الرمز</div>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span>عدد الأجهزة المسموحة</span>
+            <input type="number" min={1} max={50} value={maxDev} onChange={(e) => setMaxDev(Math.max(1, Number(e.target.value) || 1))} aria-label="عدد الأجهزة المسموحة" className={`${inp} w-20`} />
+            <button onClick={() => onChange({ action: "max_devices", n: maxDev })} disabled={maxDev === r.max_devices} className="rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-dark disabled:opacity-40">حفظ</button>
+          </div>
+          {r.devices.length > 0 ? (
+            <ul className="mt-2 rounded-lg border border-line bg-surface text-xs">
+              {r.devices.map((d) => (
+                <li key={d.device_id} className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-3 py-1.5 last:border-0">
+                  <span>{d.label || "جهاز"} <span className="text-muted">— آخر اتصال {fmtShort(d.last_seen_at)}</span></span>
+                  <button onClick={() => { if (window.confirm("إزالة هذا الجهاز من الرمز؟ يُقفل عند اتصاله التالي.")) onChange({ action: "remove_device", device: d.device_id }); }} className="text-red-700 hover:underline">إزالة</button>
+                </li>
+              ))}
+            </ul>
+          ) : <p className="mt-1 text-[11px] text-muted">لا أجهزة إضافية بعد — تُضاف عند إدخال الرمز نفسه على جهاز آخر للمختبر.</p>}
+        </div>
+      )}
       <div className="md:col-span-2">
         <div className="mb-1 flex items-center gap-1 text-xs font-semibold"><MessageSquare className="size-3.5" /> رسالة للمختبر</div>
         <p className="mb-1 text-[11px] text-muted">تظهر على محطاته عند أول اتصال بالإنترنت، حتى يضغط «تم». الرسالة الجديدة تظهر من جديد.</p>
@@ -989,8 +1039,10 @@ const providerOfRow = (r: Row): ProviderId | null => (r.admin_db ? r.admin_db.pr
 /** A saved database is checked again when the owner opens the list and its last check is older than this. */
 const RECHECK_MS = 30 * 60_000;
 
-function Databases({ rows, now, needsOwn, onOpen, onReset, onChecked }: {
+function Databases({ rows, now, needsOwn, onOpen, onReset, onChecked, onExport }: {
   rows: Row[]; now: number; needsOwn: boolean; onOpen: (r: Row, p?: ProviderId) => void; onReset: (r: Row) => void; onChecked: () => void;
+  /** The hidden data export, when switched on. */
+  onExport?: (r: Row) => void;
 }) {
   const [tab, setTab] = useState<DbTab>("all");
   const [q, setQ] = useState("");
@@ -1134,6 +1186,7 @@ function Databases({ rows, now, needsOwn, onOpen, onReset, onChecked }: {
                     <>
                       <button onClick={() => onReset(r)} className={small}><KeyRound className="size-3.5" /> كلمة مرور المدير</button>
                       <button onClick={() => importShared(r)} className={small} title="بيانات لوحة الإدارة المشتركة من قبل فصل المختبرات"><Download className="size-3.5" /> البيانات القديمة</button>
+                      {onExport && <button onClick={() => onExport(r)} className={small} data-testid="export-btn"><FileSpreadsheet className="size-3.5" /> تصدير Excel</button>}
                     </>
                   )}
                   <button onClick={() => onOpen(r, tab === "all" ? undefined : tab)} className="inline-flex items-center gap-1 rounded-lg bg-brand px-3 py-1 text-xs font-semibold text-white hover:bg-brand-dark">
@@ -1193,7 +1246,10 @@ function PrefsCard({ prefs, onSaved }: { prefs: Prefs; onSaved: () => void }) {
   async function save() {
     const defaultDays = p.days === -1 ? Number(p.custom) : p.days;
     if (!defaultDays || defaultDays < 1) { setMsg("حدّد المدة."); return; }
-    const d = await post({ op: "prefs", prefs: { defaultDays, defaultModules: p.defaultModules, trialDays: p.trialDays, soonDays: p.soonDays, adminNeedsOwnDb: p.adminNeedsOwnDb } });
+    const d = await post({ op: "prefs", prefs: {
+      defaultDays, defaultModules: p.defaultModules, trialDays: p.trialDays, soonDays: p.soonDays, adminNeedsOwnDb: p.adminNeedsOwnDb,
+      multiDevice: p.multiDevice, selfSignup: p.selfSignup, errorLog: p.errorLog, dataExport: p.dataExport,
+    } });
     setMsg(d.ok ? "✓ حُفظت الإعدادات" : "تعذّر الحفظ.");
     if (d.ok) onSaved();
   }
@@ -1228,6 +1284,36 @@ function PrefsCard({ prefs, onSaved }: { prefs: Prefs; onSaved: () => void }) {
           </span>
         </span>
       </label>
+
+      <div className="mt-4 rounded-lg border border-line p-3" data-testid="extra-features">
+        <div className="text-sm font-semibold">خصائص إضافية <span className="text-xs font-normal text-muted">— موقوفة افتراضياً</span></div>
+        <div className="mt-2 grid gap-2">
+          {([
+            ["multiDevice", "حساب واحد بعدة أجهزة", "يُدخل المختبر الرمز نفسه على أكثر من جهاز حتى العدد الذي تحدّده لكل رمز (في «رمز جديد» وفي تفاصيل الرمز)."],
+            ["selfSignup", "التسجيل الذاتي", "صفحة /signup يسجّل فيها المختبر اسمه ورقمه ويحصل فوراً على رمز تجريبي، ويظهر عندك بشارة «تسجيل ذاتي». يظهر رابطها في نافذة التفعيل."],
+            ["errorLog", "سجل الأخطاء", "تُحفظ أخطاء الموقع والمحطات ولوحة الإدارة مع اسم المختبر والصفحة، وتظهر في قسم «سجل الأخطاء»."],
+          ] as const).map(([k, title, desc]) => (
+            <label key={k} className="flex items-start gap-2 text-sm">
+              <input type="checkbox" checked={p[k]} onChange={(e) => setP({ ...p, [k]: e.target.checked })} aria-label={title} className="mt-1" />
+              <span><b>{title}</b><span className="block text-xs text-muted">{desc}</span></span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <details className="mt-3 rounded-lg border border-dashed border-line p-3" data-testid="secret-features">
+        <summary className="flex cursor-pointer items-center gap-1.5 text-sm font-semibold"><Lock className="size-3.5" /> خاصية سرية</summary>
+        <label className="mt-2 flex items-start gap-2 text-sm">
+          <input type="checkbox" checked={p.dataExport} onChange={(e) => setP({ ...p, dataExport: e.target.checked })} aria-label="تصدير بيانات المختبر" className="mt-1" />
+          <span>
+            <b>تصدير بيانات المختبر (Excel)</b>
+            <span className="block text-xs text-muted">
+              يظهر زر «تصدير Excel» لكل عميل في «قواعد البيانات»: ملف بكل بيانات لوحة إدارته، ورقة لكل جدول (دون كلمات المرور).
+              يطلب كلمة مرورك في كل مرة، ولا يظهر للمختبر ولا يُسجَّل في سجل تدقيقه — فقط في سجل الرمز عندك.
+            </span>
+          </span>
+        </label>
+      </details>
       <div className="mt-4 flex items-center gap-3">
         <button onClick={save} className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark">حفظ الإعدادات</button>
         {msg && <span data-testid="prefs-msg" className="text-xs text-brand-dark">{msg}</span>}
@@ -1337,9 +1423,89 @@ function AdminDbModal({ row, rows, provider: initial, needsOwn, onClose, onSaved
   );
 }
 
+/** «سجل الأخطاء»: what went wrong where (only kept while the owner has it on). */
+function ErrorsLog({ on }: { on: boolean }) {
+  const [list, setList] = useState<{ id: string; at: number; lab: string; kind: string; path: string; message: string; digest: string }[] | null>(null);
+  const [tick, setTick] = useState(0);
+  const load = () => setTick((t) => t + 1);
+  useEffect(() => {
+    let alive = true;
+    post({ op: "errors" }).then((d) => { if (alive) setList(d.ok ? d.errors : []); });
+    return () => { alive = false; };
+  }, [tick]);
+  return (
+    <div className="rounded-2xl border border-line bg-surface p-4 shadow-[var(--shadow-card)]">
+      {!on && <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">الخاصية موقوفة — شغّلها من «الإعدادات العامة» لتُحفظ الأخطاء الجديدة.</p>}
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <span className="text-sm text-muted">{list ? `${list.length} خطأ` : "جارٍ التحميل…"}</span>
+        <div className="flex gap-2">
+          <button onClick={load} className={small}><RefreshCw className="size-3.5" /> تحديث</button>
+          {!!list?.length && <button onClick={async () => { if (!window.confirm("مسح سجل الأخطاء كله؟")) return; await post({ op: "errors_clear" }); load(); }} className={`${small} text-red-700`}><Trash2 className="size-3.5" /> مسح السجل</button>}
+        </div>
+      </div>
+      {list && list.length === 0 ? <p className="text-center text-sm text-muted">لا أخطاء مسجّلة.</p> : (
+        <ul data-testid="errors-list" className="divide-y divide-line text-xs">
+          {(list ?? []).map((e) => (
+            <li key={e.id} className="grid gap-0.5 py-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`rounded-full px-2 py-0.5 font-semibold ${e.kind === "server" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>{e.kind === "server" ? "الخادم" : "المتصفح"}</span>
+                <b>{e.lab || "بلا رمز"}</b>
+                <span className="font-mono text-muted" dir="ltr">{e.path}</span>
+                <span className="ms-auto tabular-nums text-muted">{fmtTime(e.at)}</span>
+              </div>
+              <div className="break-words font-mono text-[11px]" dir="ltr">{e.message}{e.digest ? ` (${e.digest})` : ""}</div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** The hidden export: the owner's password again (and the phone code with two-step sign-in). */
+function ExportModal({ row, needCode, onClose }: { row: Row; needCode: boolean; onClose: () => void }) {
+  const [pw, setPw] = useState("");
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  async function go() {
+    setBusy(true); setMsg(null);
+    const d = await post({ op: "export", id: row.id, password: pw, code });
+    setBusy(false);
+    if (!d.ok) {
+      setMsg({ ok: false, text: d.error === "wrong" ? "كلمة المرور أو رمز التحقق غير صحيح." : d.error === "too_many" ? "محاولات كثيرة — حاول بعد قليل." : adminDbError(d.error) });
+      return;
+    }
+    const bin = Uint8Array.from(atob(d.file), (c) => c.charCodeAt(0));
+    const url = URL.createObjectURL(new Blob([bin], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+    const a = document.createElement("a");
+    a.href = url; a.download = d.name;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 2000);
+    setPw(""); setCode("");
+    setMsg({ ok: true, text: `✓ نُزّل الملف: ${d.tables} جدولاً و${d.rows} سجلاً.` });
+  }
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/40 p-4" onClick={onClose}>
+      <div role="dialog" aria-label="تصدير بيانات المختبر" data-testid="export-modal" onClick={(e) => e.stopPropagation()} className="w-full max-w-md rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-pop)]">
+        <h2 className="flex items-center gap-2 text-lg font-bold"><FileSpreadsheet className="size-5 text-brand" /> تصدير بيانات — {row.lab_name}</h2>
+        <p className="mt-1 text-xs text-muted">ملف Excel بكل بيانات لوحة إدارة هذا المختبر (ورقة لكل جدول، دون كلمات المرور). أدخل كلمة مرورك للتأكيد.</p>
+        <div className="mt-3 grid gap-2">
+          <input type="password" dir="ltr" value={pw} onChange={(e) => setPw(e.target.value)} aria-label="كلمة مرور المالك" placeholder="كلمة المرور" className={inp} />
+          {needCode && <input dir="ltr" inputMode="numeric" value={code} onChange={(e) => setCode(e.target.value)} aria-label="رمز التحقق" placeholder="رمز التحقق من الهاتف" className={inp} />}
+        </div>
+        {msg && <p data-testid="export-msg" className={`mt-3 text-sm ${msg.ok ? "text-teal-700" : "text-red-700"}`}>{msg.text}</p>}
+        <div className="mt-4 flex justify-end gap-2">
+          <button onClick={onClose} className="rounded-lg border border-line px-4 py-2 text-sm hover:bg-canvas">إغلاق</button>
+          <button disabled={busy || !pw} onClick={go} className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-50">{busy ? "جارٍ التصدير…" : "تصدير"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** The page's side menu, like the lab station's (a drawer on phones). */
-function OwnerNav({ section, go, total, soon, soonDays, dbDown, open, setOpen, onLogout }: {
-  section: Section; go: (s: Section) => void; total: number; soon: number; soonDays: number; dbDown: number; open: boolean; setOpen: (v: boolean) => void; onLogout: () => void;
+function OwnerNav({ section, go, total, soon, soonDays, dbDown, showErrors, open, setOpen, onLogout }: {
+  section: Section; go: (s: Section) => void; total: number; soon: number; soonDays: number; dbDown: number; showErrors: boolean; open: boolean; setOpen: (v: boolean) => void; onLogout: () => void;
 }) {
   const current = SECTIONS.flatMap((g) => g.items).find((i) => i.id === section)?.label ?? "إدارة الرموز";
   return (
@@ -1371,7 +1537,7 @@ function OwnerNav({ section, go, total, soon, soonDays, dbDown, open, setOpen, o
             <div key={g.title}>
               <div className="mb-1.5 px-2.5 text-[11px] font-semibold text-muted">{g.title}</div>
               <div className="flex flex-col gap-0.5">
-                {g.items.map((it) => {
+                {g.items.filter((it) => it.id !== "errors" || showErrors).map((it) => {
                   const active = section === it.id;
                   const badge = it.id === "codes" ? (soon || total) : it.id === "databases" ? dbDown : 0;
                   const warn = it.id === "codes" ? !!soon : it.id === "databases";
