@@ -77,3 +77,87 @@ export async function saveLabLogo(dataUrl: string): Promise<boolean> {
   await put("lab_logo", dataUrl);
   return true;
 }
+
+/**
+ * The look of the panel's printed report (Settings → «شكل تقرير النتائج»): the lab's colours, the
+ * signature and stamp, and the English report. Kept beside the identity, in the lab's own place.
+ */
+export interface ReportLook {
+  primary: string;
+  accent: string;
+  /** Colour strength in % (100 = the colours as chosen). */
+  intensity: number;
+  signatureOn: boolean;
+  signatureName: string;
+  signatureTitle: string;
+  /** Images as data URLs ("" → none). */
+  signature: string;
+  stamp: string;
+  /** The language the report opens in (each print can switch). */
+  lang: "ar" | "en";
+  /** The letterhead in English ("" → the Arabic line). */
+  nameEn: string;
+  subtitleEn: string;
+  footerEn: string;
+}
+
+export const DEFAULT_LOOK: ReportLook = {
+  primary: "#5a2a82", accent: "#c9a227", intensity: 100, signatureOn: false, signatureName: "", signatureTitle: "",
+  signature: "", stamp: "", lang: "ar", nameEn: "", subtitleEn: "", footerEn: "",
+};
+
+const HEX = /^#[0-9a-f]{6}$/i;
+const text = (v: unknown, max: number) => String(v ?? "").trim().slice(0, max);
+
+/** A saved or sent look made safe (unknown fields dropped, bad values back to the defaults). */
+export function cleanLook(v: Partial<Record<keyof ReportLook, unknown>>, base: ReportLook = DEFAULT_LOOK): ReportLook {
+  const has = (k: keyof ReportLook) => v[k] !== undefined;
+  const n = Number(v.intensity);
+  return {
+    primary: has("primary") && HEX.test(String(v.primary)) ? String(v.primary).toLowerCase() : base.primary,
+    accent: has("accent") && HEX.test(String(v.accent)) ? String(v.accent).toLowerCase() : base.accent,
+    intensity: has("intensity") && Number.isFinite(n) ? Math.max(70, Math.min(150, Math.round(n))) : base.intensity,
+    signatureOn: has("signatureOn") ? v.signatureOn === true : base.signatureOn,
+    signatureName: has("signatureName") ? text(v.signatureName, 80) : base.signatureName,
+    signatureTitle: has("signatureTitle") ? text(v.signatureTitle, 120) : base.signatureTitle,
+    signature: base.signature,
+    stamp: base.stamp,
+    lang: has("lang") ? (v.lang === "en" ? "en" : "ar") : base.lang,
+    nameEn: has("nameEn") ? text(v.nameEn, 120) : base.nameEn,
+    subtitleEn: has("subtitleEn") ? text(v.subtitleEn, 300) : base.subtitleEn,
+    footerEn: has("footerEn") ? text(v.footerEn, 300) : base.footerEn,
+  };
+}
+
+export const getReportLook = cache(async (): Promise<ReportLook> => {
+  try {
+    await ensureTable();
+    const rows = await query<{ key: string; value: string }>(
+      `select key, value from lab_settings where key = any($1)`, [["report_look", "report_signature", "report_stamp"]]
+    );
+    const get = (k: string) => rows.find((r) => r.key === k)?.value ?? "";
+    let saved: Record<string, unknown> = {};
+    try { saved = JSON.parse(get("report_look") || "{}"); } catch { /* the defaults */ }
+    const img = (k: string) => { const x = get(k).trim(); return isLogoDataUrl(x) ? x : ""; };
+    return { ...cleanLook(saved), signature: img("report_signature"), stamp: img("report_stamp") };
+  } catch {
+    return DEFAULT_LOOK; // printing must never fail over optional looks
+  }
+});
+
+export async function saveReportLook(v: Partial<Record<keyof ReportLook, unknown>>): Promise<ReportLook> {
+  const cur = await getReportLook();
+  const next = cleanLook(v, cur);
+  const { signature: _s, stamp: _t, ...store } = next;
+  await ensureTable();
+  await put("report_look", JSON.stringify(store));
+  return next;
+}
+
+/** Set the signature or the stamp (an image data URL), or remove it with "". */
+export async function saveReportImage(kind: "signature" | "stamp", dataUrl: string): Promise<boolean> {
+  if (dataUrl && !isLogoDataUrl(dataUrl)) return false;
+  await ensureTable();
+  await put(kind === "signature" ? "report_signature" : "report_stamp", dataUrl);
+  return true;
+}

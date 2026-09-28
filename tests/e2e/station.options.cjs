@@ -96,6 +96,46 @@ const { B, OWNER, ok, launch, tmp, pdfPages, done, kv, resetLocal } = require('.
   ok(await p.locator('[data-testid="color-warning"]').count() === 1, 'a too-light main colour is warned about');
   await p.locator('button:has-text("الوضع الافتراضي (الشكل الأصلي)")').click(); await p.waitForTimeout(300);
   ok((await ls('station.settings.v1')).reportTable.primary === '#5a2a82' && await p.locator('[data-testid="color-warning"]').count() === 0, '«الوضع الافتراضي» brings the original colours back');
+  // extra report options (Settings → «خيارات إضافية للتقرير المطبوع»), all off by default
+  const extras = p.locator('[data-testid="report-extras"]');
+  const sw = (l) => extras.locator(`label:has(span:text-is("${l}"))`).locator('button[role=switch]');
+  const EXTRAS = ['الطباعة على ورق المختبر المطبوع مسبقاً', 'مكان الشعار والعلامة المائية', 'خط التقرير'];
+  ok((await Promise.all(EXTRAS.map((l) => sw(l).getAttribute('aria-checked')))).every((x) => x === 'false'), 'extra report options: all off by default');
+  await p.goto(B + '/station?edit=' + v.id); await p.waitForTimeout(800);
+  const sheet = p.locator('#report-sheet');
+  ok(await sheet.locator('[data-testid="report-head"][data-logo="start"]').count() === 1 && await sheet.locator('[data-testid="report-watermark"]').count() === 1 && await sheet.getAttribute('data-pre') === null, 'report as before: logo beside the name, watermark');
+  // pre-printed paper
+  await p.goto(B + '/station/settings'); await p.waitForTimeout(600);
+  await sw(EXTRAS[0]).click();
+  await extras.locator('input[aria-label="المساحة أعلى الصفحة"]').fill('50');
+  const st2 = await ls('station.settings.v1');
+  ok(st2.prePrinted === true && st2.prePrintedTop === 50, 'pre-printed paper: on, 50 mm at the top');
+  await p.goto(B + '/station?edit=' + v.id); await p.waitForTimeout(800);
+  const padTop = await sheet.evaluate((e) => parseFloat(getComputedStyle(e).paddingTop));
+  ok(await sheet.getAttribute('data-pre') === '1' && await sheet.locator('h2').count() === 0 && await sheet.locator('[data-testid="report-watermark"]').count() === 0
+    && Math.abs(padTop - 50 * 96 / 25.4) < 2 && await sheet.locator('[data-testid="report-head-pre"]:has-text("التاريخ")').count() >= 1, `pre-printed: no letterhead or watermark, 50 mm left blank (${padTop.toFixed(0)}px), the date stays`);
+  // logo placement and watermark
+  await p.goto(B + '/station/settings'); await p.waitForTimeout(600);
+  await sw(EXTRAS[0]).click(); await sw(EXTRAS[1]).click();
+  await extras.locator('select[aria-label="مكان الشعار"]').selectOption('center');
+  await extras.locator('select[aria-label="العلامة المائية"]').selectOption('off');
+  await p.goto(B + '/station?edit=' + v.id); await p.waitForTimeout(800);
+  ok(await sheet.getAttribute('data-pre') === null && await sheet.locator('[data-testid="report-head"][data-logo="center"]').count() >= 1 && await sheet.locator('[data-testid="report-watermark"]').count() === 0, 'logo centred above the name, no watermark');
+  // font
+  await p.goto(B + '/station/settings'); await p.waitForTimeout(600);
+  await sw(EXTRAS[2]).click();
+  await extras.locator('button[aria-label="Amiri (أميري)"]').click(); await p.waitForTimeout(200);
+  ok((await ls('station.settings.v1')).reportFont === 'amiri', 'font chosen');
+  await p.goto(B + '/station?edit=' + v.id); await p.waitForTimeout(800);
+  const family = await sheet.evaluate((e) => getComputedStyle(e).fontFamily);
+  const loaded = await p.evaluate(async () => { await document.fonts.ready; return document.fonts.check('16px "Amiri"', 'مختبر'); });
+  ok(family.includes('Amiri') && loaded, `report in the chosen font (${family.split(',')[0]}, loaded: ${loaded})`);
+  // switched off: back to the original report
+  await p.goto(B + '/station/settings'); await p.waitForTimeout(600);
+  await sw(EXTRAS[1]).click(); await sw(EXTRAS[2]).click();
+  await p.goto(B + '/station?edit=' + v.id); await p.waitForTimeout(800);
+  ok(await sheet.locator('[data-testid="report-head"][data-logo="start"]').count() === 1 && await sheet.locator('[data-testid="report-watermark"]').count() === 1
+    && !(await sheet.evaluate((e) => getComputedStyle(e).fontFamily)).includes('Amiri'), 'options off again: the report as before');
   ok(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.join(' | ') : ''));
   await b.close();
   done();

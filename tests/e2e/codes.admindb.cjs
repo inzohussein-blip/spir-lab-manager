@@ -185,12 +185,15 @@ const ROUTES = ['/', '/appointments', '/audit', '/calendar', '/insights', '/inve
   const tables = (await db.query(`select count(*)::int as n from lab_admin_migrations`))[0].n;
   ok(tables >= 14 && (await db.query(`select to_regclass('public.station_licenses') is null as none`))[0].none, `the panel's migrations ran (${tables}), the codes' tables left out`);
   await modal.locator('button:has-text("حفظ")').click();
-  ok(((await waitFor(async () => { const t = await msg(); return t.includes('المدير الأول') && t; }, 15000)) || '').length > 0, 'saving a database with no users asks for the first admin');
+  // (the test message above also names «المدير الأول», so wait for the refusal's own words)
+  ok(((await waitFor(async () => { const t = await msg(); return t.includes('بلا مستخدمين') && t; }, 15000)) || '').length > 0, 'saving a database with no users asks for the first admin');
   await modal.locator('input[aria-label="اسم مستخدم المدير"]').fill('labadmin');
   await modal.locator('input[aria-label="كلمة مرور المدير"]').fill('lab-pass-1');
   await modal.locator('button:has-text("حفظ")').click();
-  await waitFor(async () => (await card.locator('[data-testid="admin-db"]').innerText()).includes('قاعدة خاصة'), 15000);
-  ok((await card.locator('[data-testid="admin-db"]').innerText()).includes('قاعدة خاصة'), 'card: the panel is on the lab\'s own database');
+  // «بانتظار قاعدة خاصة» (before) also holds «قاعدة خاصة»: wait for the saved state itself.
+  const ownDb = async () => (await card.locator('[data-testid="admin-db"] button').innerText()).trim().startsWith('قاعدة خاصة');
+  await waitFor(ownDb, 30000);
+  ok(await ownDb(), 'card: the panel is on the lab\'s own database');
   const users = await db.query(`select username, role from app_users`);
   ok(users.length === 1 && users[0].username === 'labadmin' && users[0].role === 'admin', 'the first admin is in the lab\'s database');
   const backup = JSON.stringify((await api({ op: 'backup' })).backup);

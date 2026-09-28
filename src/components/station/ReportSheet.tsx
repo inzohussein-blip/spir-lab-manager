@@ -8,6 +8,26 @@ import { QrCode } from "@/components/station/QrCode";
 import { labQrCode, type LabQrCode } from "@/lib/station/labQr";
 import { FormReport } from "@/components/station/FormReport";
 import { isFormCode, decodeForm, formOptionsOf, type FormCode } from "@/lib/station/templates";
+import { reportExtrasOf, LOGO_PX, WM_SIZE } from "@/lib/station/reportExtras";
+import { CATEGORY_EN } from "@/lib/categoryEn";
+// The report fonts one can choose (Settings → «خيارات إضافية للتقرير المطبوع»); bundled with the
+// app so they print offline too. The browser only downloads a font when it is used.
+import "@fontsource/cairo/arabic-400.css";
+import "@fontsource/cairo/arabic-700.css";
+import "@fontsource/cairo/latin-400.css";
+import "@fontsource/cairo/latin-700.css";
+import "@fontsource/tajawal/arabic-400.css";
+import "@fontsource/tajawal/arabic-700.css";
+import "@fontsource/tajawal/latin-400.css";
+import "@fontsource/tajawal/latin-700.css";
+import "@fontsource/noto-naskh-arabic/arabic-400.css";
+import "@fontsource/noto-naskh-arabic/arabic-700.css";
+import "@fontsource/noto-naskh-arabic/latin-400.css";
+import "@fontsource/noto-naskh-arabic/latin-700.css";
+import "@fontsource/amiri/arabic-400.css";
+import "@fontsource/amiri/arabic-700.css";
+import "@fontsource/amiri/latin-400.css";
+import "@fontsource/amiri/latin-700.css";
 
 const exact = { WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as CSSProperties;
 
@@ -21,27 +41,6 @@ export interface ReportRow {
 }
 
 const ymd = (ms: number) => new Date(ms).toLocaleDateString("en-CA");
-
-/** English headings for the built-in categories (the printed results table is English). */
-const CATEGORY_EN: Record<string, string> = {
-  "أمراض الدم": "Hematology",
-  "وظائف الكلى": "Renal Function Tests",
-  "وظائف الكبد": "Liver Function Tests",
-  "السكري": "Diabetes",
-  "الدهون": "Lipid Profile",
-  "الهرمونات": "Hormones",
-  "الفيتامينات والحديد": "Vitamins & Iron",
-  "العظام والمعادن": "Bone & Minerals",
-  "المصليات والمناعة": "Serology & Immunology",
-  "حساسية الحنطة": "Wheat Allergy / Celiac",
-  "فحوصات TORCH": "TORCH Panel",
-  "الفيروسات": "Virology",
-  "أدرار": "Urinalysis",
-  "الخروج": "Stool Examination",
-  "السائل المنوي": "Semen Analysis",
-  "الزرع الجرثومي": "Microbiology",
-  "فحوصات أخرى": "Other Tests",
-};
 
 /**
  * The printable A4/A5 result sheet, shared by the entry screen and reprints.
@@ -95,33 +94,54 @@ export function ReportSheet({
   const qrCode = labQrCode(settings);
   const qrLogo = settings.labQrLogo !== false ? settings.logo : undefined;
 
+  // Extra options (pre-printed paper, logo placement and watermark, font) — see lib/station/reportExtras.
+  const x = reportExtrasOf(settings);
+  const logoPx = LOGO_PX[x.head.logoSize];
+  const logoImg = settings.logo && (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={settings.logo} alt="" className="shrink-0 object-contain" style={{ width: logoPx, height: logoPx }} data-testid="report-logo" />
+  );
+  const nameBlock = (
+    <div className={x.head.logo === "center" ? "text-center" : ""}>
+      <h2 className="text-2xl font-extrabold leading-tight" style={{ color: c.title }}>{settings.labName}</h2>
+      {settings.labSubtitle && <p className="text-sm font-medium" style={{ color: c.subtitle }}>{settings.labSubtitle}</p>}
+    </div>
+  );
+  // Date, then the patient's sample barcode and number under it
+  const dateBlock = (
+    <div className="flex flex-col items-end text-xs text-gray-600">
+      <div>التاريخ: {date}</div>
+      {accession && (
+        <div className="report-pbc mt-1 flex flex-col items-end">
+          <Barcode text={accession} className="block h-9 w-44 [&>svg]:h-full [&>svg]:w-full" />
+          <div className="font-mono text-[11px] font-bold" style={{ color: c.title }} dir="ltr">{accession}</div>
+        </div>
+      )}
+    </div>
+  );
+
   const header = (
     <>
-        {/* Letterhead in the lab's colours */}
-        <div className="flex items-center justify-between gap-4 pb-3">
-          <div className="flex items-center gap-3">
-            {settings.logo && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={settings.logo} alt="" className="size-20 object-contain" />
-            )}
-            <div>
-              <h2 className="text-2xl font-extrabold leading-tight" style={{ color: c.title }}>{settings.labName}</h2>
-              {settings.labSubtitle && <p className="text-sm font-medium" style={{ color: c.subtitle }}>{settings.labSubtitle}</p>}
-            </div>
+        {/* Letterhead in the lab's colours — none on pre-printed paper (it has its own) */}
+        {x.pre ? (
+          <div className="flex justify-end pb-3" data-testid="report-head-pre">{dateBlock}</div>
+        ) : x.head.logo === "center" ? (
+          <div className="pb-3" data-testid="report-head" data-logo="center">
+            <div className="flex flex-col items-center gap-1">{logoImg}{nameBlock}</div>
+            <div className="mt-2 flex justify-end">{dateBlock}</div>
           </div>
-          {/* Date, then the patient's sample barcode and number under it */}
-          <div className="flex flex-col items-end text-xs text-gray-600">
-            <div>التاريخ: {date}</div>
-            {accession && (
-              <div className="report-pbc mt-1 flex flex-col items-end">
-                <Barcode text={accession} className="block h-9 w-44 [&>svg]:h-full [&>svg]:w-full" />
-                <div className="font-mono text-[11px] font-bold" style={{ color: c.title }} dir="ltr">{accession}</div>
-              </div>
-            )}
+        ) : x.head.logo === "end" ? (
+          <div className="flex items-center justify-between gap-4 pb-3" data-testid="report-head" data-logo="end">
+            {nameBlock}{dateBlock}{logoImg}
           </div>
-        </div>
+        ) : (
+          <div className="flex items-center justify-between gap-4 pb-3" data-testid="report-head" data-logo="start">
+            <div className="flex items-center gap-3">{logoImg}{nameBlock}</div>
+            {dateBlock}
+          </div>
+        )}
         {/* Accent rule with a main-colour center */}
-        <div className="h-1 w-full rounded" style={{ background: `linear-gradient(90deg, ${c.border} 0%, ${c.title} 50%, ${c.border} 100%)`, ...exact }} />
+        {!x.pre && <div className="h-1 w-full rounded" style={{ background: `linear-gradient(90deg, ${c.border} 0%, ${c.title} 50%, ${c.border} 100%)`, ...exact }} />}
 
         <div className="report-keep mt-4 grid grid-cols-2 gap-x-6 gap-y-1.5 rounded-lg border-2 p-3 text-sm sm:grid-cols-3" style={{ borderColor: c.border }}>
           <div><span style={{ color: c.title }} className="font-semibold">المريض:</span> <b>{patient.name || "—"}</b></div>
@@ -139,7 +159,7 @@ export function ReportSheet({
         @page { size: ${paper}; margin: 0; }
         #report-sheet {
           min-height: ${paper === "A5" ? "208mm" : "295mm"};
-          padding: 12mm 12mm 22mm !important;
+          padding: ${x.pre ? `${x.pre.top}mm 12mm ${x.pre.bottom}mm` : "12mm 12mm 22mm"} !important;
           -webkit-box-decoration-break: clone;
           box-decoration-break: clone;
         }
@@ -155,7 +175,7 @@ export function ReportSheet({
         #report-sheet .report-qr img { width: 19mm !important; height: 19mm !important; }
         #report-sheet td, #report-sheet th { padding-top: ${pad.a4}px !important; padding-bottom: ${pad.a4}px !important; }
         ${paper === "A5" ? `
-        #report-sheet { padding: 8mm 8mm 18mm !important; }
+        #report-sheet { padding: ${x.pre ? `${x.pre.top}mm 8mm ${x.pre.bottom}mm` : "8mm 8mm 18mm"} !important; }
         #report-sheet table { font-size: ${(ts.fontSize * 10 / 14).toFixed(1)}px !important; }
         #report-sheet td, #report-sheet th { padding: ${pad.a5}px 4px !important; }
         #report-sheet .form-table td, #report-sheet .form-table th { padding: 0.5px 4px !important; }
@@ -178,12 +198,21 @@ export function ReportSheet({
         ` : ""}
       }`}</style>}
 
-      <div id="report-sheet" className={`relative isolate mx-auto flex max-w-[210mm] flex-col bg-white p-8 text-black shadow-sm print:mt-0 print:shadow-none ${printable ? "" : "print:hidden"} ${className}`}>
+      <div id="report-sheet" data-pre={x.pre ? "1" : undefined}
+        className={`relative isolate mx-auto flex max-w-[210mm] flex-col bg-white p-8 text-black shadow-sm print:mt-0 print:shadow-none ${printable ? "" : "print:hidden"} ${className}`}
+        style={{ ...(x.font ? { fontFamily: x.font } : {}), ...(x.pre ? { paddingTop: `${x.pre.top}mm`, paddingBottom: `${x.pre.bottom}mm` } : {}) }}>
+        {/* Pre-printed paper: where its own letterhead and footer are (on screen only) */}
+        {x.pre && (
+          <>
+            <div aria-hidden className="pointer-events-none absolute inset-x-3 top-2 grid place-items-center rounded border border-dashed border-gray-300 text-[11px] text-gray-400 print:hidden" style={{ height: `calc(${x.pre.top}mm - 12px)` }}>رأس الورق المطبوع</div>
+            <div aria-hidden className="pointer-events-none absolute inset-x-3 bottom-2 grid place-items-center rounded border border-dashed border-gray-300 text-[11px] text-gray-400 print:hidden" style={{ height: `calc(${x.pre.bottom}mm - 12px)` }}>تذييل الورق المطبوع</div>
+          </>
+        )}
         {/* Faint centred logo watermark (fixed in print → centred on every page) */}
-        {settings.logo && (
-          <div aria-hidden className="report-watermark pointer-events-none absolute inset-0 -z-10 flex items-center justify-center">
+        {settings.logo && !x.pre && x.head.watermark && (
+          <div aria-hidden className="report-watermark pointer-events-none absolute inset-0 -z-10 flex items-center justify-center" data-testid="report-watermark">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={settings.logo} alt="" className="w-1/2 max-w-[110mm] opacity-[0.06]" style={exact} />
+            <img src={settings.logo} alt="" style={{ width: `${WM_SIZE[x.head.wmSize].pct}%`, maxWidth: `${WM_SIZE[x.head.wmSize].maxMm}mm`, opacity: x.head.wmOpacity / 100, ...exact }} />
           </div>
         )}
 
@@ -232,7 +261,7 @@ export function ReportSheet({
             {qrCode && <LabQrCard q={qrCode} logo={qrLogo} colors={c} />}
           </div>
 
-          {settings.footer && (
+          {settings.footer && !x.pre && (
             <div className="report-footer mt-4 rounded-md px-4 py-2 text-center text-xs font-medium text-white" style={{ background: c.bar, ...exact }}>
               {settings.footer}
             </div>
