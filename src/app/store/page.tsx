@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  ShoppingCart, Plus, Trash2, Search, Coins, Wallet, X,
+  ShoppingCart, Plus, Trash2, Search, X,
 } from "lucide-react";
 import {
   getPurchases, addPurchase, deletePurchases, getSuppliers, purchaseTotal, uid,

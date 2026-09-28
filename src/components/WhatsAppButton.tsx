@@ -16,7 +16,7 @@ export function WhatsAppButton({ orderId }: { orderId: string }) {
         return;
       }
       if (res.via === "wa_link" && res.link) {
-        window.open(res.link, "_blank");
+        window.open(res.link, "_blank", "noopener,noreferrer");
       } else {
         toast.success("تم إرسال التقرير عبر واتساب");
       }

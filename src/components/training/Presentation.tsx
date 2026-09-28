@@ -255,6 +255,8 @@ export function Presentation({ test, all, tubes, tools, onClose }: {
     window.addEventListener("keydown", onKey);
     document.body.style.overflow = "hidden";
     return () => { window.removeEventListener("keydown", onKey); document.body.style.overflow = ""; };
+    // toggleFull only asks the document whether it is full-screen, so a stale copy does the same.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [last, close]);
 
   const slide = slides[i];

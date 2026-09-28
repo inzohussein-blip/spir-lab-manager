@@ -52,7 +52,6 @@ function zip(files: { name: string; data: Uint8Array }[]): Uint8Array {
   return out;
 }
 
-// eslint-disable-next-line no-control-regex
 const esc = (s: string) => s.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const col = (i: number) => { let s = ""; for (let n = i + 1; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + ((n - 1) % 26)) + s; return s; };
 const sheetName = (s: string, used: Set<string>) => {

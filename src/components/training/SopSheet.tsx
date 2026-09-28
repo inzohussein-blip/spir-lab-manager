@@ -52,6 +52,15 @@ export function SopLetterhead({ settings, right }: { settings: TrainingSettings;
 }
 
 /** One Standard Operating Procedure (content only — wrap in `.sop-doc`). */
+/** A section heading on the procedure sheet. */
+function H({ children }: { children: string }) {
+  return (
+    <div className="sop-keep mb-1.5 mt-4 flex items-center gap-2 text-sm font-bold" style={{ color: SOP_INK }}>
+      <span className="h-4 w-1.5 rounded" style={{ background: SOP_ACCENT, ...exact }} /> {children}
+    </div>
+  );
+}
+
 export function SopSheet({
   test, tubes, tools, settings, withImages, breakBefore = false,
 }: { test: TrainingTest; tubes: Tube[]; tools: Tool[]; settings: TrainingSettings; withImages: boolean; breakBefore?: boolean }) {
@@ -63,12 +72,6 @@ export function SopSheet({
   const sampleRows = [
     ["نوع العينة", test.sampleType], ["الحجم", test.volume], ["تحضير المريض", test.patientPrep], ["الثبات والحفظ", test.storage],
   ].filter(([, v]) => v?.trim());
-
-  const H = ({ children }: { children: string }) => (
-    <div className="sop-keep mb-1.5 mt-4 flex items-center gap-2 text-sm font-bold" style={{ color: SOP_INK }}>
-      <span className="h-4 w-1.5 rounded" style={{ background: SOP_ACCENT, ...exact }} /> {children}
-    </div>
-  );
 
   return (
     <article className={`text-[12px] leading-relaxed ${breakBefore ? "sop-page-break" : ""}`}>

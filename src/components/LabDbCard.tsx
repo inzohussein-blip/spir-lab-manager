@@ -24,6 +24,8 @@ export function LabDbCard({ host, by }: { host: string; by: "owner" | "lab" | ""
     setBusy(false);
     if (!r.ok) { setMsg({ ok: false, text: adminDbError(r.error) }); return; }
     if (op === "test") { setMsg({ ok: true, text: `✓ الاتصال يعمل والجداول جاهزة — المستخدمون فيها: ${r.users}${r.users ? "" : " (سيُنسخ حسابك إليها عند الحفظ)"}` }); return; }
+    // A full load on purpose: the panel now reads another database, so nothing old may stay in memory.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
     window.location.href = "/login";
   }
 

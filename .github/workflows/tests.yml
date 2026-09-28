@@ -44,6 +44,9 @@ jobs:
       - name: Type check
         run: npx tsc --noEmit
 
+      - name: Lint (errors fail; warnings are listed)
+        run: npm run -s lint
+
       - name: Test image for the project image library (not committed)
         run: node tests/e2e/make-test-image.cjs
 

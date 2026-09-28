@@ -42,5 +42,18 @@ const nextConfig = {
   outputFileTracingIncludes: {
     "/**": ["./supabase/migrations/**", "./supabase/seed.sql"],
   },
+  // Basic protection for every page: no framing by other sites (e.g. the code manager inside a
+  // trap page), no guessing of file types, and only the site's address sent on outgoing links.
+  async headers() {
+    return [{
+      source: "/:path*",
+      headers: [
+        { key: "X-Frame-Options", value: "SAMEORIGIN" },
+        { key: "Content-Security-Policy", value: "frame-ancestors 'self'" },
+        { key: "X-Content-Type-Options", value: "nosniff" },
+        { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+      ],
+    }];
+  },
 };
 export default nextConfig;

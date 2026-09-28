@@ -11,6 +11,7 @@ export default function PurchasingReportPage() {
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [settings, setSettings] = useState<PurchasingSettings>({ orgName: "" });
   const now = new Date();
+  const thisYear = now.getFullYear();
   const [year, setYear] = useState(String(now.getFullYear()));
   const [month, setMonth] = useState("0"); // 0 = whole year
 
@@ -19,9 +20,9 @@ export default function PurchasingReportPage() {
 
   const years = useMemo(() => {
     const set = new Set(purchases.map((p) => (p.date || "").slice(0, 4)).filter(Boolean));
-    set.add(String(now.getFullYear()));
+    set.add(String(thisYear));
     return Array.from(set).sort().reverse();
-  }, [purchases]);
+  }, [purchases, thisYear]);
 
   const rows = useMemo(() => {
     const m = Number(month);

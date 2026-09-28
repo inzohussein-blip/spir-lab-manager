@@ -164,6 +164,7 @@ export default async function ReportPage(
             </div>
           </div>
           <div className="text-center">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={qr} alt="QR" width={82} height={82} />
             <div className="text-[10px] text-gray-500">{t.scan}</div>
           </div>

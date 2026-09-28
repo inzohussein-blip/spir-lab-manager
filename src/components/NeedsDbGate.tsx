@@ -19,6 +19,8 @@ export function NeedsDbGate() {
     const r = await connectFromGate(conn);
     setBusy(false);
     if (!r.ok) { setMsg(adminDbError(r.error)); return; }
+    // A full load on purpose: the panel now reads another database, so nothing old may stay in memory.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
     window.location.assign("/login");
   }
   return (
