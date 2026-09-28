@@ -272,7 +272,7 @@ export default function LicensesPage() {
     load();
   }
 
-  const now = data?.now ?? Date.now();
+  const now = data?.now ?? 0; // the server's time with the list (nothing to compare before it loads)
   const prefs = data?.prefs ?? DEFAULT_PREFS;
   const soonMs = prefs.soonDays * DAY;
   const all = useMemo(() => data?.licenses ?? [], [data]);

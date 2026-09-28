@@ -27,6 +27,21 @@ const TABS: { id: Tab; label: string; icon: LucideIcon }[] = [
   { id: "links", label: "شبكة الربط", icon: Network },
 ];
 
+/** A titled card on the test page. */
+function Card({ title, icon: Icon, children }: { title: string; icon?: LucideIcon; children: React.ReactNode }) {
+  return (
+    <div className="rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
+      <div className="mb-3 flex items-center gap-2 text-sm font-bold">{Icon && <Icon className="size-4 text-brand" />}{title}</div>
+      {children}
+    </div>
+  );
+}
+
+/** A label and its text (nothing when the text is empty). */
+function Row({ k, v }: { k: string; v?: string }) {
+  return v ? <div className="grid grid-cols-[120px_1fr] gap-2 border-b border-line py-2 text-sm last:border-0"><span className="text-muted">{k}</span><RichText text={v} /></div> : null;
+}
+
 export default function TrainingTestPage() {
   const id = useRouteId();
   const router = useRouter();
@@ -79,15 +94,6 @@ export default function TrainingTestPage() {
     deleteTest(test!.id);
     router.push("/training");
   }
-
-  const Card = ({ title, icon: Icon, children }: { title: string; icon?: LucideIcon; children: React.ReactNode }) => (
-    <div className="rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
-      <div className="mb-3 flex items-center gap-2 text-sm font-bold">{Icon && <Icon className="size-4 text-brand" />}{title}</div>
-      {children}
-    </div>
-  );
-  const Row = ({ k, v }: { k: string; v?: string }) =>
-    v ? <div className="grid grid-cols-[120px_1fr] gap-2 border-b border-line py-2 text-sm last:border-0"><span className="text-muted">{k}</span><RichText text={v} /></div> : null;
 
   return (
     <div>

@@ -96,17 +96,10 @@ function Culture({ values, c, fontSize, py, testedOnly }: { values: FormValues; 
   const half = Math.ceil(all.length / 2);
   const growthOf = `Growth of ${org1}${org2 ? ` and ${org2}` : ""}`;
   const culture = growth && org1 ? (growthOf.endsWith(".") ? growthOf : `${growthOf}.`) : values.growth;
-  const Line = ({ k, v, color }: { k: string; v?: string; color?: string }) => (
-    <div className="flex gap-3 py-1"><span className="w-36 shrink-0 font-bold" style={{ color: c.header }}>{k}</span><span className="font-semibold" style={color ? { color } : undefined}>{v || "—"}</span></div>
-  );
+  const Line = (p: { k: string; v?: string; color?: string }) => <CsLine {...p} ink={c.header} />;
   const cell = { paddingTop: py - 3, paddingBottom: py - 3, borderTop: `1px solid ${c.line}` };
-  const Res = ({ r }: { r: string }) => <td className="px-2 text-center font-bold" style={{ ...cell, color: AST_COLOR[r] }}>{r}</td>;
-  const Pair = ({ ab, first }: { ab?: string; first?: boolean }) => (
-    <>
-      <td className="px-3" style={{ ...cell, borderLeft: first ? undefined : `1px solid ${c.line}` }}>{ab ?? ""}</td>
-      <Res r={res("ab:", ab)} />
-      {two && <Res r={res("ab2:", ab)} />}
-    </>
+  const pair = (ab: string | undefined, first: boolean) => (
+    <AbPair ab={ab} first={first} cell={cell} line={c.line} r1={res("ab:", ab)} r2={two ? res("ab2:", ab) : null} />
   );
   const head = (
     <>
@@ -119,10 +112,10 @@ function Culture({ values, c, fontSize, py, testedOnly }: { values: FormValues; 
   return (
     <div style={{ fontSize }}>
       <div className="cs-box rounded-lg border px-4 py-3" style={{ borderColor: c.line, background: c.stripe, ...exact }}>
-        <Line k="Specimen:" v={values.specimen ? `${values.specimen.replace(/\.$/, "")}.` : ""} />
-        <Line k="Culture:" v={culture} color={noGrowth ? "#15803d" : growth ? "#b91c1c" : undefined} />
-        {growth && values.colony && <Line k={org2 ? "Colony Count (1):" : "Colony Count:"} v={values.colony} />}
-        {growth && org2 && values.colony2 && <Line k="Colony Count (2):" v={values.colony2} />}
+        {Line({ k: "Specimen:", v: values.specimen ? `${values.specimen.replace(/\.$/, "")}.` : "" })}
+        {Line({ k: "Culture:", v: culture, color: noGrowth ? "#15803d" : growth ? "#b91c1c" : undefined })}
+        {growth && values.colony && Line({ k: org2 ? "Colony Count (1):" : "Colony Count:", v: values.colony })}
+        {growth && org2 && values.colony2 && Line({ k: "Colony Count (2):", v: values.colony2 })}
       </div>
 
       {!noGrowth && tested && (
@@ -135,8 +128,8 @@ function Culture({ values, c, fontSize, py, testedOnly }: { values: FormValues; 
             <tbody>
               {Array.from({ length: all.length > 1 ? half : all.length }, (_, i) => (
                 <tr key={i}>
-                  <Pair ab={all[i]} first />
-                  {all.length > 1 && <Pair ab={all[i + half]} />}
+                  {pair(all[i], true)}
+                  {all.length > 1 && pair(all[i + half], false)}
                 </tr>
               ))}
             </tbody>
@@ -148,7 +141,24 @@ function Culture({ values, c, fontSize, py, testedOnly }: { values: FormValues; 
         </div>
       )}
 
-      {values.notes && <div className="mt-3"><Line k="Remarks:" v={values.notes} /></div>}
+      {values.notes && <div className="mt-3">{Line({ k: "Remarks:", v: values.notes })}</div>}
     </div>
+  );
+}
+
+/** A culture line: its label in the report's colour, then the answer. */
+function CsLine({ k, v, color, ink }: { k: string; v?: string; color?: string; ink: string }) {
+  return <div className="flex gap-3 py-1"><span className="w-36 shrink-0 font-bold" style={{ color: ink }}>{k}</span><span className="font-semibold" style={color ? { color } : undefined}>{v || "—"}</span></div>;
+}
+
+/** One antibiotic and its result(s) — for the first organism, and the second when there is one. */
+function AbPair({ ab, first, cell, line, r1, r2 }: { ab?: string; first: boolean; cell: CSSProperties; line: string; r1: string; r2: string | null }) {
+  const res = (r: string) => <td className="px-2 text-center font-bold" style={{ ...cell, color: AST_COLOR[r] }}>{r}</td>;
+  return (
+    <>
+      <td className="px-3" style={{ ...cell, borderLeft: first ? undefined : `1px solid ${line}` }}>{ab ?? ""}</td>
+      {res(r1)}
+      {r2 !== null && res(r2)}
+    </>
   );
 }

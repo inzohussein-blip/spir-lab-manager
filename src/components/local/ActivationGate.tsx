@@ -157,7 +157,8 @@ export function ActivationGate({ module }: { module?: LicenseModule }) {
     </Screen>
   );
 
-  // Small notices (the stations stay usable).
+  // Small notices (the stations stay usable). Whole days left, worked out again with each check.
+  // eslint-disable-next-line react-hooks/purity
   const left = state.kind === "grace" || state.kind === "ok" ? Math.ceil((state.until - Date.now()) / DAY) : 0;
   const notice =
     state.kind === "grace" ? `هذا الجهاز يعمل بالتفعيل السابق حتى ${fmt(state.until)} (${left} يوم) — أدخل رمز مختبرك قبل ذلك.`

@@ -30,6 +30,8 @@ function SettingsInner() {
     } catch { /* unsupported */ }
     setUsage(u);
   }
+  // Once, when the page opens (refreshUsage only reads the browser's storage).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { setS(getSettings()); refreshUsage(); }, []);
 
   if (!s) return null;

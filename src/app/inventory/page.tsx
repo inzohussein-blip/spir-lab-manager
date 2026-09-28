@@ -22,8 +22,11 @@ export default async function InventoryPage() {
        from products where is_active order by name`
   );
 
+  // A server component: rendered once per request, so "now" is the request time.
+  // eslint-disable-next-line react-hooks/purity
+  const now = Date.now();
   const soon = (d: string | null) =>
-    d ? new Date(d).getTime() - Date.now() < 30 * 864e5 : false;
+    d ? new Date(d).getTime() - now < 30 * 864e5 : false;
   const isLow = (p: { quantity: number; min_quantity: number }) =>
     Number(p.quantity) <= Number(p.min_quantity);
 
