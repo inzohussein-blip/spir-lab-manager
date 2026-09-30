@@ -156,6 +156,15 @@ export function addPayment(purchaseId: string, amount: number, note?: string): v
   }));
 }
 
+/** «تم الدفع» / «غير مدفوعة»: mark a purchase paid (with supplier debts on, what was still owed is
+ *  recorded as a payment) or back to unpaid (its payments are cleared). */
+export function setPaid(purchaseId: string, paid: boolean): void {
+  const p = getPurchases().find((x) => x.id === purchaseId);
+  if (!p) return;
+  if (paid && getSettings().debts && dueOf(p) > 0) { addPayment(purchaseId, dueOf(p)); return; }
+  write(K_PUR, getPurchases().map((x) => (x.id === purchaseId ? { ...x, paid, ...(paid ? {} : { payments: undefined }) } : x)));
+}
+
 // ── Purchases ────────────────────────────────────────────────────────────────
 export function getPurchases(): Purchase[] {
   return read<Purchase[]>(K_PUR, []);

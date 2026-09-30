@@ -14,18 +14,20 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   // ── The stock room lives in procurement; the old address leads there ──
   await p.goto(B + '/station/inventory'); await p.waitForURL('**/store/inventory', { timeout: 20000 });
   ok(true, 'old /station/inventory opens the stock room in procurement');
-  await p.goto(B + '/store/items'); await p.waitForSelector('label:has-text("اسم الصنف") input', { timeout: 20000 });
-  await p.fill('label:has-text("اسم الصنف") input', 'كاشف السكر');
-  await p.locator('input[aria-label="الكمية"]').pressSequentially('٥');
-  ok(await p.locator('input[aria-label="الكمية"]').inputValue() === '5', 'Arabic-keyboard digit typed as 5');
-  await p.click('button:has-text("إضافة")');
+  await p.goto(B + '/store/items'); await p.waitForSelector('[data-testid="item-new"]', { timeout: 20000 });
+  await p.click('[data-testid="item-new"]');
+  await p.fill('[data-testid="item-form"] label:has-text("اسم الصنف") input', 'كاشف السكر');
+  await p.locator('[data-testid="item-form"] input[aria-label="الكمية"]').pressSequentially('٥');
+  ok(await p.locator('[data-testid="item-form"] input[aria-label="الكمية"]').inputValue() === '5', 'Arabic-keyboard digit typed as 5');
+  await p.click('[data-testid="item-form"] button[type=submit]');
   ok(await settled(async () => ((await kv(p, 'station.stock.v1')) || []).some((s) => s.name === 'كاشف السكر' && s.qty === 5)), 'stock item saved (shared key with the lab station)');
   ok(await p.locator('aside a[href="/store"]:has-text("المشتريات")').count() === 1 && await p.locator('aside a[href="/store/inventory"]:has-text("المخزن")').count() === 1
     && await p.locator('aside a[href="/store/items"]:has-text("الأصناف")').count() === 1, 'purchases, stock and items: each in the side menu');
 
   // ── A purchase: typed amounts and the stock link ──
-  await p.goto(B + '/store'); await p.waitForSelector('input[placeholder="الصنف"]', { timeout: 20000 });
-  await p.fill('label:has-text("أو اسم مورّد مباشر") input', 'مورّد المخزن');
+  await p.goto(B + '/store'); await p.waitForSelector('[data-testid="purchase-new"]', { timeout: 20000 });
+  await p.click('[data-testid="purchase-new"]');
+  await p.fill('input[aria-label="المورّد"]', 'مورّد المخزن');
   await p.fill('input[placeholder="الصنف"]', 'كاشف السكر');
   const qty = p.locator('input[aria-label="الكمية"]'); const price = p.locator('input[aria-label="سعر الوحدة"]');
   await qty.fill(''); await qty.pressSequentially('٣');
@@ -37,10 +39,11 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   ok(await settled(async () => ((await kv(p, 'station.stock.v1')) || []).find((s) => s.name === 'كاشف السكر')?.qty === 8), 'buying 3 adds them to the stock room (5 → 8)');
   const pur = ((await kv(p, 'purchasing.purchases.v1')) || [])[0];
   ok(pur && pur.total === 75000 && pur.items[0].unitPrice === 25000, 'purchase saved with 25000 per unit');
-  await p.reload(); await p.waitForSelector('input[placeholder="الصنف"]');
-  await p.locator('tbody tr', { hasText: 'مورّد المخزن' }).locator('button').last().click();
+  await p.reload(); await p.waitForSelector('li[data-purchase]');
+  await p.locator('li[data-purchase]', { hasText: 'مورّد المخزن' }).locator('button[aria-label="حذف العملية"]').click();
   ok(await settled(async () => ((await kv(p, 'station.stock.v1')) || []).find((s) => s.name === 'كاشف السكر')?.qty === 5), 'deleting the purchase takes its quantity back (8 → 5)');
   // A line not yet in the stock room becomes a new item there.
+  await p.click('[data-testid="purchase-new"]');
   await p.fill('input[placeholder="الصنف"]', 'قفازات جديدة');
   await qty.fill(''); await qty.pressSequentially('4');
   await price.click(); await price.pressSequentially('1000'); await price.press('Tab');

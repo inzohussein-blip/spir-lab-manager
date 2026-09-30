@@ -120,7 +120,8 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   ok(q.includes('-1') && q.includes('بالسالب'), `the stock room shows the negative count (${q.replace(/\s+/g, ' ')})`);
 
   // ── «الأصناف»: the lab's tests (from «إدارة الفحوصات») with their materials, then tubes ──
-  await p.goto(B + '/store/items'); await p.waitForSelector('[data-testid="items-tests"] tr[data-test]', { timeout: 20000 });
+  await p.goto(B + '/store/items'); await p.waitForSelector('[data-testid="items-list"]', { timeout: 20000 });
+  await p.click('button[role=tab]:has-text("التحاليل وموادها")'); await p.waitForSelector('[data-testid="items-tests"] tr[data-test]', { timeout: 20000 });
   const catalog = await kv(p, 'station.tests.v1');
   ok(await p.locator('[data-testid="items-tests"] tr[data-test]').count() === catalog.length, `every supported test is listed as an item (${catalog.length})`);
   ok((await p.locator('tr[data-test="HB"] [data-testid="test-materials"]').innerText()).includes('كاشف الهيموغلوبين'), 'a test shows its material');
@@ -129,17 +130,23 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   const MAT = `كاشف ${urea.name_ar}`;
   ok(await settled(async () => ((await kv(p, 'station.stock.v1')) || []).some((x) => x.name === MAT && x.testIds?.includes(urea.id) && x.qty === 0)), 'one click: the test\'s material in the stock room (0, linked)');
   ok((await p.locator('tr[data-test="UREA"] [data-testid="test-materials"]').innerText()).includes(MAT), 'and shown beside the test');
-  await p.locator('[data-testid="stock-presets"]').click();
-  ok(await settled(async () => (await p.locator('[data-testid="items-consumables"] tbody tr').count()) >= 5), 'tubes and containers listed with the items');
+  await p.click('button[role=tab]:has-text("الأصناف")'); await p.locator('[data-testid="stock-presets"]').click();
+  ok(await settled(async () => (await p.locator('[data-testid="items-list"] tbody tr', { hasText: 'أنبوب' }).count()) >= 3), 'tubes and containers listed with the items');
 
   // ── «المخزن»: add and issue by hand ──
   const ureaQty = async () => ((await kv(p, 'station.stock.v1')) || []).find((x) => x.name === MAT)?.qty;
-  await p.goto(B + '/store/inventory'); await p.waitForSelector('[data-testid="stock-mode-line"]', { timeout: 20000 });
-  ok((await p.locator('[data-testid="stock-mode-line"]').innerText()).includes('تلقائي'), 'stock room: deduction is automatic by default');
-  await p.fill(`input[aria-label="كمية ${MAT}"]`, '6'); await p.click(`button[aria-label="إضافة إلى ${MAT}"]`);
-  ok(await settled(async () => (await ureaQty()) === 6), 'added by hand (0 → 6)');
-  await p.click(`button[aria-label="صرف من ${MAT}"]`);
-  ok(await settled(async () => (await ureaQty()) === 5), 'issued by hand (6 → 5)');
+  await p.goto(B + '/store/inventory'); await p.waitForSelector(`li[data-stock="${MAT}"]`, { timeout: 20000 });
+  ok(((await kv(p, 'station.stockOptions.v1'))?.mode ?? 'auto') === 'auto', 'stock room: deduction is automatic by default');
+  await p.click(`button[aria-label="إضافة إلى ${MAT}"]`);
+  const md = p.locator('[data-testid="move-dialog"]');
+  await md.locator('input[aria-label="كمية الحركة"]').fill('6');
+  ok((await md.innerText()).includes('6'), 'the dialog shows the count after the move');
+  await md.locator('button:has-text("حفظ الإضافة")').click();
+  ok(await settled(async () => (await ureaQty()) === 6) && await md.count() === 0, 'added by hand (0 → 6), the dialog closes');
+  await p.click(`button[aria-label="صرف من ${MAT}"]`); await md.locator('input[aria-label="كمية الحركة"]').press('Enter');
+  ok(await settled(async () => (await ureaQty()) === 5), 'issued by hand: 1 by default, Enter saves (6 → 5)');
+  await p.click('button[role=tab]:has-text("نفد أو ناقص")');
+  ok(await p.locator(`li[data-stock="${MAT}"]`).count() === 0 && await p.locator('li[data-stock]').count() >= 1, 'the «نفد أو ناقص» filter shows only what ran low');
 
   // ── Results ↔ stock: automatic ──
   const ureaVisit = async (name) => {
