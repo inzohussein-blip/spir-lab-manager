@@ -85,6 +85,36 @@ export function LocalThemeSwitch({ storageKey }: { storageKey: string }) {
   );
 }
 
+/**
+ * The site-wide appearance (the welcome page): "auto" follows the computer, or force light / dark.
+ * Every station left on «تلقائي» follows it too; a station with its own choice keeps it.
+ */
+export function SiteThemeSwitch() {
+  const [mode, setModeState] = useState<ThemeMode>("auto");
+  useEffect(() => setModeState(getMode("lab-theme")), []);
+  const opts: { m: ThemeMode; label: string; icon: typeof Sun }[] = [
+    { m: "auto", label: "تلقائي", icon: Monitor },
+    { m: "light", label: "فاتح", icon: Sun },
+    { m: "dark", label: "غامق", icon: Moon },
+  ];
+  return (
+    <div role="radiogroup" aria-label="المظهر" data-testid="site-theme" className="inline-flex flex-wrap gap-1 rounded-xl border border-line bg-canvas p-1">
+      {opts.map(({ m, label, icon: Icon }) => (
+        <button
+          key={m}
+          type="button"
+          role="radio"
+          aria-checked={mode === m}
+          onClick={() => { setModeState(m); setMode("lab-theme", m); apply(siteDark()); }}
+          className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm ${mode === m ? "bg-brand font-semibold text-white" : "text-muted hover:bg-surface hover:text-ink"}`}
+        >
+          <Icon className="size-4" /> {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /** Settings card with the switch (same look in every station). */
 export function ThemeCard({ storageKey, note }: { storageKey: string; note?: string }) {
   return (

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Beaker, ShoppingCart, GraduationCap, ShieldCheck, Users, ArrowLeft, Phone, RefreshCw } from "lucide-react";
 import { LicensedLink, AdminPanelCard } from "@/components/local/WelcomeLicense";
 import { WelcomeAccount } from "@/components/local/WelcomeAccount";
+import { WelcomeFooter } from "@/components/local/WelcomeFooter";
 
 export const metadata = { title: "مختبر التحليلات المرضية — اختيار النسخة" };
 
@@ -120,6 +121,10 @@ export default function WelcomePage() {
           {/* The version this device runs (the saved offline copy may be older than the site). */}
           <div className="mt-2 text-[11px] text-muted" data-testid="app-version">الإصدار: <span dir="ltr" className="tabular-nums">{process.env.LAB_VERSION}</span></div>
         </div>
+
+        {/* Appearance, about SPIR, privacy and disclaimer */}
+        <WelcomeFooter />
+        <p className="mt-6 text-center text-[11px] text-muted">© <span className="tabular-nums">{new Date().getFullYear()}</span> SPIR — جميع الحقوق محفوظة</p>
       </div>
     </div>
   );
