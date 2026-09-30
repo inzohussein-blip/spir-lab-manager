@@ -115,7 +115,7 @@ const { PG, freshDb, fakeSupabase, waitFor } = require('./pgfake.cjs');
 
   // ── Both offline change the lab name; the later change wins everywhere ──
   const setName = async (p, name) => {
-    await p.goto(B + '/station/settings#report'); await p.waitForSelector('text=اسم المختبر', { timeout: 15000 });
+    await p.goto(B + '/station/settings#lab'); await p.waitForSelector('text=اسم المختبر', { timeout: 15000 });
     await p.locator('label:has-text("اسم المختبر") input').first().fill(name);
     await p.keyboard.press('Tab'); await p.waitForTimeout(400); // a field saves when you leave it
   };
@@ -132,7 +132,7 @@ const { PG, freshDb, fakeSupabase, waitFor } = require('./pgfake.cjs');
 
   // ── Text only: a device's logo (an image) stays on it; text changes still arrive ──
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
-  await A.p.goto(B + '/station/settings#report'); await A.p.waitForSelector('text=اسم المختبر', { timeout: 15000 });
+  await A.p.goto(B + '/station/settings#lab'); await A.p.waitForSelector('text=اسم المختبر', { timeout: 15000 });
   await A.p.setInputFiles('input[type=file][accept="image/*"]', { name: 'logo.png', mimeType: 'image/png', buffer: png }); await A.p.waitForTimeout(600);
   ok(String((await kv(A.p, 'station.settings.v1'))?.logo).startsWith('data:image'), 'A has its logo');
   await syncNow(A.p);

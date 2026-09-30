@@ -8,6 +8,7 @@
  */
 
 import { kvGet, kvSet, kvBytes, kvLarge, storageQuota } from "@/lib/local/kv";
+import { stockFloor } from "@/lib/local/links";
 import { clearOldDefault } from "@/lib/local/util";
 import { DEFAULT_TESTS } from "./defaultTests";
 
@@ -171,6 +172,9 @@ export interface StationSettings {
   derivedEgfr?: boolean;
   /** Under autoDerived: LDL by Sampson when TG 400–800 — off by default. */
   derivedSampson?: boolean;
+  /** The sample-number barcode at the top of the report, beside the patient's details — on by default
+   *  (the sample number itself is always printed). */
+  reportBarcode?: boolean;
   /** Few tests: a larger results table that fills more of the page (off by default). */
   reportFill?: boolean;
   /** A «واتساب» button beside it: the report as a PDF to share — on by default. */
@@ -601,23 +605,49 @@ export function getStock(): StockItem[] {
 export function saveStock(list: StockItem[]): void {
   write(K_STOCK, list);
 }
-/** Use stock for the tests newly ordered on a visit: a reagent loses one unit per linked test, a
- *  consumable (per visit) one unit when the visit has any of its tests — and none when the visit
- *  already had one of them (`already`: the visit's tests before this save). */
-export function deductStockForTests(testIds: string[], already: string[] = []): void {
-  if (testIds.length === 0) return;
+/** Units each stock item gives to the tests newly ordered on a visit: a reagent one per linked
+ *  test, a consumable (per visit) one when the visit has any of its tests — and none when the
+ *  visit already had one of them (`already`: the visit's tests before this save). */
+function stockUse(list: StockItem[], testIds: string[], already: string[]): Map<string, number> {
   const added = new Set(testIds), before = new Set(already);
-  let changed = false;
-  const next = getStock().map((s) => {
+  const use = new Map<string, number>();
+  for (const s of list) {
     const ids = stockTestIds(s);
     const n = ids.filter((id) => added.has(id)).length;
-    if (!n) return s;
-    const use = s.perVisit ? (ids.some((id) => before.has(id)) ? 0 : 1) : n;
-    if (!use) return s;
-    changed = true;
-    return { ...s, qty: Math.max(0, Number(s.qty) - use) };
-  });
-  if (changed) saveStock(next);
+    if (!n) continue;
+    const u = s.perVisit ? (ids.some((id) => before.has(id)) ? 0 : 1) : n;
+    if (u) use.set(s.id, u);
+  }
+  return use;
+}
+/** A stock item a save needs more of than is in stock. */
+export interface StockShort { name: string; qty: number; need: number }
+/** Use stock for the tests newly ordered on a visit (see stockUse). Returns what was not in stock
+ *  (the count stops at 0, or goes below it when the lab allows negative stock). */
+export function deductStockForTests(testIds: string[], already: string[] = []): StockShort[] {
+  if (testIds.length === 0) return [];
+  const list = getStock();
+  const use = stockUse(list, testIds, already);
+  if (!use.size) return [];
+  const short: StockShort[] = [];
+  saveStock(list.map((s) => {
+    const u = use.get(s.id);
+    if (!u) return s;
+    const qty = Number(s.qty) || 0;
+    if (qty < u) short.push({ name: s.name, qty, need: u });
+    return { ...s, qty: stockFloor(qty - u) };
+  }));
+  return short;
+}
+/** Per test: the linked stock items that are out (0 or less) — for the entry screen's warning. */
+export function outOfStockByTest(testIds: string[]): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  const empty = getStock().filter((s) => (Number(s.qty) || 0) <= 0);
+  for (const id of testIds) {
+    const names = empty.filter((s) => stockTestIds(s).includes(id)).map((s) => s.name);
+    if (names.length) out[id] = names;
+  }
+  return out;
 }
 /** Drop a now-deleted test from every stock item's links. */
 export function unlinkTestFromStock(testId: string): void {

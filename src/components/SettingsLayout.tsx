@@ -146,7 +146,8 @@ export function SettingsLayout({ title, icon, sections, search = false, intro }:
               </div>
               <div className={s.aside && !searching ? "grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,420px)]" : ""}>
                 <div data-sec-body className="flex min-w-0 flex-col gap-4 [&>*]:!m-0 [&>[data-miss]]:hidden">{s.content}</div>
-                {s.aside && !searching && <div className="min-w-0 xl:sticky xl:top-4 xl:self-start">{s.aside}</div>}
+                {/* Drawn for the open section only, so several sections can share one preview. */}
+                {s.aside && !searching && s.id === active && <div className="min-w-0 xl:sticky xl:top-4 xl:self-start">{s.aside}</div>}
               </div>
             </section>
           ))}

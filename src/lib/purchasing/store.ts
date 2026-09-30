@@ -8,6 +8,7 @@
 
 import { kvGet, kvSet } from "@/lib/local/kv";
 import { getStock, saveStock } from "@/lib/station/store";
+import { stockFloor } from "@/lib/local/links";
 
 export interface Supplier {
   id: string;
@@ -111,7 +112,7 @@ export function stockMatch(name: string): { id: string; name: string; qty: numbe
 function changeStock(moves: { id: string; qty: number }[]): void {
   const by = new Map<string, number>();
   for (const m of moves) by.set(m.id, (by.get(m.id) ?? 0) + m.qty);
-  saveStock(getStock().map((s) => (by.has(s.id) ? { ...s, qty: Math.max(0, Number(s.qty) + by.get(s.id)!) } : s)));
+  saveStock(getStock().map((s) => (by.has(s.id) ? { ...s, qty: stockFloor(Number(s.qty) + by.get(s.id)!) } : s)));
 }
 /** Put bought quantities in the stock room: onto the item of the same name, or as a new item
  *  (with no quantity yet, then the purchase's). Returns what was added. */
@@ -135,7 +136,9 @@ export function getPurchase(id: string): Purchase | null {
 
 // ── Settings ─────────────────────────────────────────────────────────────────
 export function getSettings(): PurchasingSettings {
-  return read<PurchasingSettings>(K_SET, { orgName: "منظومة المشتريات" });
+  const s = read<PurchasingSettings>(K_SET, { orgName: "المخزن والمشتريات" });
+  // The station's old name, kept by labs that never changed it.
+  return s.orgName === "منظومة المشتريات" ? { ...s, orgName: "المخزن والمشتريات" } : s;
 }
 export function saveSettings(s: PurchasingSettings): void {
   write(K_SET, s);

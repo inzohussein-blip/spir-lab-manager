@@ -340,15 +340,23 @@ export function valueText(value: string | undefined, code?: string, short = fals
 }
 
 // ── Options from the station settings (each can be switched off / on) ────────
-export interface FormOptions { diagnosis: boolean; autoCalc: boolean; hideEmpty: boolean; testedOnly: boolean; boldAbnormal: boolean }
+export interface FormOptions { diagnosis: boolean; autoCalc: boolean; hideEmpty: boolean; testedOnly: boolean; boldAbnormal: boolean; highlight: boolean }
 export function formOptionsOf(st: {
-  sfaDiagnosis?: boolean; sfaAutoCalc?: boolean; formHideEmpty?: boolean; csTestedOnly?: boolean; formBoldAbnormal?: boolean;
+  sfaDiagnosis?: boolean; sfaAutoCalc?: boolean; formHideEmpty?: boolean; csTestedOnly?: boolean; formBoldAbnormal?: boolean; entryHighlight?: boolean;
 }): FormOptions {
   return {
     diagnosis: st.sfaDiagnosis !== false, autoCalc: st.sfaAutoCalc !== false,
     hideEmpty: st.formHideEmpty === true, testedOnly: st.csTestedOnly === true, boldAbnormal: st.formBoldAbnormal !== false,
+    highlight: st.entryHighlight !== false,
   };
 }
+
+/** «تمييز» inside a form: a field (or a culture line, or an antibiotic as "ab:<name>") ticked to
+ *  be highlighted on the printed report — kept with the answers as "hl:<key>" = "1". */
+const HL = "hl:";
+export const isHl = (v: FormValues, k: string) => v[HL + k] === "1";
+export const withHl = (v: FormValues, k: string, on: boolean): FormValues => ({ ...v, [HL + k]: on ? "1" : "" });
+export const hlCount = (v: FormValues) => Object.entries(v).filter(([k, x]) => k.startsWith(HL) && x === "1").length;
 
 const firstNum = (s?: string) => { const m = /(\d+(?:\.\d+)?)/.exec(s ?? ""); return m ? Number(m[1]) : null; };
 const numOf = (s?: string) => { const m = /^\s*[<>]?\s*(\d+(?:\.\d+)?)/.exec(s ?? ""); return m ? Number(m[1]) : null; };

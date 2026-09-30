@@ -78,7 +78,7 @@ export default function PurchasingReportPage() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={settings.logo || "/lab-logo.png"} alt="" className="size-14 object-contain" data-testid="store-report-logo" />
             <div>
-              <h2 className="text-xl font-bold text-amber-700">{settings.orgName || "منظومة المشتريات"}</h2>
+              <h2 className="text-xl font-bold text-amber-700">{settings.orgName || "المخزن والمشتريات"}</h2>
               {settings.subtitle && <p className="text-xs text-gray-600">{settings.subtitle}</p>}
               <p className="text-sm text-gray-600">{title}</p>
             </div>

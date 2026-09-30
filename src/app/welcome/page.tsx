@@ -51,7 +51,7 @@ export default function WelcomePage() {
             <span className="grid size-12 place-items-center rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 text-white shadow-sm">
               <ShoppingCart className="size-6" />
             </span>
-            <div className="mt-4 text-lg font-bold">منظومة المشتريات</div>
+            <div className="mt-4 text-lg font-bold">المخزن والمشتريات</div>
             <p className="mt-1 flex-1 text-sm text-muted">إدارة المشتريات والموردين ومتابعة المصروف، والمخزن المرتبط بمحطة المختبر والجودة: يُضاف إليه ما يُشترى ويُحسم منه ما يُستعمل.</p>
             <span className="mt-5 inline-flex items-center justify-center gap-1.5 rounded-lg bg-amber-600 px-4 py-2.5 text-sm font-semibold text-white group-hover:bg-amber-700">
               الدخول <ArrowLeft className="size-4" />

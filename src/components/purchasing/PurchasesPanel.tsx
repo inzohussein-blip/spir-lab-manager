@@ -25,7 +25,7 @@ function StatCard({ label, value, tone }: { label: string; value: string; tone?:
   );
 }
 
-/** «المشتريات» tab of «المشتريات والمخزن». */
+/** «المشتريات» tab of «المخزن والمشتريات». */
 export function PurchasesPanel() {
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);

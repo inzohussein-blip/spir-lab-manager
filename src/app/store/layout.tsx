@@ -13,7 +13,7 @@ export default function StoreLayout({ children }: { children: ReactNode }) {
     <div className="store min-h-screen md:flex">
       <script dangerouslySetInnerHTML={{ __html: ACTIVATION_SCRIPT }} />
       <ActivationGate module="purchasing" />
-      <PinGate station="purchasing" title="منظومة المشتريات" />
+      <PinGate station="purchasing" title="المخزن والمشتريات" />
       <script dangerouslySetInnerHTML={{ __html: themeScript(THEME_KEYS.store) }} />
       <LocalThemeApplier storageKey={THEME_KEYS.store} />
       <LocalDataGate>

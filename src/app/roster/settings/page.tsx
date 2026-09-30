@@ -5,7 +5,7 @@ import { ThemeCard } from "@/components/local/LocalTheme";
 import { PinCard } from "@/components/local/PinGate";
 import { THEME_KEYS } from "@/lib/local/theme";
 import { useEffect, useRef, useState } from "react";
-import { Settings, Download, Upload, HardDrive, FileText, Clock } from "lucide-react";
+import { Settings, Download, Upload, HardDrive, FileText, Clock, ShieldCheck } from "lucide-react";
 import { LetterheadCard } from "@/components/local/LetterheadCard";
 import { SettingsLayout, notifySaved } from "@/components/SettingsLayout";
 import { getSettings, saveSettings, exportBackup, importBackup, type RosterSettings } from "@/lib/roster/store";
@@ -68,7 +68,7 @@ export default function RosterSettingsPage() {
           ),
         },
         {
-          id: "device", label: "الجهاز والبيانات", hint: "النسخ الاحتياطي والمظهر", icon: <HardDrive />,
+          id: "device", label: "الجهاز والبيانات", hint: "النسخ الاحتياطي والمزامنة", icon: <HardDrive />,
           content: (
             <>
               <div className="rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
@@ -81,9 +81,16 @@ export default function RosterSettingsPage() {
                 </div>
                 {msg && <p className="mt-2 text-xs text-brand-dark">{msg}</p>}
               </div>
-              <ThemeCard storageKey={THEME_KEYS.roster} />
-              <PinCard station="roster" />
               <SyncPanel />
+            </>
+          ),
+        },
+        {
+          id: "look", label: "الأمان والمظهر", hint: "رمز الدخول والألوان", icon: <ShieldCheck />,
+          content: (
+            <>
+              <PinCard station="roster" />
+              <ThemeCard storageKey={THEME_KEYS.roster} />
             </>
           ),
         },

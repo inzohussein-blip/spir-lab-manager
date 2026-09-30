@@ -148,12 +148,19 @@ export default function TrainingSettingsPage() {
           content: <LockGate><div className="flex flex-col gap-4"><PrintCards /></div></LockGate>,
         },
         {
-          id: "device", label: "الجهاز والبيانات", hint: "النسخ الاحتياطي والقفل والمظهر", icon: <HardDrive />,
+          id: "device", label: "الجهاز والبيانات", hint: "النسخ الاحتياطي والقفل والمزامنة", icon: <HardDrive />,
           content: (
             <>
               <LockGate><div className="flex flex-col gap-4"><BackupCard /><LockCard /><SyncPanel /></div></LockGate>
-              <ThemeCard storageKey={THEME_KEYS.training} />
+            </>
+          ),
+        },
+        {
+          id: "look", label: "الأمان والمظهر", hint: "رمز الدخول والألوان", icon: <ShieldCheck />,
+          content: (
+            <>
               <PinCard station="training" />
+              <ThemeCard storageKey={THEME_KEYS.training} />
             </>
           ),
         },

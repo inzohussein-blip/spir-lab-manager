@@ -7,5 +7,5 @@ import { useRouter } from "next/navigation";
 export default function StationInventoryMoved() {
   const router = useRouter();
   useEffect(() => { router.replace("/store/inventory"); }, [router]);
-  return <div className="grid min-h-[40vh] place-items-center text-sm text-muted">انتقل المخزن إلى محطة المشتريات…</div>;
+  return <div className="grid min-h-[40vh] place-items-center text-sm text-muted">انتقل المخزن إلى محطة المخزن والمشتريات…</div>;
 }

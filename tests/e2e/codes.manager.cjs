@@ -61,7 +61,7 @@ const fs = require('node:fs');
   await d.locator('button:text-is("تم")').click(); await d.reload(); await d.waitForTimeout(1500);
   ok(await d.locator('text=رسالة من المزوّد').count() === 0, 'message stays dismissed after «تم»');
   // station PIN forgotten: the owner sets a new one, the device takes it with «نسيت الرمز؟ ← تحديث»
-  await d.goto(B + '/station/settings#device'); await d.waitForTimeout(1500);
+  await d.goto(B + '/station/settings#look'); await d.waitForTimeout(1500);
   await d.click('[data-testid="pin-card"] button:has-text("تفعيل رمز الدخول")');
   await d.fill('input[aria-label="الرمز الجديد"]', '1111'); await d.fill('input[aria-label="تأكيد الرمز"]', '1111'); await d.click('button:has-text("حفظ الرمز")');
   const dp = await ctxD.newPage(); dp.on('pageerror', e => errs.push(e.message.slice(0, 120)));

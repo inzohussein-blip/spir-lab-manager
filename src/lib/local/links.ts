@@ -19,12 +19,31 @@ function list<T>(key: string): T[] {
 export interface StockRef { id: string; name: string; qty: number; minQty?: number; expiry?: string; linkedTestId?: string }
 const K_STOCK = "station.stock.v1";
 export const stockItems = () => list<StockRef>(K_STOCK);
-/** Take units out of a stock item (never below 0). */
+/**
+ * How the stock room behaves when a material runs out — one choice for every station on the
+ * computer (set from the lab station's or procurement's settings; synced with the stock room):
+ *  - warnOut: warn when a result or a control run needs a material that is not in stock;
+ *  - allowNegative: keep counting below zero (e.g. -1) instead of stopping at 0, so the stock
+ *    room shows how much was used without stock.
+ * Both off by default.
+ */
+export interface StockOptions { warnOut?: boolean; allowNegative?: boolean }
+const K_STOCK_OPT = "station.stockOptions.v1";
+export function stockOptions(): StockOptions {
+  try { const v = JSON.parse(kvGet(K_STOCK_OPT) ?? "{}"); return v && typeof v === "object" ? (v as StockOptions) : {}; } catch { return {}; }
+}
+export function setStockOptions(patch: StockOptions): void {
+  kvSet(K_STOCK_OPT, JSON.stringify({ ...stockOptions(), ...patch }));
+}
+/** A new stock count: below zero only when the lab allows it. */
+export const stockFloor = (n: number): number => (stockOptions().allowNegative ? n : Math.max(0, n));
+
+/** Take units out of a stock item (not below 0 unless negative stock is allowed). */
 export function takeFromStock(id: string | undefined, units = 1): void {
   if (!id) return;
   const all = stockItems();
   if (!all.some((s) => s.id === id)) return;
-  kvSet(K_STOCK, JSON.stringify(all.map((s) => (s.id === id ? { ...s, qty: Math.max(0, Number(s.qty) - units) } : s))));
+  kvSet(K_STOCK, JSON.stringify(all.map((s) => (s.id === id ? { ...s, qty: stockFloor(Number(s.qty) - units) } : s))));
 }
 
 /** Active staff names (roster). */

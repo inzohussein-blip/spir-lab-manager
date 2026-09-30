@@ -5,7 +5,7 @@ import { ThemeCard } from "@/components/local/LocalTheme";
 import { PinCard } from "@/components/local/PinGate";
 import { THEME_KEYS } from "@/lib/local/theme";
 import { useEffect, useRef, useState } from "react";
-import { Settings, Download, Upload, HardDrive, FileText } from "lucide-react";
+import { Settings, Download, Upload, HardDrive, FileText, ShieldCheck } from "lucide-react";
 import { LetterheadCard } from "@/components/local/LetterheadCard";
 import { SettingsLayout, notifySaved } from "@/components/SettingsLayout";
 import { getSettings, saveSettings, exportBackup, importBackup, type QcSettings } from "@/lib/qc/store";
@@ -52,7 +52,7 @@ export default function QcSettingsPage() {
           ),
         },
         {
-          id: "device", label: "الجهاز والبيانات", hint: "النسخ الاحتياطي والمظهر", icon: <HardDrive />,
+          id: "device", label: "الجهاز والبيانات", hint: "النسخ الاحتياطي والمزامنة", icon: <HardDrive />,
           content: (
             <>
               <div className="rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
@@ -65,9 +65,16 @@ export default function QcSettingsPage() {
                 </div>
                 {msg && <p className="mt-2 text-xs text-brand-dark">{msg}</p>}
               </div>
-              <ThemeCard storageKey={THEME_KEYS.qc} />
-              <PinCard station="qc" />
               <SyncPanel />
+            </>
+          ),
+        },
+        {
+          id: "look", label: "الأمان والمظهر", hint: "رمز الدخول والألوان", icon: <ShieldCheck />,
+          content: (
+            <>
+              <PinCard station="qc" />
+              <ThemeCard storageKey={THEME_KEYS.qc} />
             </>
           ),
         },

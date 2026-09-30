@@ -17,13 +17,13 @@ const { B, OWNER, ok, launch, tmp, pdfPages, done, kv, resetLocal } = require('.
   ok(await p.locator('text=قيم أخرى تُعتبر طبيعية').count() === 0, 'default: no extra-normals editor');
   await p.locator('button[aria-label="إغلاق"]').click();
   // switch on from the settings page
-  // two in «شاشة الإدخال», the third found with the settings search (it lives under «التقرير المطبوع»)
+  // two in «شاشة الإدخال», the third found with the settings search (it lives under «الاستمارات»)
   await p.goto(B + '/station/settings#entry'); await p.waitForTimeout(600);
   for (const l of ['وحدة العمر (سنة / شهر / يوم)', 'حالة تسليم النتائج']) await p.locator(`label:has(span:text-is("${l}"))`).locator('button[role=switch]').click();
   ok((await p.locator('[data-testid="badge-entry"]').innerText()).includes('مفعّل'), 'section badge counts what is on');
   await p.fill('input[aria-label="بحث في الإعدادات"]', 'قيم طبيعية إضافية');
-  ok(await p.locator('[data-sec="report"]:not([data-miss])').count() === 1 && await p.locator('[data-sec="device"][data-miss]').count() === 1, 'search shows only the section that has it');
-  await p.locator('label:has(span:text-is("قيم طبيعية إضافية في محرر الاستمارات"))').locator('button[role=switch]').click();
+  ok(await p.locator('[data-sec="forms"]:not([data-miss])').count() === 1 && await p.locator('[data-sec="device"][data-miss]').count() === 1, 'search shows only the section that has it');
+  await p.locator('label:has(span:text-is("قيم طبيعية إضافية"))').locator('button[role=switch]').click();
   await settled((st) => st.formExtraNormals === true);
   const st = await ls('station.settings.v1');
   ok(st.ageUnit === true && st.deliveryStatus === true && st.formExtraNormals === true, 'three switches turn on from settings');

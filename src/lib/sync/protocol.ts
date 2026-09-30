@@ -26,7 +26,7 @@ export const COMPANY_SYNC_KEY = "lab-company-sync";
  *  chosen in «محطة المزامنة ← الإعدادات». */
 export const SYNC_EXCLUDE_KEY = "lab-sync-exclude";
 export const SYNC_STATIONS: [string, string][] = [
-  ["station.", "محطة المختبر"], ["purchasing.", "المشتريات"], ["training.", "التدريب والمعلومات"],
+  ["station.", "محطة المختبر"], ["purchasing.", "المخزن والمشتريات"], ["training.", "التدريب والمعلومات"],
   ["qc.", "الجودة والأجهزة"], ["roster.", "الكادر والدوام"],
 ];
 export function syncExcluded(): string[] {

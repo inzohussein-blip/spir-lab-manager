@@ -9,7 +9,7 @@ import { money } from "@/lib/utils";
 import { PurchasesPanel } from "./PurchasesPanel";
 import { StockPanel } from "./StockPanel";
 
-/** «المشتريات والمخزن»: one screen for buying and for the stock room it fills (two tabs). */
+/** «المخزن والمشتريات»: one screen for buying and for the stock room it fills (two tabs). */
 export function StoreHub({ tab }: { tab: "purchases" | "stock" }) {
   const [sum, setSum] = useState({ items: 0, alerts: 0, spent: 0, unpaid: 0 });
   useEffect(() => {
@@ -26,7 +26,7 @@ export function StoreHub({ tab }: { tab: "purchases" | "stock" }) {
     <div>
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold"><ShoppingCart className="size-6" /> المشتريات والمخزن</h1>
+          <h1 className="flex items-center gap-2 text-2xl font-bold"><ShoppingCart className="size-6" /> المخزن والمشتريات</h1>
           <p className="mt-1 text-xs text-muted" data-testid="store-summary">
             المصروف <b className="tabular-nums">{money(sum.spent)}</b> د.ع · غير مدفوع <b className="tabular-nums">{money(sum.unpaid)}</b> د.ع ·
             أصناف المخزن <b className="tabular-nums">{sum.items}</b>{sum.alerts > 0 && <> · <b className="tabular-nums text-amber-700">{sum.alerts}</b> تنبيه</>}

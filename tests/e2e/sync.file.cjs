@@ -82,7 +82,7 @@ const { B, ok, launch, done, kv, resetLocal } = require('./lib.cjs');
 
   // ── Settings: a station kept to this computer stays out of the file ──
   await C.goto(B + '/sync/settings#shared'); await C.waitForSelector('[data-testid="sync-stations"]', { timeout: 20000 });
-  await C.uncheck('input[aria-label="مشاركة المشتريات"]');
+  await C.uncheck('input[aria-label="مشاركة المخزن والمشتريات"]');
   ok((await C.getByTestId('sync-settings-msg').innerText()).includes('حُفظ'), 'sync settings: a station kept to this computer');
 
   ok(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.join(' | ') : ''));

@@ -9,7 +9,7 @@ import { useSideCollapsed, SideCollapseButton, SideReopenButton } from "@/compon
 import { getStock, daysToExpiry } from "@/lib/station/store";
 
 const FIXED = [
-  { href: "/store", label: "المشتريات والمخزن", icon: ShoppingCart },
+  { href: "/store", label: "المخزن والمشتريات", icon: ShoppingCart },
   { href: "/store/report", label: "التقارير (شهري/سنوي)", icon: FileBarChart },
   { href: "/store/suppliers", label: "الموردون", icon: Truck },
   { href: "/store/settings", label: "الإعدادات والنسخ الاحتياطي", icon: Settings },
@@ -35,7 +35,7 @@ export function PurchasingSidebar() {
     <>
     <div className="no-print sticky top-0 z-30 flex items-center gap-3 border-b border-line bg-surface/90 px-4 py-2.5 backdrop-blur md:hidden">
       <button onClick={() => setOpen(true)} aria-label="فتح القائمة" className="grid size-10 place-items-center rounded-xl border border-line bg-surface hover:bg-canvas"><Menu className="size-5" /></button>
-      <span className="font-bold">منظومة المشتريات</span>
+      <span className="font-bold">المخزن والمشتريات</span>
     </div>
     {open && <div className="no-print fixed inset-0 z-40 bg-black/40 md:hidden" onClick={() => setOpen(false)} />}
     {collapsed && <SideReopenButton onClick={() => setCollapsed(false)} />}
@@ -50,7 +50,7 @@ export function PurchasingSidebar() {
           <ShoppingCart className="size-5" />
         </span>
         <div className="leading-tight">
-          منظومة المشتريات
+          المخزن والمشتريات
           <div className="text-xs font-normal text-muted">نسخة محلية — بدون إنترنت</div>
         </div>
         <span className="ms-auto"><SideCollapseButton onClick={() => setCollapsed(true)} /></span>

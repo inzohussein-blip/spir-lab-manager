@@ -2,10 +2,10 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search, Printer, MessageCircle, Save, Check, Tag, ClipboardList, Beaker, Layers, Pencil, UserRound, StickyNote, Plus, X, RotateCcw, ListChecks, ChevronDown, type LucideIcon } from "lucide-react";
+import { Search, Printer, MessageCircle, Save, Check, Tag, ClipboardList, Beaker, Layers, Pencil, UserRound, StickyNote, Plus, X, RotateCcw, ListChecks, ChevronDown, AlertTriangle, type LucideIcon } from "lucide-react";
 import {
   getTests, addVisit, updateVisit, getVisit, getSettings, getPanels, nextAccession, uid, rangeLabel, flagFor,
-  getPatients, getPatient, upsertPatient, addPatientNote, deductStockForTests, getDoctors, addDoctor,
+  getPatients, getPatient, upsertPatient, addPatientNote, deductStockForTests, outOfStockByTest, getDoctors, addDoctor,
   previousResults, resultDelta, localYmd, splitAge, joinAge, type AgeUnitPick,
   type StationTest, type Gender, type StationVisit, type StationSettings, type StationPanel, type StationPatient, type NoteEntry, type StationDoctor,
 } from "@/lib/station/store";
@@ -13,10 +13,11 @@ import { ReportSheet } from "@/components/station/ReportSheet";
 import { loadBarcode } from "@/components/station/Barcode";
 import { TubeLabels } from "@/components/station/TubeLabel";
 import { FormDialog, fillNormals } from "@/components/station/ReportForms";
-import { isFormCode, decodeForm, encodeForm, formProgress, formOptionsOf, type FormCode } from "@/lib/station/templates";
+import { isFormCode, decodeForm, encodeForm, formProgress, formOptionsOf, hlCount, type FormCode } from "@/lib/station/templates";
 import { computeDerived } from "@/lib/station/derived";
 import { useToast } from "@/components/station/Toast";
 import { fmtDate } from "@/lib/utils";
+import { stockOptions } from "@/lib/local/links";
 
 const inp =
   "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
@@ -218,6 +219,12 @@ function StationEntryPage() {
     return previousResults({ patientId, name, phone }, { before: createdAt ?? undefined, excludeId: editId });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [patientId, editId, createdAt, savedTick]);
+  // Settings → «المخزن»: the chosen tests whose linked materials are out of stock.
+  const outOfStock = useMemo(
+    () => (stockOptions().warnOut ? outOfStockByTest(Array.from(selected)) : {}),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selected, savedTick],
+  );
   const showPrev = settings.showPrevious !== false;
   const printPrev = settings.printPrevious === true && chosen.some((t) => prev[t.id] && !isFormCode(t.code));
 
@@ -343,14 +350,19 @@ function StationEntryPage() {
       toast.show("تعذّر الحفظ: مساحة التخزين في المتصفح ممتلئة — خذ نسخة احتياطية واحذف زيارات قديمة من «الزيارات المحفوظة».", "warn");
       return false;
     }
+    let short;
     if (!editId) {
       setEditId(v.id);
       setCreatedAt(v.created_at);
       // Deduct one unit of stock per linked test.
-      deductStockForTests(Array.from(selected));
+      short = deductStockForTests(Array.from(selected));
     } else {
       // Editing: deduct only the tests added since the last save (never twice).
-      deductStockForTests(Array.from(selected).filter((id) => !before!.has(id)), Array.from(before!));
+      short = deductStockForTests(Array.from(selected).filter((id) => !before!.has(id)), Array.from(before!));
+    }
+    // Settings → «المخزن»: say which materials were not in stock (the result is still saved).
+    if (short.length && stockOptions().warnOut) {
+      toast.show(`تنبيه المخزن — مواد غير متوفرة: ${short.map((x) => `${x.name} (${x.qty})`).join("، ")}`, "warn");
     }
     setBaseline(snapshot);
     setSavedTick((n) => n + 1);
@@ -710,6 +722,7 @@ function StationEntryPage() {
                           <div className="mb-2 flex items-center justify-between gap-2">
                             <span className="truncate text-sm font-medium">{t.name_ar}</span>
                             <div className="flex items-center gap-1">
+                              {hlCount(vals) > 0 && <span className="rounded-full bg-yellow-200 px-2 py-0.5 text-[11px] font-semibold text-yellow-900" data-testid="form-hl">مميّز {hlCount(vals)}</span>}
                               <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${done ? "bg-teal-50 text-brand-dark" : pr.filled ? "bg-amber-50 text-amber-700" : "bg-canvas text-muted"}`}>
                                 <span dir="ltr">{pr.filled}/{pr.total}</span>
                               </span>
@@ -729,6 +742,7 @@ function StationEntryPage() {
                               ملء الطبيعي
                             </button>
                           </div>
+                          <StockOut names={outOfStock[t.id]} />
                         </div>
                       );
                     }
@@ -789,6 +803,7 @@ function StationEntryPage() {
                         <div className="mt-1 text-xs text-muted">
                           المعدل الطبيعي: <span dir="ltr">{rangeLabel(t.normal, gender, t.unit, age)}</span>
                         </div>
+                        <StockOut names={outOfStock[t.id]} />
                         {derived[t.id] && (() => {
                           const d = derived[t.id];
                           const isAuto = (results[t.id] ?? "") !== "" && results[t.id] === autoVals[t.id];
@@ -877,6 +892,16 @@ function StationEntryPage() {
           onReady={() => setTimeout(() => window.print(), 60)}
         />
       )}
+    </div>
+  );
+}
+
+/** «غير متوفر في المخزن»: the test's linked materials that are out (Settings → «المخزن»). */
+function StockOut({ names }: { names?: string[] }) {
+  if (!names?.length) return null;
+  return (
+    <div className="mt-1 flex items-start gap-1 rounded-md bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-800" data-testid="stock-out">
+      <AlertTriangle className="mt-px size-3.5 shrink-0" /> غير متوفر في المخزن: {names.join("، ")}
     </div>
   );
 }

@@ -5,10 +5,11 @@ import { kvFlush } from "@/lib/local/kv";
 import { ThemeCard } from "@/components/local/LocalTheme";
 import { PinCard } from "@/components/local/PinGate";
 import { LetterheadCard } from "@/components/local/LetterheadCard";
+import { StockOptionsCard } from "@/components/local/SettingsParts";
 import { SettingsLayout, notifySaved } from "@/components/SettingsLayout";
 import { THEME_KEYS } from "@/lib/local/theme";
 import { useEffect, useRef, useState } from "react";
-import { Settings, Download, Upload, FileText, HardDrive } from "lucide-react";
+import { Settings, Download, Upload, FileText, HardDrive, ShieldCheck, Boxes } from "lucide-react";
 import { exportBackup, importBackup, getSettings, saveSettings, type PurchasingSettings } from "@/lib/purchasing/store";
 
 export default function StoreSettingsPage() {
@@ -45,7 +46,7 @@ export default function StoreSettingsPage() {
     const cur = getSettings();
     const next: PurchasingSettings = {
       ...cur,
-      ...(patch.title !== undefined ? { orgName: patch.title || "منظومة المشتريات" } : {}),
+      ...(patch.title !== undefined ? { orgName: patch.title || "المخزن والمشتريات" } : {}),
       ...(patch.subtitle !== undefined ? { subtitle: patch.subtitle } : {}),
       ...(patch.footer !== undefined ? { footer: patch.footer } : {}),
       ...(patch.logo !== undefined ? { logo: patch.logo || undefined } : {}),
@@ -55,7 +56,7 @@ export default function StoreSettingsPage() {
 
   return (
     <SettingsLayout
-      title="إعدادات المشتريات"
+      title="إعدادات المخزن والمشتريات"
       icon={<Settings className="size-6" />}
       sections={[
         {
@@ -66,7 +67,11 @@ export default function StoreSettingsPage() {
           ),
         },
         {
-          id: "device", label: "الجهاز والبيانات", hint: "النسخ الاحتياطي والمظهر", icon: <HardDrive />,
+          id: "stock", label: "المخزن", hint: "عند نفاد المادة", icon: <Boxes />,
+          content: <StockOptionsCard from="purchasing" />,
+        },
+        {
+          id: "device", label: "الجهاز والبيانات", hint: "النسخ الاحتياطي والمزامنة", icon: <HardDrive />,
           content: (
             <>
               <div className="rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
@@ -79,9 +84,16 @@ export default function StoreSettingsPage() {
                 </div>
                 {msg && <p className="mt-2 text-xs text-muted">{msg}</p>}
               </div>
-              <ThemeCard storageKey={THEME_KEYS.store} />
-              <PinCard station="purchasing" />
               <SyncPanel />
+            </>
+          ),
+        },
+        {
+          id: "look", label: "الأمان والمظهر", hint: "رمز الدخول والألوان", icon: <ShieldCheck />,
+          content: (
+            <>
+              <PinCard station="purchasing" />
+              <ThemeCard storageKey={THEME_KEYS.store} />
             </>
           ),
         },

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, X, Wand2, Eraser, Check } from "lucide-react";
 import {
-  templateOf, cultureOf, formTitle, isSub, fieldsOf, sfaComputed, sfaAuto, sfaDiagnosis, CS_GROWTH, AST_SCALE, astValue,
+  templateOf, cultureOf, formTitle, isSub, fieldsOf, sfaComputed, sfaAuto, sfaDiagnosis, CS_GROWTH, AST_SCALE, astValue, isHl, withHl,
   type Opt, type FormCode, type FormValues, type FormOptions,
 } from "@/lib/station/templates";
 
@@ -98,6 +98,17 @@ export function fillNormals(code: FormCode, values: FormValues): FormValues {
   return next;
 }
 
+/** «تمييز»: tick a field to highlight it on the printed report (Settings → «مربع تمييز»). */
+export function HlTick({ on, onChange, label }: { on: boolean; onChange: (on: boolean) => void; label: string }) {
+  return (
+    <label dir="rtl" title="تمييز النتيجة بلون على التقرير المطبوع"
+      className={`inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${on ? "bg-yellow-200 text-yellow-900" : "text-muted hover:bg-canvas"}`}>
+      <input type="checkbox" checked={on} onChange={(e) => onChange(e.target.checked)} aria-label={`تمييز ${label}`} className="size-3 accent-yellow-500" />
+      تمييز
+    </label>
+  );
+}
+
 /** Wide form window for a structured test (urine, stool, semen, culture). */
 export function FormDialog({ code, testName, values, onChange, onClose, opts }: {
   code: FormCode; testName: string; values: FormValues; onChange: (v: FormValues) => void; onClose: () => void; opts: FormOptions;
@@ -112,6 +123,10 @@ export function FormDialog({ code, testName, values, onChange, onClose, opts }: 
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
   const dx = code === "SFA" && opts.diagnosis ? sfaDiagnosis(values) : "";
+  // «تمييز» beside a field (none when switched off in Settings).
+  const tick = (k: string, label: string) => opts.highlight
+    ? <HlTick on={isHl(values, k)} onChange={(on) => onChange(withHl(values, k, on))} label={label} /> : null;
+  const hlBox = (k: string) => (opts.highlight && isHl(values, k) ? "rounded-lg bg-yellow-50 ring-2 ring-yellow-300 ring-offset-2 ring-offset-yellow-50" : "");
 
   return (
     <div className="no-print fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/40 p-3 sm:p-6" role="dialog" aria-modal="true" aria-label={testName}>
@@ -137,7 +152,7 @@ export function FormDialog({ code, testName, values, onChange, onClose, opts }: 
 
         <div className="p-5">
           <p className="mb-3 text-[11px] text-muted">لوحة المفاتيح: ↓ ↑ للتنقل في القائمة (الكتابة تُضيّقها)، Enter للاختيار والانتقال للحقل التالي.</p>
-          {code === "CS" ? <CultureForm values={values} set={set} /> : (
+          {code === "CS" ? <CultureForm values={values} set={set} tick={tick} hlBox={hlBox} /> : (
             <div className="flex flex-col gap-5">
               {templateOf(code).sections.map((s, si) => (
                 <section key={si}>
@@ -146,10 +161,13 @@ export function FormDialog({ code, testName, values, onChange, onClose, opts }: 
                     {s.rows.map((r, i) => isSub(r) ? (
                       <div key={i} className="mt-1 text-[11px] font-bold uppercase tracking-wide text-muted md:col-span-2" dir="ltr" style={{ textAlign: "left" }}>{r.sub}</div>
                     ) : (
-                      <div key={r.k} dir="ltr" className="text-left">
-                        <div className="mb-1 flex items-baseline justify-between gap-2 text-xs">
+                      <div key={r.k} dir="ltr" className={`text-left ${hlBox(r.k)}`}>
+                        <div className="mb-1 flex items-center justify-between gap-2 text-xs">
                           <span className={`font-semibold ${r.indent ? "ps-3" : ""}`}>{r.indent ? "• " : ""}{r.label}</span>
-                          {(r.ref || r.unit) && <span className="truncate text-[11px] text-muted">{r.ref ?? r.unit}</span>}
+                          <span className="flex min-w-0 items-center gap-1.5">
+                            {(r.ref || r.unit) && <span className="truncate text-[11px] text-muted">{r.ref ?? r.unit}</span>}
+                            {tick(r.k, r.label)}
+                          </span>
                         </div>
                         <Combo value={values[r.k] ?? ""} onChange={(v) => set(r.k, v)} opts={r.opts} ariaLabel={r.label} />
                         {code === "SFA" && !opts.autoCalc && (r.k === "tm" || r.k === "total") && (() => {
@@ -168,18 +186,22 @@ export function FormDialog({ code, testName, values, onChange, onClose, opts }: 
 
               <section dir="ltr" className="grid gap-x-4 gap-y-3 md:grid-cols-2">
                 {code === "SFA" && opts.diagnosis && (
-                  <div className="text-left md:col-span-2">
-                    <div className="mb-1 flex items-baseline justify-between gap-2 text-xs">
+                  <div className={`text-left md:col-span-2 ${hlBox("dx")}`}>
+                    <div className="mb-1 flex items-center justify-between gap-2 text-xs">
                       <span className="font-semibold">Conclusion</span>
-                      <span dir="rtl" className="text-[11px] text-muted">تُحسب تلقائياً وتُطبع — اكتب غيرها لتستبدلها</span>
+                      <span className="flex items-center gap-1.5">
+                        <span dir="rtl" className="text-[11px] text-muted">تُحسب تلقائياً وتُطبع — اكتب غيرها لتستبدلها</span>
+                        {tick("dx", "Conclusion")}
+                      </span>
                     </div>
                     <Combo value={values.dx ?? ""} onChange={(v) => set("dx", v)} placeholder={dx || "—"} ariaLabel="Conclusion" />
                     {dx && <div className="mt-1 text-[11px] text-violet-700">التلقائية: <b>{dx}</b>{values.dx?.trim() && values.dx.trim() !== dx ? " — ستُطبع التي كتبتها" : ""}</div>}
                   </div>
                 )}
-                <div className="text-left md:col-span-2">
-                  <div className="mb-1 flex items-baseline justify-between gap-2 text-xs">
-                    <span className="font-semibold">Remarks</span><span dir="rtl" className="text-[11px] text-muted">ملاحظات — اختياري، تُطبع أسفل التقرير</span>
+                <div className={`text-left md:col-span-2 ${hlBox("notes")}`}>
+                  <div className="mb-1 flex items-center justify-between gap-2 text-xs">
+                    <span className="font-semibold">Remarks</span>
+                    <span className="flex items-center gap-1.5"><span dir="rtl" className="text-[11px] text-muted">ملاحظات — اختياري، تُطبع أسفل التقرير</span>{tick("notes", "Remarks")}</span>
                   </div>
                   <Combo value={values.notes ?? ""} onChange={(v) => set("notes", v)} ariaLabel="Remarks" />
                 </div>
@@ -196,7 +218,10 @@ const btnCls = (on: boolean, v: string) => `h-7 w-10 rounded-md border text-xs f
   ? v === "H.S" ? "border-green-600 bg-green-600 text-white" : v === "M.S" ? "border-amber-500 bg-amber-500 text-white" : "border-red-600 bg-red-600 text-white"
   : "border-line text-muted hover:bg-canvas"}`;
 
-function CultureForm({ values, set }: { values: FormValues; set: (k: string, v: string) => void }) {
+function CultureForm({ values, set, tick, hlBox }: {
+  values: FormValues; set: (k: string, v: string) => void;
+  tick: (k: string, label: string) => React.ReactNode; hlBox: (k: string) => string;
+}) {
   const lists = cultureOf();
   const organisms: Opt[] = lists.organisms.flatMap((g) => g.items.map((v) => ({ v, ar: g.group })));
   const noGrowth = /^no growth/i.test(values.growth ?? "");
@@ -209,9 +234,13 @@ function CultureForm({ values, set }: { values: FormValues; set: (k: string, v: 
       <span className="text-sm font-bold text-brand-dark">{t}</span>{extra}
     </div>
   );
-  const field = (label: string, hint: string, node: React.ReactNode) => (
-    <div dir="ltr" className="text-left">
-      <div className="mb-1 flex items-baseline justify-between gap-2 text-xs"><span className="font-semibold">{label}</span><span dir="rtl" className="text-[11px] text-muted">{hint}</span></div>
+  // hk: the printed line the field's «تمييز» highlights (none: no tick).
+  const field = (label: string, hint: string, node: React.ReactNode, hk?: string) => (
+    <div dir="ltr" className={`text-left ${hk ? hlBox(hk) : ""}`}>
+      <div className="mb-1 flex items-center justify-between gap-2 text-xs">
+        <span className="font-semibold">{label}</span>
+        <span className="flex items-center gap-1.5"><span dir="rtl" className="text-[11px] text-muted">{hint}</span>{hk && tick(hk, label)}</span>
+      </div>
       {node}
     </div>
   );
@@ -233,14 +262,14 @@ function CultureForm({ values, set }: { values: FormValues; set: (k: string, v: 
       <section>
         {title("1. Specimen & Culture")}
         <div dir="ltr" className="grid gap-x-4 gap-y-3 md:grid-cols-2">
-          {field("Specimen", "نوع العينة", <Combo value={values.specimen ?? ""} onChange={(v) => set("specimen", v)} opts={lists.specimens} ariaLabel="Specimen" />)}
-          {field("Culture Result", "نتيجة النمو", <Combo value={values.growth ?? ""} onChange={(v) => set("growth", v)} opts={CS_GROWTH} ariaLabel="Culture" />)}
+          {field("Specimen", "نوع العينة", <Combo value={values.specimen ?? ""} onChange={(v) => set("specimen", v)} opts={lists.specimens} ariaLabel="Specimen" />, "specimen")}
+          {field("Culture Result", "نتيجة النمو", <Combo value={values.growth ?? ""} onChange={(v) => set("growth", v)} opts={CS_GROWTH} ariaLabel="Culture" />, "culture")}
           {field(two || showSecond ? "Isolated Organism (1)" : "Isolated Organism", "يُطبع: Growth of …", <Combo value={values.organism ?? ""} onChange={(v) => set("organism", v)} opts={organisms} ariaLabel="Organism" />)}
-          {field(two || showSecond ? "Colony Count (1)" : "Colony Count", "اختياري", <Combo value={values.colony ?? ""} onChange={(v) => set("colony", v)} opts={lists.colony} ariaLabel="Colony" />)}
+          {field(two || showSecond ? "Colony Count (1)" : "Colony Count", "اختياري", <Combo value={values.colony ?? ""} onChange={(v) => set("colony", v)} opts={lists.colony} ariaLabel="Colony" />, "colony")}
           {(two || showSecond) ? (
             <>
               {field("Isolated Organism (2)", "بكتيريا ثانية — Mixed growth", <Combo value={values.organism2 ?? ""} onChange={(v) => set("organism2", v)} opts={organisms} ariaLabel="Organism 2" />)}
-              {field("Colony Count (2)", "اختياري", <Combo value={values.colony2 ?? ""} onChange={(v) => set("colony2", v)} opts={lists.colony} ariaLabel="Colony 2" />)}
+              {field("Colony Count (2)", "اختياري", <Combo value={values.colony2 ?? ""} onChange={(v) => set("colony2", v)} opts={lists.colony} ariaLabel="Colony 2" />, "colony2")}
             </>
           ) : (
             <button type="button" onClick={() => setShowSecond(true)} className="w-fit rounded-lg border border-dashed border-line px-3 py-1.5 text-xs hover:bg-canvas md:col-span-2" dir="rtl">
@@ -272,8 +301,11 @@ function CultureForm({ values, set }: { values: FormValues; set: (k: string, v: 
             )}
             <div className={two ? "" : "gap-x-8 md:columns-2"}>
               {g.items.map((ab) => (
-                <div key={ab} className="flex break-inside-avoid items-center justify-between gap-2 border-b border-line/60 py-1 text-sm">
-                  <span className={`text-left ${astValue(values[`ab:${ab}`]) || astValue(values[`ab2:${ab}`]) ? "font-semibold" : ""}`}>{ab}</span>
+                <div key={ab} className={`flex break-inside-avoid items-center justify-between gap-2 border-b border-line/60 py-1 text-sm ${hlBox(`ab:${ab}`)}`}>
+                  <span className="flex items-center gap-1.5">
+                    <span className={`text-left ${astValue(values[`ab:${ab}`]) || astValue(values[`ab2:${ab}`]) ? "font-semibold" : ""}`}>{ab}</span>
+                    {tick(`ab:${ab}`, ab)}
+                  </span>
                   <div className="flex gap-6">
                     <Buttons ab={ab} prefix="ab:" />
                     {two && <Buttons ab={ab} prefix="ab2:" />}
@@ -285,7 +317,7 @@ function CultureForm({ values, set }: { values: FormValues; set: (k: string, v: 
         ))}
       </section>
 
-      {field("Remarks", "ملاحظات — اختياري", <Combo value={values.notes ?? ""} onChange={(v) => set("notes", v)} ariaLabel="Remarks" />)}
+      {field("Remarks", "ملاحظات — اختياري", <Combo value={values.notes ?? ""} onChange={(v) => set("notes", v)} ariaLabel="Remarks" />, "notes")}
     </div>
   );
 }

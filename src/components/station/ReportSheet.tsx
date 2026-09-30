@@ -123,7 +123,7 @@ export function ReportSheet({
       <div>التاريخ: {date}</div>
       {accession && (
         <div className="report-pbc mt-1 flex flex-col items-end">
-          <Barcode text={accession} className="block h-9 w-44 [&>svg]:h-full [&>svg]:w-full" />
+          {settings.reportBarcode !== false && <Barcode text={accession} className="block h-9 w-44 [&>svg]:h-full [&>svg]:w-full" />}
           <div className="font-mono text-[11px] font-bold" style={{ color: c.title }} dir="ltr">{accession}</div>
         </div>
       )}

@@ -20,7 +20,7 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   ok(await p.locator('input[aria-label="الكمية"]').inputValue() === '5', 'Arabic-keyboard digit typed as 5');
   await p.click('button:has-text("إضافة")');
   ok(await settled(async () => ((await kv(p, 'station.stock.v1')) || []).some((s) => s.name === 'كاشف السكر' && s.qty === 5)), 'stock item saved (shared key with the lab station)');
-  ok(await p.locator('[data-testid="store-tabs"] a[href="/store/inventory"]').count() === 1 && await p.locator('aside a[href="/store"]:has-text("المشتريات والمخزن")').count() === 1,
+  ok(await p.locator('[data-testid="store-tabs"] a[href="/store/inventory"]').count() === 1 && await p.locator('aside a[href="/store"]:has-text("المخزن والمشتريات")').count() === 1,
     'procurement and the stock room on one screen (two tabs, one menu entry)');
 
   // ── A purchase: typed amounts and the stock link ──
@@ -128,7 +128,7 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
 
   // ── PIN: none at first; switched on in settings; asked in a new window ──
   const q0 = await ctx.newPage();
-  await q0.goto(B + '/station/settings#device'); await q0.waitForTimeout(1200);
+  await q0.goto(B + '/station/settings#look'); await q0.waitForTimeout(1200);
   ok(await q0.locator('[data-testid="pin-gate"]').count() === 0, 'no PIN at first');
   await q0.click('[data-testid="pin-card"] button:has-text("تفعيل رمز الدخول")');
   await q0.fill('input[aria-label="الرمز الجديد"]', '1234'); await q0.fill('input[aria-label="تأكيد الرمز"]', '1235');
@@ -147,7 +147,7 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   ok(await q.locator('[data-testid="pin-gate"]').count() === 0, 'right PIN (typed in Arabic digits) opens the station');
   await q.goto(B + '/store'); await q.waitForTimeout(1000);
   ok(await q.locator('[data-testid="pin-gate"]').count() === 0, 'other stations keep their own setting (none here)');
-  await q.goto(B + '/station/settings#device'); await q.waitForTimeout(1000);
+  await q.goto(B + '/station/settings#look'); await q.waitForTimeout(1000);
   await q.click('[data-testid="pin-card"] button:has-text("قفل الآن")');
   ok(await q.locator('[data-testid="pin-gate"]').isVisible(), '«قفل الآن» locks at once');
   await q.fill('input[aria-label="رمز الدخول"]', '1234'); await q.click('[data-testid="pin-gate"] button:has-text("دخول")');

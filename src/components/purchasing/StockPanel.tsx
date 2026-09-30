@@ -8,7 +8,7 @@ import {
 } from "@/lib/station/store";
 import { consumablePresets } from "@/lib/purchasing/presets";
 import { NumberInput } from "@/components/local/NumberInput";
-import { qcLinks } from "@/lib/local/links";
+import { qcLinks, stockFloor } from "@/lib/local/links";
 
 const inp = "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
 const empty = { name: "", qty: "", minQty: "", expiry: "", testIds: [] as string[], perVisit: false };
@@ -62,7 +62,7 @@ function Tile({ label, value, tone }: { label: string; value: number; tone?: "da
   );
 }
 
-/** «المخزن» tab of «المشتريات والمخزن». */
+/** «المخزن» tab of «المخزن والمشتريات». */
 export function StockPanel() {
   const [rows, setRows] = useState<StockItem[]>([]);
   const [tests, setTests] = useState<StationTest[]>([]);
@@ -99,7 +99,7 @@ export function StockPanel() {
     if (editId === id) reset();
   }
   function restock(id: string, amount: number) {
-    persist(rows.map((r) => (r.id === id ? { ...r, qty: Math.max(0, Number(r.qty) + amount) } : r)));
+    persist(rows.map((r) => (r.id === id ? { ...r, qty: stockFloor(Number(r.qty) + amount) } : r)));
   }
 
   const isLow = (s: StockItem) => s.minQty != null && Number(s.qty) <= Number(s.minQty);
@@ -191,7 +191,10 @@ export function StockPanel() {
               return (
                 <tr key={s.id} className="border-b border-line last:border-0 hover:bg-canvas">
                   <td className="px-4 py-3 font-medium">{s.name}</td>
-                  <td className={`px-4 py-3 tabular-nums ${low ? "font-bold text-red-600" : ""}`}>{s.qty}</td>
+                  <td className={`px-4 py-3 tabular-nums ${low || Number(s.qty) < 0 ? "font-bold text-red-600" : ""}`} data-testid="stock-qty">
+                    <span dir="ltr">{s.qty}</span>
+                    {Number(s.qty) <= 0 && <span className="ms-1.5 rounded-full bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">{Number(s.qty) < 0 ? "بالسالب" : "نفد"}</span>}
+                  </td>
                   <td className="px-4 py-3 text-muted">
                     {(() => {
                       const ids = stockTestIds(s);
