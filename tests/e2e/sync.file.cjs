@@ -20,14 +20,17 @@ const { B, ok, launch, done, kv, resetLocal } = require('./lib.cjs');
     await p.click('button:has-text("إضافة")'); await p.waitForTimeout(500);
   };
   const exportFrom = async (p, name) => {
-    await p.goto(B + '/sync'); await p.waitForSelector('[data-testid="sync-export"]', { timeout: 20000 });
+    await p.goto(B + '/sync/file'); await p.waitForSelector('[data-testid="sync-export"]', { timeout: 20000 });
     if (name) { await p.fill('input[aria-label="اسم الحاسوب"]', name); await p.locator('input[aria-label="اسم الحاسوب"]').blur(); }
     const [dl] = await Promise.all([p.waitForEvent('download'), p.click('[data-testid="sync-export"]')]);
     return dl.path();
   };
   const importInto = async (p, file) => {
-    await p.goto(B + '/sync'); await p.waitForSelector('[data-testid="sync-export"]', { timeout: 20000 });
+    await p.goto(B + '/sync/file'); await p.waitForSelector('[data-testid="sync-export"]', { timeout: 20000 });
     await p.setInputFiles('[data-testid="sync-file"]', file);
+    // What the file holds is shown first; then it is brought in.
+    await p.waitForSelector('[data-testid="sync-preview"], [data-testid="sync-result"]', { timeout: 15000 });
+    if (await p.locator('[data-testid="sync-preview"]').count()) await p.click('[data-testid="sync-apply"]');
     await p.waitForSelector('[data-testid="sync-result"]', { timeout: 15000 });
     return p.getByTestId('sync-result').innerText();
   };
@@ -40,20 +43,26 @@ const { B, ok, launch, done, kv, resetLocal } = require('./lib.cjs');
   // The station is on the welcome page, open to every activated computer.
   await A.goto(B + '/welcome'); await A.waitForTimeout(800);
   ok(await A.locator('[data-testid="sync-card"]').count() === 1, 'welcome: «محطة المزامنة» among the stations');
+  await A.goto(B + '/sync'); await A.waitForSelector('[data-testid="sync-status"]', { timeout: 20000 });
+  ok(await A.locator('[data-testid="sync-reminder"]').isVisible(), 'overview: a computer never synced is reminded');
 
   await addStock(A, SA, 5); await addStock(A, 'Test Kit', 1);
   await addStock(C, SC, 7); await addStock(C, 'Test Kit', 2);
   const fileA = await exportFrom(A, 'حاسوب الاستقبال');
-  ok((await A.getByTestId('sync-counts').innerText()).includes('محطة المختبر'), 'this computer: its records per station');
+  await A.goto(B + '/sync'); await A.waitForSelector('[data-testid="sync-counts"]', { timeout: 20000 });
+  ok((await A.getByTestId('sync-counts').innerText()).includes('محطة المختبر'), 'overview: this computer\'s records per station');
+  ok(await A.locator('aside a[href="/sync/file"]').count() === 1 && await A.locator('aside a[href="/sync/settings"]').count() === 1, 'the sync station has its side menu');
 
   // ── C brings A's file in: A's items are added, C's own are kept ──
   const r1 = await importInto(C, fileA);
   ok(r1.includes('حاسوب الاستقبال') && num(r1, 'أُضيف') >= 2, `C: A's records added (${r1.replace(/\s+/g, ' ')})`);
   const cs = await stock(C);
   ok(cs.some((s) => s.name === SA) && cs.some((s) => s.name === SC), 'C now has both stock items');
+  await C.goto(B + '/sync'); await C.waitForSelector('[data-testid="sync-counts"]', { timeout: 20000 });
   ok((await C.getByTestId('sync-dupes').innerText().catch(() => '')).includes('test kit'), 'the item both computers entered as «Test Kit» is listed to merge by hand');
   const r2 = await importInto(C, fileA);
   ok(num(r2, 'أُضيف') === 0 && num(r2, 'حُدّث') === 0 && num(r2, 'حُذف') === 0, 'the same file again changes nothing');
+  await C.goto(B + '/sync/log'); await C.waitForSelector('[data-testid="sync-log"]', { timeout: 20000 });
   ok((await C.getByTestId('sync-log').innerText()).includes('حاسوب الاستقبال'), 'the sync log names the other computer');
 
   // ── Back to A; then A changes SA's quantity and deletes SC: C follows ──
@@ -72,7 +81,7 @@ const { B, ok, launch, done, kv, resetLocal } = require('./lib.cjs');
   ok(!after.some((s) => s.name === SC) && num(r4, 'حُذف') >= 1, 'and the deletion of SC');
 
   // ── Settings: a station kept to this computer stays out of the file ──
-  await C.goto(B + '/sync/settings'); await C.waitForSelector('[data-testid="sync-stations"]', { timeout: 20000 });
+  await C.goto(B + '/sync/settings#shared'); await C.waitForSelector('[data-testid="sync-stations"]', { timeout: 20000 });
   await C.uncheck('input[aria-label="مشاركة المشتريات"]');
   ok((await C.getByTestId('sync-settings-msg').innerText()).includes('حُفظ'), 'sync settings: a station kept to this computer');
 

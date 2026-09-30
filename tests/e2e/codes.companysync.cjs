@@ -47,12 +47,12 @@ const A = 'مختبر أ ' + TAG, BB = 'مختبر ب ' + TAG;
 
   const items = async (p) => ((await kv(p, 'station.stock.v1')) || []).map((s) => s.name);
   const switchOn = async (p) => {
-    await p.goto(B + '/sync'); await p.waitForSelector('[data-testid="company-sync"]', { timeout: 20000 });
+    await p.goto(B + '/sync/auto'); await p.waitForSelector('[data-testid="company-sync"]', { timeout: 20000 });
     await p.check('input[aria-label="المزامنة التلقائية"]');
     return waitFor(async () => (await p.getAttribute('[data-testid="company-sync"]', 'data-state')) === 'ok', 30000);
   };
   const syncNow = async (p) => {
-    await p.goto(B + '/sync'); await p.waitForSelector('[data-testid="company-sync-now"]', { timeout: 20000 });
+    await p.goto(B + '/sync/auto'); await p.waitForSelector('[data-testid="company-sync-now"]', { timeout: 20000 });
     await p.click('[data-testid="company-sync-now"]');
     await waitFor(async () => (await p.getAttribute('[data-testid="company-sync"]', 'data-state')) === 'ok', 30000);
   };
@@ -82,22 +82,23 @@ const A = 'مختبر أ ' + TAG, BB = 'مختبر ب ' + TAG;
   ok(own.status === 200 && txt.includes(SB) && !txt.includes(SA1) && !txt.includes(SA2), 'B\'s license reads only B\'s records');
 
   // ── Files: B's sync file does not go into A's computer ──
-  await b1.goto(B + '/sync'); await b1.waitForSelector('[data-testid="sync-export"]', { timeout: 20000 });
+  await b1.goto(B + '/sync/file'); await b1.waitForSelector('[data-testid="sync-export"]', { timeout: 20000 });
   const [dl] = await Promise.all([b1.waitForEvent('download'), b1.click('[data-testid="sync-export"]')]);
-  await a1.goto(B + '/sync'); await a1.waitForSelector('[data-testid="sync-export"]', { timeout: 20000 });
+  await a1.goto(B + '/sync/file'); await a1.waitForSelector('[data-testid="sync-export"]', { timeout: 20000 });
   await a1.setInputFiles('[data-testid="sync-file"]', await dl.path());
+  await a1.waitForSelector('[data-testid="sync-apply"]', { timeout: 15000 }); await a1.click('[data-testid="sync-apply"]');
   await a1.waitForSelector('[data-testid="sync-result"]', { timeout: 15000 });
   ok((await a1.getByTestId('sync-result').innerText()).includes('مختبر آخر') && !(await items(a1)).includes(SB), 'lab B\'s sync file is refused on lab A\'s computer');
 
   // ── Lab C has no database of its own: told to link one ──
   const c1 = await computer(cc.code, 'c1');
-  await c1.goto(B + '/sync'); await c1.waitForSelector('[data-testid="company-sync"]', { timeout: 20000 });
+  await c1.goto(B + '/sync/auto'); await c1.waitForSelector('[data-testid="company-sync"]', { timeout: 20000 });
   await c1.check('input[aria-label="المزامنة التلقائية"]');
   ok(!!(await waitFor(async () => (await c1.getByTestId('company-sync-state').innerText().catch(() => '')).includes('لم يربط قاعدة بياناته'), 30000)), 'lab C (no database): told to link its own database');
   ok((await dbA.query(`select count(*)::int as n from lab_sync_records`))[0].n > 0 && (await dbB.query(`select count(*)::int as n from lab_sync_records`))[0].n > 0, 'A\'s and B\'s records are in their own databases');
 
   // ── Switched off: this computer stops, its data stays ──
-  await a2.goto(B + '/sync'); await a2.waitForSelector('[data-testid="company-sync"]', { timeout: 20000 });
+  await a2.goto(B + '/sync/auto'); await a2.waitForSelector('[data-testid="company-sync"]', { timeout: 20000 });
   await a2.uncheck('input[aria-label="المزامنة التلقائية"]'); await a2.waitForTimeout(800);
   ok((await a2.getAttribute('[data-testid="company-sync"]', 'data-state')) === 'off' && (await items(a2)).includes(SA1), 'switched off: its records stay');
 
