@@ -2,9 +2,9 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search, Printer, MessageCircle, Save, Check, Tag, ClipboardList, Beaker, Layers, Pencil, UserRound, StickyNote, Plus, X, RotateCcw, ListChecks, ChevronDown, AlertTriangle, PackageMinus, type LucideIcon } from "lucide-react";
+import { Search, Printer, MessageCircle, Maximize2, Save, Check, Tag, ClipboardList, Beaker, Layers, Pencil, UserRound, StickyNote, Plus, X, RotateCcw, ListChecks, ChevronDown, AlertTriangle, PackageMinus, type LucideIcon } from "lucide-react";
 import {
-  getTests, addVisit, updateVisit, getVisit, getSettings, getPanels, nextAccession, uid, rangeLabel, flagFor,
+  getTests, addVisit, updateVisit, getVisit, getSettings, saveSettings, getPanels, nextAccession, uid, rangeLabel, flagFor,
   getPatients, getPatient, upsertPatient, addPatientNote, stockForVisit, issueVisitStock, visitStockToIssue, outOfStockByTest, getDoctors, addDoctor,
   previousResults, resultDelta, localYmd, splitAge, joinAge, type AgeUnitPick,
   type StationTest, type Gender, type StationVisit, type StationSettings, type StationPanel, type StationPatient, type NoteEntry, type StationDoctor,
@@ -423,6 +423,13 @@ function StationEntryPage() {
     if (short.length && stockOptions().warnOut) {
       toast.show(`تنبيه المخزن — مواد غير متوفرة: ${short.map((x) => `${x.name} (${x.qty})`).join("، ")}`, "warn");
     }
+  }
+
+  /** «ملء الصفحة» beside the print button: the report setting of the same name, switched here. */
+  function toggleFill() {
+    const next = { ...getSettings(), reportFill: settings.reportFill !== true };
+    saveSettings(next); setSettings(next);
+    toast.show(next.reportFill ? "ملء الصفحة: يكبر الخط والجدول عند قلة الفحوص" : "أُوقف ملء الصفحة");
   }
 
   /** «واتساب»: WhatsApp opens at once on the patient's number (or, with no number, to choose the
@@ -874,13 +881,18 @@ function StationEntryPage() {
                 <div className="mt-3 flex gap-2">
                   {settings.entryPrintButton !== false && (
                     <button onClick={onPrint} data-testid="entry-print" title="طباعة (Ctrl+P)"
-                      className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-brand px-3.5 py-2.5 text-sm font-semibold text-white hover:bg-brand-dark">
+                      className="inline-flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-brand px-3 py-2.5 text-sm font-semibold text-white hover:bg-brand-dark">
                       <Printer className="size-4" /> طباعة {paper}
                     </button>
                   )}
+                  <button onClick={toggleFill} data-testid="entry-fill" aria-pressed={settings.reportFill === true}
+                    title="تكبير الخط والجدول ليملأ التقرير الورقة عند قلة الفحوص (نفس خيار «ملء الصفحة» في إعدادات التقرير)"
+                    className={`inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-lg border px-2.5 py-2.5 text-sm font-semibold ${settings.reportFill === true ? "border-brand bg-teal-50 text-brand-dark" : "border-line bg-surface text-muted hover:bg-canvas"}`}>
+                    <Maximize2 className="size-4" /> ملء الصفحة
+                  </button>
                   {settings.entryWhatsApp !== false && (
                     <button onClick={() => void onShare()} disabled={sharing} data-testid="entry-whatsapp" title="مشاركة التقرير PDF عبر واتساب"
-                      className={`inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#25D366] px-3 py-2.5 text-sm font-semibold text-white hover:bg-[#1ebe5b] disabled:opacity-60 ${settings.entryPrintButton === false ? "flex-1" : ""}`}>
+                      className={`inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-lg bg-[#25D366] px-2.5 py-2.5 text-sm font-semibold text-white hover:bg-[#1ebe5b] disabled:opacity-60 ${settings.entryPrintButton === false ? "flex-1" : ""}`}>
                       <MessageCircle className={`size-4 ${sharing ? "animate-pulse" : ""}`} /> واتساب
                     </button>
                   )}

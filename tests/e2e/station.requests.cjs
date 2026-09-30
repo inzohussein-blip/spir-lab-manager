@@ -116,6 +116,13 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   await p.locator('div.grid button:has(span.flex-1)').first().click();
   const after = await font();
   ok(after > before * 1.3, `one test: larger results table (${before}px → ${after}px)`);
+  // The same option as a button beside print / WhatsApp under the results.
+  const fillBtn = p.locator('[data-testid="entry-fill"]');
+  ok(await fillBtn.getAttribute('aria-pressed') === 'true', '«ملء الصفحة» button under the results shows it on');
+  await fillBtn.click();
+  ok(await settled(async () => (await kv(p, 'station.settings.v1'))?.reportFill === false) && (await font()) === before, 'the button switches it off: the table back to its size');
+  await fillBtn.click();
+  ok(await settled(async () => (await kv(p, 'station.settings.v1'))?.reportFill === true) && (await font()) === after, 'and on again (the same setting as in «إعدادات التقرير»)');
 
   // ── Urine: pus cells and red cells as a sign scale ──
   await p.fill('input[placeholder="ابحث عن فحص…"]', 'General Urine'); await p.waitForTimeout(150);
