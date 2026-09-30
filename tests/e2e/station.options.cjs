@@ -151,7 +151,7 @@ const { B, OWNER, ok, launch, tmp, pdfPages, done, kv, resetLocal } = require('.
   const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEUlEQVR4nGOI0mr6D8IMMAYARDgIFbiRq5wAAAAASUVORK5CYII=', 'base64');
   const labName = (await ls('station.settings.v1')).labName || 'مختبر التحليلات المرضية';
   await p.goto(B + '/store/settings'); await p.waitForSelector('[data-testid="letterhead-card"]', { timeout: 15000 });
-  ok(await p.locator('[data-testid="settings-nav"] [data-section]').count() === 4, 'stock and purchases settings: four sections');
+  ok(await p.locator('[data-testid="settings-nav"] [data-section]').count() === 5, 'stock and purchases settings: five sections');
   await p.click('button:has-text("نسخ من محطة المختبر")');
   await p.setInputFiles('[data-testid="letterhead-card"] input[aria-label="ملف الشعار"]', { name: 'logo.png', mimeType: 'image/png', buffer: PNG });
   let ps = {}; for (let i = 0; i < 50 && !String(ps.logo || '').startsWith('data:image/'); i++) { await p.waitForTimeout(100); ps = (await ls('purchasing.settings.v1')) || {}; }
