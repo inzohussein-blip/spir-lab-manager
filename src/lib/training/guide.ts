@@ -3,6 +3,7 @@
  * and separating samples, the test categories, the methods, quality control, reading results and
  * diagnosis, reporting, and a glossary. Written once here; some blocks are filled from the
  * station's own devices, tubes and tests (`auto`), so the guide follows what the lab adds.
+ * This is the starting text: the lab edits it freely (see getGuide / saveGuide in ./store).
  */
 
 export type GuideBlock =
@@ -11,6 +12,7 @@ export type GuideBlock =
   | { steps: string[] }
   | { table: { head: string[]; rows: string[][] } }
   | { note: string; tone?: "tip" | "warn" }
+  | { img: string; caption?: string }
   | { auto: "tools" | "tubes" | "categories" | "index" };
 
 export interface GuideSection { title: string; blocks: GuideBlock[] }

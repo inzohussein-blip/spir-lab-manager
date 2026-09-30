@@ -1,243 +1,138 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { BookMarked, Printer, Search, Lightbulb, TriangleAlert, ChevronUp } from "lucide-react";
-import { getTests, getTubes, getTools, getSettings, type TrainingTest, type Tube, type Tool, type TrainingSettings } from "@/lib/training/store";
-import { GUIDE, CATEGORY_WHY, type GuideBlock, type GuideChapter } from "@/lib/training/guide";
-import { SopPrintStyle, SopFooter, SopLetterhead, SOP_INK, SOP_ACCENT, exact } from "@/components/training/SopSheet";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { BookMarked, Printer, Search, ChevronUp, Pencil, Check, Plus, RotateCcw, Info } from "lucide-react";
+import {
+  getTests, getTubes, getTools, getSettings, getGuide, uid, saveGuide, resetGuide, defaultGuide, defaultChapter, guideEdited,
+  type TrainingTest, type Tube, type Tool, type TrainingSettings, type GuideData,
+} from "@/lib/training/store";
+import type { GuideChapter } from "@/lib/training/guide";
+import { useEditLock } from "@/lib/training/lock";
+import { SopPrintStyle, SOP_INK, SOP_ACCENT, exact } from "@/components/training/SopSheet";
+import { Chapter, blockText } from "@/components/training/GuideView";
+import { ChapterEditor } from "@/components/training/GuideEditor";
+import { Img } from "@/components/training/Img";
 import { cn } from "@/lib/utils";
 
 interface Data { tests: TrainingTest[]; tubes: Tube[]; tools: Tool[] }
 
-const TOOL_KINDS = ["جهاز", "أداة", "كاشف", "مستهلكات"];
-const KIND_TITLE: Record<string, string> = { "جهاز": "الأجهزة", "أداة": "الأدوات", "كاشف": "الكواشف", "مستهلكات": "المستهلكات" };
-const CAT_ORDER = Object.keys(CATEGORY_WHY);
-const catOf = (t: TrainingTest) => t.category?.trim() || "أخرى";
+const chapterText = (c: GuideChapter) => `${c.title} ${c.intro} ${c.sections.map((s) => `${s.title} ${s.blocks.map(blockText).join(" ")}`).join(" ")}`;
 
-/** The station's tests grouped by category, in the guide's order (unknown categories last). */
-function byCategory(tests: TrainingTest[]): [string, TrainingTest[]][] {
-  const m = new Map<string, TrainingTest[]>();
-  tests.forEach((t) => { const k = catOf(t); (m.get(k) ?? m.set(k, []).get(k)!).push(t); });
-  const rank = (c: string) => { const i = CAT_ORDER.indexOf(c); return i < 0 ? 999 : i; };
-  return Array.from(m.entries())
-    .sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b, "ar"))
-    .map(([c, list]) => [c, list.sort((a, b) => a.name_ar.localeCompare(b.name_ar, "ar"))]);
-}
-
-/** The text a block carries — for the search. */
-const blockText = (b: GuideBlock): string =>
-  "p" in b ? b.p : "list" in b ? b.list.join(" ") : "steps" in b ? b.steps.join(" ") : "note" in b ? b.note
-    : "table" in b ? [...b.table.head, ...b.table.rows.flat()].join(" ") : "";
-
-/** A table shared by the written tables and the ones filled from the station. */
-function Table({ head, rows, print }: { head: string[]; rows: React.ReactNode[][]; print: boolean }) {
-  return (
-    <div className={cn("my-2 overflow-x-auto", print && "overflow-visible")}>
-      <table className={cn("w-full border-collapse text-start", print ? "text-[11px]" : "text-sm")}>
-        <thead>
-          <tr>{head.map((h, i) => (
-            <th key={i} className={cn("border px-2 py-1.5 text-start font-bold", print ? "border-gray-300 text-white" : "border-line bg-brand-light text-brand-dark")}
-              style={print ? { background: SOP_INK, ...exact } : undefined}>{h}</th>
-          ))}</tr>
-        </thead>
-        <tbody>
-          {rows.map((r, i) => (
-            <tr key={i} className={cn(i % 2 === 1 && (print ? "bg-gray-50" : "bg-canvas"))} style={print ? exact : undefined}>
-              {r.map((c, j) => <td key={j} className={cn("border px-2 py-1 align-top", print ? "border-gray-300" : "border-line", j === 0 && "font-semibold")}>{c}</td>)}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+/** The lab's logo, name and details on the printed guide (every chapter; large on the cover). */
+function LabHead({ s, big, right }: { s: TrainingSettings; big?: boolean; right?: React.ReactNode }) {
+  const logo = s.logoImageId ? <Img id={s.logoImageId} className={big ? "size-28" : "size-14"} /> : (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src="/lab-logo.png" alt="" className={cn("object-contain", big ? "size-28" : "size-14")} />
   );
-}
-
-function Auto({ kind, data, print }: { kind: "tools" | "tubes" | "categories" | "index"; data: Data; print: boolean }) {
-  const muted = print ? "text-gray-600" : "text-muted";
-  const testLink = (t: TrainingTest, label: React.ReactNode) =>
-    print ? <>{label}</> : <Link href={`/training/test/${t.id}`} className="text-brand-dark hover:underline">{label}</Link>;
-
-  if (kind === "tools") {
-    if (!data.tools.length) return <p className={cn("text-sm", muted)}>لا توجد أدوات مسجّلة بعد — أضفها من «الأدوات والأجهزة».</p>;
-    const kinds = [...TOOL_KINDS, ...Array.from(new Set(data.tools.map((t) => t.kind))).filter((k) => !TOOL_KINDS.includes(k))];
+  if (big) {
     return (
-      <div data-testid="guide-auto-tools">
-        {kinds.map((k) => {
-          const list = data.tools.filter((t) => t.kind === k);
-          if (!list.length) return null;
-          return (
-            <div key={k} className="guide-keep mb-3">
-              <div className="mb-1 text-sm font-bold" style={{ color: print ? SOP_ACCENT : undefined }}>{KIND_TITLE[k] ?? k} ({list.length})</div>
-              <ul className="grid gap-1.5 sm:grid-cols-2">
-                {list.map((t) => (
-                  <li key={t.id} className={cn("rounded-lg px-3 py-1.5", print ? "border border-gray-200" : "bg-canvas")}>
-                    <div className="font-semibold">{t.name}</div>
-                    {t.description && <div className={cn("text-xs", muted)}>{t.description}</div>}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          );
-        })}
-        {!print && <Link href="/training/tools" className="text-xs text-brand-dark hover:underline">كل الأدوات بالصور ←</Link>}
+      <div className="flex flex-col items-center text-center" data-testid="guide-cover-head">
+        {logo}
+        <div className="mt-3 text-3xl font-extrabold" style={{ color: SOP_INK }}>{s.title}</div>
+        {s.subtitle && <div className="mt-1 text-sm text-gray-600">{s.subtitle}</div>}
+        {s.contact && <div className="mt-1 text-sm text-gray-600">{s.contact}</div>}
       </div>
     );
   }
-
-  if (kind === "tubes") {
-    if (!data.tubes.length) return <p className={cn("text-sm", muted)}>لا توجد تيوبات مسجّلة بعد.</p>;
-    return (
-      <div data-testid="guide-auto-tubes">
-        <Table print={print} head={["التيوب", "المادة", "الاستعمال", "ملاحظات"]} rows={data.tubes.map((t) => [
-          <span key="n" className="inline-flex items-center gap-2">
-            <span className="size-4 shrink-0 rounded-full border border-black/20" style={{ background: t.color, ...exact }} />{t.name}
-          </span>,
-          t.additive ?? "", t.uses ?? "", t.notes ?? "",
-        ])} />
-        {!print && <Link href="/training/tubes" className="text-xs text-brand-dark hover:underline">التيوبات بالصور ←</Link>}
-      </div>
-    );
-  }
-
-  const groups = byCategory(data.tests);
-  if (kind === "categories") {
-    return (
-      <div data-testid="guide-auto-categories" className="grid gap-2.5">
-        {groups.map(([c, list]) => (
-          <div key={c} className={cn("guide-keep rounded-xl p-3", print ? "border border-gray-300" : "border border-line")}>
-            <div className="flex items-baseline justify-between gap-2">
-              <div className="font-bold" style={{ color: print ? SOP_INK : undefined }}>{c}</div>
-              <span className={cn("text-xs", muted)}>{list.length} فحص</span>
-            </div>
-            {CATEGORY_WHY[c] && <p className={cn("mt-0.5 text-sm", muted)}>{CATEGORY_WHY[c]}</p>}
-            <div className="mt-1.5 flex flex-wrap gap-1">
-              {list.map((t) => (
-                <span key={t.id} className={cn("rounded-md px-1.5 py-0.5 text-xs", print ? "border border-gray-200" : "bg-canvas")}>
-                  {testLink(t, <span dir="ltr">{t.abbr || t.name_ar}</span>)}
-                </span>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  // index
-  const tubeName = (t: TrainingTest) => t.tubeIds.map((id) => data.tubes.find((x) => x.id === id)?.name).filter(Boolean).join(" ، ");
-  let n = 0;
   return (
-    <div data-testid="guide-auto-index">
-      {groups.map(([c, list]) => (
-        <div key={c} className="mb-3">
-          <div className="guide-keep mb-1 border-b pb-0.5 text-sm font-bold" style={{ color: SOP_ACCENT, borderColor: SOP_ACCENT }}>{c}</div>
-          <Table print={print} head={["#", "الفحص", "العينة", "التيوب"]} rows={list.map((t) => [
-            String(++n),
-            testLink(t, <>{t.name_ar}{t.abbr && <span className={muted} dir="ltr"> ({t.abbr})</span>}</>),
-            t.sampleType ?? "", tubeName(t),
-          ])} />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function Block({ b, data, print }: { b: GuideBlock; data: Data; print: boolean }) {
-  if ("p" in b) return <p className="my-1.5">{b.p}</p>;
-  if ("list" in b) return <ul className="my-1.5 list-disc space-y-1 ps-5">{b.list.map((x, i) => <li key={i}>{x}</li>)}</ul>;
-  if ("steps" in b) {
-    return (
-      <ol className="my-2 space-y-1.5">
-        {b.steps.map((x, i) => (
-          <li key={i} className="flex gap-2">
-            <span className={cn("grid size-6 shrink-0 place-items-center rounded-full text-xs font-bold", print ? "text-white" : "bg-brand text-white")}
-              style={print ? { background: SOP_ACCENT, ...exact } : undefined}>{i + 1}</span>
-            <span className="pt-0.5">{x}</span>
-          </li>
-        ))}
-      </ol>
-    );
-  }
-  if ("table" in b) return <Table print={print} head={b.table.head} rows={b.table.rows} />;
-  if ("note" in b) {
-    const warn = b.tone === "warn";
-    const Icon = warn ? TriangleAlert : Lightbulb;
-    return (
-      <div className={cn("guide-keep my-2 flex gap-2 rounded-xl border px-3 py-2",
-        warn ? "border-amber-300 bg-amber-50 text-amber-900" : "border-sky-200 bg-sky-50 text-sky-900")} style={exact} data-tone={b.tone ?? "tip"}>
-        <Icon className="mt-0.5 size-4 shrink-0" /><span>{b.note}</span>
-      </div>
-    );
-  }
-  return <Auto kind={b.auto} data={data} print={print} />;
-}
-
-function Chapter({ ch, no, data, print, q }: { ch: GuideChapter; no: number; data: Data; print: boolean; q?: string }) {
-  const sections = q ? ch.sections.filter((s) => `${ch.title} ${s.title} ${s.blocks.map(blockText).join(" ")}`.includes(q)) : ch.sections;
-  if (q && !sections.length) return null;
-  return (
-    <section id={print ? undefined : `ch-${ch.id}`} data-chapter={ch.id}
-      className={cn(print ? "sop-page-break" : "scroll-mt-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]")}>
-      <div className="guide-keep mb-3 flex items-center gap-3">
-        <span className={cn("grid size-10 shrink-0 place-items-center rounded-xl text-lg font-extrabold text-white", !print && "bg-gradient-to-br from-brand to-brand-dark")}
-          style={print ? { background: SOP_INK, ...exact } : undefined}>{no}</span>
+    <div className="guide-keep flex items-center justify-between gap-4 border-b-2 pb-2" style={{ borderColor: SOP_ACCENT }} data-testid="guide-page-head">
+      <div className="flex items-center gap-3">
+        {logo}
         <div>
-          <h2 className={cn("font-extrabold", print ? "text-xl" : "text-lg")} style={print ? { color: SOP_INK } : undefined}>{ch.title}</h2>
-          <p className={cn("text-sm", print ? "text-gray-600" : "text-muted")}>{ch.intro}</p>
+          <div className="text-lg font-extrabold" style={{ color: SOP_INK }}>{s.title}</div>
+          {s.subtitle && <div className="text-[11px] text-gray-600">{s.subtitle}</div>}
+          {s.contact && <div className="text-[11px] text-gray-600">{s.contact}</div>}
         </div>
       </div>
-      {sections.map((s, i) => (
-        <div key={i} className="mt-4">
-          {s.title && (
-            <h3 className="guide-keep mb-1 flex items-center gap-2 font-bold" style={print ? { color: SOP_INK } : undefined}>
-              <span className={cn("h-4 w-1.5 rounded", !print && "bg-brand")} style={print ? { background: SOP_ACCENT, ...exact } : undefined} />
-              {s.title}
-            </h3>
-          )}
-          {s.blocks.map((b, j) => <Fragment key={j}><Block b={b} data={data} print={print} /></Fragment>)}
-        </div>
-      ))}
-    </section>
+      {right && <div className="text-left text-[11px] text-gray-600">{right}</div>}
+    </div>
   );
 }
 
-/** «الدليل»: the training station's guide from scratch — browsed on screen, printed as a book. */
+/** «الدليل»: the training station's guide from scratch — browsed on screen, edited by the lab,
+ *  printed as a book on the lab's letterhead. */
 export default function GuidePage() {
   const [data, setData] = useState<Data>({ tests: [], tubes: [], tools: [] });
   const [settings, setSettings] = useState<TrainingSettings | null>(null);
+  const [guide, setGuide] = useState<GuideData>(() => defaultGuide());
+  const [edited, setEdited] = useState(false);
   const [q, setQ] = useState("");
   const [only, setOnly] = useState(""); // print one chapter ("" = the whole guide)
-  const [active, setActive] = useState(GUIDE[0].id);
+  const [active, setActive] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [sv, setSv] = useState(0); // bumped on moves / adds / deletes (re-creates the edit fields)
+  const [saved, setSaved] = useState<"" | "saving" | "saved">("");
+  const pending = useRef<GuideData | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { canEdit } = useEditLock();
 
-  useEffect(() => { setData({ tests: getTests(), tubes: getTubes(), tools: getTools() }); setSettings(getSettings()); }, []);
+  useEffect(() => {
+    setData({ tests: getTests(), tubes: getTubes(), tools: getTools() });
+    setSettings(getSettings());
+    setGuide(getGuide());
+    setEdited(guideEdited());
+  }, []);
+
+  // Edits are saved a moment after typing stops (and before leaving the page).
+  const flush = useCallback(() => {
+    if (timer.current) { clearTimeout(timer.current); timer.current = null; }
+    if (pending.current) { saveGuide(pending.current); pending.current = null; setEdited(true); setSaved("saved"); }
+  }, []);
+  useEffect(() => {
+    window.addEventListener("beforeunload", flush);
+    return () => { window.removeEventListener("beforeunload", flush); flush(); };
+  }, [flush]);
+  const update = (next: GuideData, structural = false) => {
+    setGuide(next);
+    if (structural) setSv((v) => v + 1);
+    pending.current = next;
+    setSaved("saving");
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(flush, 400);
+  };
+  const setChapter = (i: number, ch: GuideChapter, structural = false) =>
+    update({ ...guide, chapters: guide.chapters.map((c, j) => (j === i ? ch : c)) }, structural);
+
+  const chapters = guide.chapters;
+  const source = useMemo(() => ({ ...data, why: guide.why }), [data, guide.why]);
 
   // The contents highlight the chapter being read.
   useEffect(() => {
     if (!settings) return;
-    const els = GUIDE.map((c) => document.getElementById(`ch-${c.id}`)).filter(Boolean) as HTMLElement[];
+    const els = chapters.map((c) => document.getElementById(`ch-${c.id}`)).filter(Boolean) as HTMLElement[];
     const io = new IntersectionObserver((es) => {
       const vis = es.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
-      if (vis) setActive(vis.target.getAttribute("data-chapter") ?? GUIDE[0].id);
+      if (vis) setActive(vis.target.getAttribute("data-chapter") ?? "");
     }, { rootMargin: "0px 0px -70% 0px" });
     els.forEach((e) => io.observe(e));
     return () => io.disconnect();
-  }, [settings, q]);
+  }, [settings, q, chapters, editing]);
 
-  const query = q.trim();
-  const printed = useMemo(() => GUIDE.map((c, i) => ({ c, no: i + 1 })).filter(({ c }) => !only || c.id === only), [only]);
-  const visible = useMemo(
-    () => GUIDE.map((c, i) => ({ c, no: i + 1 })).filter(({ c }) => !query || `${c.title} ${c.sections.map((s) => `${s.title} ${s.blocks.map(blockText).join(" ")}`).join(" ")}`.includes(query)),
-    [query]
-  );
+  const query = editing ? "" : q.trim();
+  const printed = useMemo(() => chapters.map((c, i) => ({ c, no: i + 1 })).filter(({ c }) => !only || c.id === only), [chapters, only]);
+  const visible = useMemo(() => chapters.map((c, i) => ({ c, no: i + 1 })).filter(({ c }) => !query || chapterText(c).includes(query)), [chapters, query]);
 
   if (!settings) return null;
 
   const print = () => {
+    flush();
     const y = window.scrollY;
     window.scrollTo(0, 0); // fixed elements (the footer) print from the top of the page
     setTimeout(() => { window.print(); window.scrollTo(0, y); }, 60);
   };
+  const addChapter = () => {
+    const id = `c-${uid().slice(0, 8)}`;
+    update({ ...guide, chapters: [...chapters, { id, title: "فصل جديد", intro: "", sections: [{ title: "", blocks: [{ p: "" }] }] }] }, true);
+    setTimeout(() => document.getElementById(`ch-${id}`)?.scrollIntoView({ behavior: "smooth" }), 80);
+  };
+  const restoreAll = () => {
+    if (!confirm("إرجاع الدليل إلى نصه الأصلي؟ ستُحذف كل التعديلات والفصول المضافة.")) return;
+    if (timer.current) clearTimeout(timer.current);
+    pending.current = null;
+    resetGuide();
+    setGuide(defaultGuide()); setEdited(false); setSv((v) => v + 1); setSaved("saved");
+  };
+  const footer = [settings.footer, settings.contact].filter(Boolean).join(" — ");
 
   return (
     <div>
@@ -248,10 +143,17 @@ export default function GuidePage() {
             <p className="mt-1 text-sm text-muted">دليل كامل من الصفر: الأجهزة والتيوبات ، سحب العينة وفصلها ، أقسام الفحوص وطرقها ، ضبط الجودة ، قراءة النتيجة والتشخيص.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {canEdit && (
+              <button onClick={() => { flush(); setEditing(!editing); setSv((v) => v + 1); }} data-testid="guide-edit"
+                className={cn("inline-flex items-center gap-1.5 rounded-lg border px-4 py-2 text-sm font-semibold",
+                  editing ? "border-green-600 bg-green-600 text-white hover:bg-green-700" : "border-line bg-surface hover:bg-canvas")}>
+                {editing ? <><Check className="size-4" /> إنهاء التعديل</> : <><Pencil className="size-4" /> تعديل الدليل</>}
+              </button>
+            )}
             <select value={only} onChange={(e) => setOnly(e.target.value)} aria-label="ما يُطبع" data-testid="guide-print-what"
               className="rounded-lg border border-line bg-surface px-3 py-2 text-sm">
-              <option value="">الدليل كاملاً ({GUIDE.length} فصلاً)</option>
-              {GUIDE.map((c, i) => <option key={c.id} value={c.id}>{i + 1}. {c.title}</option>)}
+              <option value="">الدليل كاملاً ({chapters.length} فصلاً)</option>
+              {chapters.map((c, i) => <option key={c.id} value={c.id}>{i + 1}. {c.title}</option>)}
             </select>
             <button onClick={print} data-testid="guide-print" className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark">
               <Printer className="size-4" /> طباعة
@@ -259,54 +161,100 @@ export default function GuidePage() {
           </div>
         </div>
 
+        {editing && (
+          <div className="sticky top-2 z-20 mb-4 flex flex-wrap items-center gap-2 rounded-2xl border border-brand/30 bg-brand-light px-4 py-2.5 text-sm shadow-[var(--shadow-card)]" data-testid="guide-edit-bar">
+            <Pencil className="size-4 text-brand-dark" />
+            <span className="font-semibold text-brand-dark">وضع التعديل</span>
+            <span className="text-xs text-muted">عدّل أي نص، أو أضف فصلاً أو قسماً أو فقرة أو جدولاً أو صورة. يُحفظ تلقائياً.</span>
+            <span className="ms-auto text-xs text-muted" data-testid="guide-saved">{saved === "saving" ? "جارٍ الحفظ…" : saved === "saved" ? "حُفظ ✓" : ""}</span>
+            <button onClick={addChapter} data-testid="guide-add-chapter" className="inline-flex items-center gap-1 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-dark"><Plus className="size-3.5" /> فصل جديد</button>
+            {edited && (
+              <button onClick={restoreAll} data-testid="guide-restore" className="inline-flex items-center gap-1 rounded-lg border border-line bg-surface px-3 py-1.5 text-xs hover:bg-canvas"><RotateCcw className="size-3.5" /> النص الأصلي للدليل كله</button>
+            )}
+          </div>
+        )}
+
         <div className="grid gap-5 lg:grid-cols-[15rem_1fr]">
           <aside className="lg:sticky lg:top-4 lg:self-start">
-            <label className="relative mb-2 block">
-              <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
-              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="بحث في الدليل" data-testid="guide-search"
-                className="w-full rounded-lg border border-line bg-surface py-2 pe-3 ps-9 text-sm" />
-            </label>
-            <nav data-testid="guide-toc" className="rounded-2xl border border-line bg-surface p-2 shadow-[var(--shadow-card)]">
-              {GUIDE.map((c, i) => (
+            {!editing && (
+              <label className="relative mb-2 block">
+                <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
+                <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="بحث في الدليل" data-testid="guide-search"
+                  className="w-full rounded-lg border border-line bg-surface py-2 pe-3 ps-9 text-sm" />
+              </label>
+            )}
+            <nav data-testid="guide-toc" className="max-h-[calc(100vh-7rem)] overflow-y-auto rounded-2xl border border-line bg-surface p-2 shadow-[var(--shadow-card)]">
+              {chapters.map((c, i) => (
                 <a key={c.id} href={`#ch-${c.id}`}
                   className={cn("flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm",
                     active === c.id ? "bg-brand-light font-semibold text-brand-dark" : "hover:bg-canvas",
                     query && !visible.some((v) => v.c.id === c.id) && "opacity-40")}>
-                  <span className="w-5 text-center text-xs text-muted tabular-nums">{i + 1}</span>{c.title}
+                  <span className="w-5 text-center text-xs text-muted tabular-nums">{i + 1}</span>{c.title || "بلا عنوان"}
                 </a>
               ))}
             </nav>
+            {edited && !editing && <p className="mt-2 px-1 text-[11px] text-muted">عدّل المختبر هذا الدليل.</p>}
           </aside>
 
           <div className="grid min-w-0 gap-5 text-[15px] leading-relaxed">
+            {!editing && (
+              <p className="flex items-start gap-2 rounded-xl border border-line bg-surface px-4 py-2.5 text-xs text-muted" data-testid="guide-disclaimer">
+                <Info className="mt-0.5 size-4 shrink-0" />
+                الدليل مرجع تعليمي عام قابل للتعديل من المختبر، وليس بديلاً عن نشرات الكواشف والأجهزة وتعليمات الجهات الصحية. المختبر مسؤول عن مراجعة محتواه واعتماده.
+              </p>
+            )}
             {query && !visible.length && <p className="rounded-2xl border border-line bg-surface p-5 text-sm text-muted">لا توجد نتائج لـ «{query}».</p>}
-            {visible.map(({ c, no }) => <Chapter key={c.id} ch={c} no={no} data={data} print={false} q={query || undefined} />)}
+            {editing
+              ? chapters.map((c, i) => (
+                <ChapterEditor key={c.id} ch={c} no={i + 1} count={chapters.length} sv={sv} tests={data.tests} why={guide.why}
+                  onChange={(ch, structural) => setChapter(i, ch, structural)}
+                  onWhy={(cat, text) => update({ ...guide, why: { ...guide.why, [cat]: text } })}
+                  onMove={(d) => {
+                    const j = i + d;
+                    const next = [...chapters];
+                    [next[i], next[j]] = [next[j], next[i]];
+                    update({ ...guide, chapters: next }, true);
+                  }}
+                  onDelete={() => { if (confirm(`حذف الفصل «${c.title}» بكل ما فيه؟`)) update({ ...guide, chapters: chapters.filter((_, j) => j !== i) }, true); }}
+                  onRestore={defaultChapter(c.id) ? () => { if (confirm(`إرجاع الفصل «${c.title}» إلى نصه الأصلي؟`)) setChapter(i, defaultChapter(c.id)!, true); } : undefined} />
+              ))
+              : visible.map(({ c, no }) => <Chapter key={c.id} ch={c} no={no} data={source} print={false} q={query || undefined} />)}
+            {editing && (
+              <button onClick={addChapter} className="inline-flex items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-brand/40 py-4 text-sm font-semibold text-brand-dark hover:bg-brand-light">
+                <Plus className="size-4" /> إضافة فصل جديد
+              </button>
+            )}
             <a href="#" onClick={(e) => { e.preventDefault(); window.scrollTo({ top: 0, behavior: "smooth" }); }}
               className="inline-flex items-center gap-1 justify-self-center text-xs text-muted hover:text-ink"><ChevronUp className="size-4" /> إلى الأعلى</a>
           </div>
         </div>
       </div>
 
-      {/* ── Printed book ── */}
+      {/* ── Printed book, on the lab's letterhead ── */}
       <div className="sop-doc hidden bg-white text-[12px] leading-relaxed text-black print:block" data-testid="guide-doc">
         <SopPrintStyle />
         <style>{`@media print { .sop-doc .guide-keep { break-inside: avoid; break-after: avoid; } .sop-doc > .sop-page-break:first-of-type { break-before: auto; } }`}</style>
         {!only && (
           <>
-            <section className="flex min-h-[250mm] flex-col">
-              <SopLetterhead settings={settings} />
-              <div className="flex flex-1 flex-col items-center justify-center text-center">
-                <div className="text-4xl font-extrabold" style={{ color: SOP_INK }}>الدليل</div>
+            <section className="flex min-h-[250mm] flex-col items-center justify-between py-6 text-center" data-testid="guide-cover">
+              <LabHead s={settings} big />
+              <div>
+                <div className="mx-auto mb-4 h-1 w-24 rounded" style={{ background: SOP_ACCENT, ...exact }} />
+                <div className="text-5xl font-extrabold" style={{ color: SOP_INK }}>الدليل</div>
                 <div className="mt-1 text-sm tracking-wide text-gray-600" dir="ltr">Laboratory Training Guide</div>
-                <div className="mt-4 max-w-md text-sm text-gray-700">من الصفر: الأجهزة والتيوبات ، سحب العينة وفصلها ، أقسام الفحوص وطرقها ، ضبط الجودة ، قراءة النتيجة والتشخيص.</div>
-                <div className="mt-6 text-sm text-gray-600">{GUIDE.length} فصلاً · {data.tests.length} فحصاً · تاريخ الطباعة: <span dir="ltr">{new Date().toLocaleDateString("en-CA")}</span></div>
-                {settings.preparedBy && <div className="mt-1 text-sm text-gray-600">إعداد: <b>{settings.preparedBy}</b></div>}
+                <div className="mx-auto mt-4 max-w-md text-sm text-gray-700">من الصفر: الأجهزة والتيوبات ، سحب العينة وفصلها ، أقسام الفحوص وطرقها ، ضبط الجودة ، قراءة النتيجة والتشخيص.</div>
+              </div>
+              <div className="text-sm text-gray-600">
+                <div>{chapters.length} فصلاً · {data.tests.length} فحصاً · تاريخ الطباعة: <span dir="ltr">{new Date().toLocaleDateString("en-CA")}</span></div>
+                {settings.preparedBy && <div className="mt-1">إعداد: <b>{settings.preparedBy}</b></div>}
+                <div className="mx-auto mt-3 max-w-lg text-[10px] text-gray-500">مرجع تعليمي داخلي قابل للتعديل من المختبر؛ يُراجع ويُعتمد من إدارة المختبر، ولا يغني عن نشرات الكواشف والأجهزة.</div>
               </div>
             </section>
             <section className="sop-page-break">
-              <div className="mb-3 text-xl font-extrabold" style={{ color: SOP_INK }}>المحتويات</div>
+              <LabHead s={settings} right={<b style={{ color: SOP_INK }}>الدليل — المحتويات</b>} />
+              <div className="mb-3 mt-4 text-xl font-extrabold" style={{ color: SOP_INK }}>المحتويات</div>
               <ol className="space-y-1.5 text-[13px]">
-                {GUIDE.map((c, i) => (
+                {chapters.map((c, i) => (
                   <li key={c.id} className="flex gap-2 border-b border-dotted border-gray-300 pb-1">
                     <b className="w-6" style={{ color: SOP_ACCENT }}>{i + 1}.</b>
                     <span className="flex-1"><b>{c.title}</b> <span className="text-gray-500">— {c.sections.map((s) => s.title).filter(Boolean).join(" ، ") || c.intro}</span></span>
@@ -316,8 +264,11 @@ export default function GuidePage() {
             </section>
           </>
         )}
-        {printed.map(({ c, no }) => <Chapter key={c.id} ch={c} no={no} data={data} print />)}
-        <SopFooter text={settings.footer} />
+        {printed.map(({ c, no }) => (
+          <Chapter key={c.id} ch={c} no={no} data={source} print
+            head={<LabHead s={settings} right={<><b style={{ color: SOP_INK }}>الدليل</b><div>الفصل {no}</div></>} />} />
+        ))}
+        {footer && <div className="sop-footer mt-4 rounded-md px-3 py-1.5 text-center text-[10px] text-white" style={{ background: SOP_INK, ...exact }} data-testid="guide-footer">{footer}</div>}
       </div>
     </div>
   );

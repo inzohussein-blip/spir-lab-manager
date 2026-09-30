@@ -44,6 +44,7 @@ export function SopLetterhead({ settings, right }: { settings: TrainingSettings;
         <div>
           <div className="text-xl font-extrabold" style={{ color: SOP_INK }}>{settings.title}</div>
           <div className="text-xs text-gray-600">{settings.subtitle}</div>
+          {settings.contact && <div className="text-[11px] text-gray-600">{settings.contact}</div>}
         </div>
       </div>
       {right && <div className="text-left text-[11px] text-gray-600">{right}</div>}

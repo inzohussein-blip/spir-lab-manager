@@ -95,37 +95,37 @@ main > * {
 }
 
 /* ── Local stations interactions (scoped to .station / .training / .qc / .roster — admin/purchasing untouched) ── */
-:is(.station, .training, .qc, .roster, .about) button:not(:disabled),
-:is(.station, .training, .qc, .roster, .about) a[href] {
+:is(.station, .training, .qc, .roster, .about, .sync) button:not(:disabled),
+:is(.station, .training, .qc, .roster, .about, .sync) a[href] {
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease,
     box-shadow 0.15s ease, transform 0.1s ease;
 }
 /* Tactile press feedback */
-:is(.station, .training, .qc, .roster, .about) button:not(:disabled):active {
+:is(.station, .training, .qc, .roster, .about, .sync) button:not(:disabled):active {
   transform: scale(0.96);
 }
-:is(.station, .training, .qc, .roster, .about) button:disabled {
+:is(.station, .training, .qc, .roster, .about, .sync) button:disabled {
   cursor: not-allowed;
   opacity: 0.5;
 }
 /* Primary buttons lift slightly on hover */
-:is(.station, .training, .qc, .roster, .about) button.bg-brand:not(:disabled):hover {
+:is(.station, .training, .qc, .roster, .about, .sync) button.bg-brand:not(:disabled):hover {
   box-shadow: 0 4px 12px color-mix(in oklab, var(--color-brand) 35%, transparent);
 }
 /* Keyboard focus ring for buttons/links */
-:is(.station, .training, .qc, .roster, .about) button:focus-visible,
-:is(.station, .training, .qc, .roster, .about) a:focus-visible {
+:is(.station, .training, .qc, .roster, .about, .sync) button:focus-visible,
+:is(.station, .training, .qc, .roster, .about, .sync) a:focus-visible {
   outline: 2px solid var(--color-brand);
   outline-offset: 2px;
 }
 /* Soft glow around focused fields */
-:is(.station, .training, .qc, .roster, .about) input:focus,
-:is(.station, .training, .qc, .roster, .about) select:focus,
-:is(.station, .training, .qc, .roster, .about) textarea:focus {
+:is(.station, .training, .qc, .roster, .about, .sync) input:focus,
+:is(.station, .training, .qc, .roster, .about, .sync) select:focus,
+:is(.station, .training, .qc, .roster, .about, .sync) textarea:focus {
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-brand) 18%, transparent);
 }
 /* Dark theme: the brand teal is bright, so text sitting on it goes dark for contrast */
-:root[data-theme="dark"] :is(.station, .training, .qc, .roster, .about) :is(.bg-brand, .from-brand).text-white {
+:root[data-theme="dark"] :is(.station, .training, .qc, .roster, .about, .sync) :is(.bg-brand, .from-brand).text-white {
   color: #042f2e;
 }
 /* Training station — its own accent (indigo) so it reads as a separate app */
@@ -181,8 +181,19 @@ main > * {
   --color-brand-dark: #0ea5e9;
   --color-brand-light: #082f49;
 }
-:root[data-theme="dark"] :is(.qc, .roster, .about) :is(.bg-brand, .from-brand).text-white {
+:root[data-theme="dark"] :is(.qc, .roster, .about, .sync) :is(.bg-brand, .from-brand).text-white {
   color: #0f172a;
+}
+/* Sync station — violet accent */
+.sync {
+  --color-brand: #7c3aed;
+  --color-brand-dark: #6d28d9;
+  --color-brand-light: #f5f3ff;
+}
+:root[data-theme="dark"] .sync {
+  --color-brand: #a78bfa;
+  --color-brand-dark: #8b5cf6;
+  --color-brand-light: #2e1065;
 }
 /* About the app — purple accent */
 .about {
@@ -204,7 +215,7 @@ main > * {
   animation: station-toast-in 0.18s ease-out;
 }
 @media (prefers-reduced-motion: reduce) {
-  :is(.station, .training, .qc, .roster, .about) button:not(:disabled):active { transform: none; }
+  :is(.station, .training, .qc, .roster, .about, .sync) button:not(:disabled):active { transform: none; }
   .station-toast { animation: none; }
 }
 

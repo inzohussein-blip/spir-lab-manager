@@ -1,6 +1,6 @@
 // «الدليل»: the training station's guide from scratch — first in the sidebar, browsed by chapter,
 // searched, filled from the station's own tools, tubes and tests, and printed as a book or one chapter.
-const { B, ok, launch, done, resetLocal } = require('./lib.cjs');
+const { B, ok, launch, done, resetLocal, kv, kvPut } = require('./lib.cjs');
 (async () => {
   const b = await launch();
   const p = await (await b.newContext({ viewport: { width: 1440, height: 950 } })).newPage();
@@ -68,6 +68,59 @@ const { B, ok, launch, done, resetLocal } = require('./lib.cjs');
   const pages1 = (pdf1.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length;
   ok(pages1 >= 1 && pages1 <= 3, `one chapter is a few pages (${pages1})`);
   await p.emulateMedia({ media: 'screen' });
+
+  // ── The printed book carries the lab's logo, name and details ──
+  await p.emulateMedia({ media: 'screen' });
+  await kvPut(p, 'station.settings.v1', { ...((await kv(p, 'station.settings.v1')) || {}), labName: 'مختبر النور التخصصي', labSubtitle: 'للتحليلات المرضية', footer: 'بغداد — 07700000000' });
+  await p.goto(B + '/training/settings#print'); await p.waitForSelector('[data-testid="training-copy-lab"]', { timeout: 20000 });
+  await p.click('[data-testid="training-copy-lab"]');
+  const settled = async (fn, ms = 5000) => { const end = Date.now() + ms; while (Date.now() < end) { if (await fn()) return true; await p.waitForTimeout(150); } return false; };
+  ok(await settled(async () => ((await kv(p, 'training.settings.v1')) || {}).title === 'مختبر النور التخصصي'), '«نسخ من محطة المختبر»: the lab\'s name and details');
+  ok(((await kv(p, 'training.settings.v1')) || {}).contact === 'بغداد — 07700000000', 'with its address and phone');
+  await p.goto(B + '/training/guide'); await p.waitForSelector('[data-testid="guide-toc"]', { timeout: 20000 });
+  ok((await p.locator('[data-testid="guide-disclaimer"]').innerText()).includes('قابل للتعديل'), 'the guide says it is an editable reference');
+  await p.selectOption('[data-testid="guide-print-what"]', '');
+  await p.emulateMedia({ media: 'print' });
+  const cover = await p.locator('[data-testid="guide-cover-head"]').innerText();
+  ok(cover.includes('مختبر النور التخصصي') && cover.includes('بغداد — 07700000000'), 'the cover: the lab\'s name, details and logo');
+  ok(await p.locator('[data-testid="guide-cover-head"] img, [data-testid="guide-cover-head"] .skeleton').count() >= 1, 'with the logo');
+  ok(await p.locator('[data-testid="guide-doc"] [data-testid="guide-page-head"]').count() === 14, 'the letterhead on the contents and on every chapter');
+  await p.emulateMedia({ media: 'screen' });
+
+  // ── Everything in the guide can be edited ──
+  await p.click('[data-testid="guide-edit"]'); await p.waitForSelector('[data-testid="guide-edit-bar"]');
+  const ch1 = p.locator('section[data-chapter="intro"]');
+  await ch1.locator('input[aria-label="عنوان الفصل"]').fill('المختبر من الصفر — نسخة المختبر');
+  const sec1 = ch1.locator('[data-testid="guide-section-edit"]').first();
+  await sec1.locator('[data-testid="guide-add-block"] button:has-text("فقرة")').click();
+  await sec1.locator('[data-testid="guide-block-edit"]').last().locator('textarea').fill('فقرة كتبها المختبر بنفسه.');
+  await sec1.locator('[data-testid="guide-add-block"] button:has-text("جدول")').click();
+  await sec1.locator('[data-testid="guide-block-edit"]').last().locator('textarea').fill('الجهاز | الموقع\nالطرد المركزي | غرفة 2');
+  await ch1.locator('[data-testid="guide-add-section"]').click();
+  await ch1.locator('[data-testid="guide-section-edit"]').last().locator('input[aria-label="عنوان القسم"]').fill('قسم أضافه المختبر');
+  await p.click('[data-testid="guide-add-chapter"]');
+  const last = p.locator('section[data-editing]').last();
+  await last.locator('input[aria-label="عنوان الفصل"]').fill('فصل خاص بمختبرنا');
+  const why = p.locator('[data-testid="guide-why"] textarea').first();
+  await why.fill('وصف الأهمية بصياغة المختبر.');
+  ok(await settled(async () => (await p.locator('[data-testid="guide-saved"]').innerText()).includes('حُفظ')), 'saved by itself');
+  await p.click('[data-testid="guide-edit"]');
+  await p.reload(); await p.waitForSelector('[data-testid="guide-toc"]', { timeout: 20000 });
+  const view = await p.locator('main .no-print').innerText();
+  ok(view.includes('المختبر من الصفر — نسخة المختبر') && view.includes('فقرة كتبها المختبر بنفسه.') && view.includes('غرفة 2') && view.includes('قسم أضافه المختبر'), 'the edits stay after a reload: title, paragraph, table, section');
+  ok(view.includes('فصل خاص بمختبرنا') && await p.locator('[data-testid="guide-toc"] a').count() === 14, 'a new chapter, in the contents too');
+  ok(view.includes('وصف الأهمية بصياغة المختبر.'), 'a category\'s description edited');
+  const g = await kv(p, 'training.guide.v1');
+  ok(g && g.chapters.length === 14, 'kept on the device (training.guide.v1)');
+  // Back to the built-in text: one chapter, then the whole guide.
+  p.on('dialog', (d) => d.accept());
+  await p.click('[data-testid="guide-edit"]');
+  await p.locator('section[data-chapter="intro"] [data-testid="guide-chapter-restore"]').click();
+  ok(await settled(async () => (await p.locator('section[data-chapter="intro"] input[aria-label="عنوان الفصل"]').inputValue()) === 'المختبر من الصفر'), 'a chapter back to its original text');
+  await p.click('[data-testid="guide-restore"]');
+  ok(await settled(async () => await p.locator('section[data-editing]').count() === 13), 'the whole guide back to the original');
+  await p.click('[data-testid="guide-edit"]');
+  ok(!(await p.locator('main .no-print').innerText()).includes('فصل خاص بمختبرنا'), 'the added chapter gone');
 
   ok(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.slice(0, 3).join(' | ') : ''));
   await b.close();

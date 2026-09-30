@@ -13,7 +13,14 @@ const fs = require('node:fs');
   // The code manager's sections (side menu).
   const go = (s) => o.click(`[data-section="${s}"]`);
   ok(await o.locator('text=صفحة المالك فقط').count() === 0, 'no «صفحة المالك فقط» line');
-  ok(await o.locator('[data-section]').count() === 7, 'code manager: seven sections in the side menu');
+  ok(await o.locator('[data-section]').count() === 8, 'code manager: eight sections in the side menu (with «المحطات»)');
+  // «المحطات»: every station, including the sync station (with every code) and «عن التطبيق» (for everyone)
+  await go('stations'); await o.waitForSelector('[data-testid="stations-overview"]', { timeout: 15000 });
+  const sts = await o.locator('[data-testid="stations-overview"] [data-station]').evaluateAll((els) => els.map((e) => e.getAttribute('data-station')));
+  ok(['station', 'purchasing', 'training', 'qc', 'roster', 'admin', 'sync', 'about'].every((x) => sts.includes(x)), `«المحطات» lists every station (${sts.join(', ')})`);
+  ok((await o.locator('[data-station="about"]').innerText()).includes('للجميع') && (await o.locator('[data-station="sync"]').innerText()).includes('مع كل رمز'), 'the sync station comes with every code, «عن التطبيق» is for everyone');
+  await go('codes');
+  ok(await o.locator('[data-testid="codes-kpis"]').count() === 1, 'the codes open with their figures');
   // signing key sealed with AUTH_SECRET (the codes run always sets it)
   await go('system');
   await o.waitForSelector('[data-testid="key-sealed"]', { timeout: 15000 });

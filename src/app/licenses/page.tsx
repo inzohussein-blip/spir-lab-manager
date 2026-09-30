@@ -1,11 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import {
   KeyRound, LogOut, Plus, Copy, Check, Ban, Play, MonitorSmartphone, RefreshCw, Trash2, Pencil, ShieldAlert,
   FlaskConical, Download, ChevronDown, MessageSquare, History, Wallet, MessageSquareText, Database, Upload, ShieldCheck, Smartphone, Phone,
-  Server, Menu, X, ChevronLeft, HardDrive, Settings, Search, Bug, FileSpreadsheet, Lock, type LucideIcon,
+  Server, Menu, X, ChevronLeft, HardDrive, Settings, Search, Bug, FileSpreadsheet, Lock, LayoutGrid, Wifi, AlarmClock, CircleDollarSign,
+  type LucideIcon,
 } from "lucide-react";
+import { StationsOverview, ALWAYS_STATIONS } from "./stations";
 import { LICENSE_MODULES, DEFAULT_MODULES, moduleLabel, type LicenseModule } from "@/lib/license/modules";
 import { STATION_SYNC, SUPABASE_SQL } from "@/lib/sync/protocol";
 import { SYNC_ERRORS } from "@/components/local/SyncPanel";
@@ -65,6 +67,7 @@ const inp = "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm o
 const small = "inline-flex items-center gap-1 rounded-lg border border-line px-2 py-1 text-xs hover:bg-canvas";
 const DAY = 86_400_000;
 const OWNER_PHONE = "07803993585";
+const PAGE = 40; // codes drawn at first; «عرض المزيد» draws more
 const PERIODS = [{ d: 30, l: "شهر" }, { d: 90, l: "3 أشهر" }, { d: 180, l: "6 أشهر" }, { d: 365, l: "سنة" }];
 const fmt = (ms: number | null) => (ms ? new Date(ms).toLocaleDateString("en-CA") : "—");
 const fmtTime = (ms: number | null) => (ms ? fmtDateTime(ms) : "—");
@@ -85,11 +88,12 @@ const EVENT_LABEL: Record<string, string> = {
 };
 const eventDetail = (e: Ev) => (e.kind === "modules" ? e.detail.split(",").filter(Boolean).map(moduleLabel).join("، ") || "لا شيء" : e.detail);
 
-type Section = "codes" | "new" | "databases" | "settings" | "errors" | "security" | "backup" | "system";
+type Section = "codes" | "new" | "stations" | "databases" | "settings" | "errors" | "security" | "backup" | "system";
 const SECTIONS: { title: string; items: { id: Section; label: string; hint: string; icon: LucideIcon }[] }[] = [
   { title: "الرموز", items: [
     { id: "codes", label: "الرموز", hint: "المختبرات وأجهزتها", icon: KeyRound },
     { id: "new", label: "رمز جديد", hint: "إنشاء رمز أو رمز تجريبي", icon: Plus },
+    { id: "stations", label: "المحطات", hint: "كل المحطات واستعمالها", icon: LayoutGrid },
     { id: "databases", label: "قواعد البيانات", hint: "قاعدة لوحة الإدارة لكل عميل", icon: HardDrive },
   ] },
   { title: "الإعدادات", items: [
@@ -163,6 +167,7 @@ function activationMessage(r: Row, code: string, origin: string) {
     `الرمز: ${code}`,
     `المدة: ${r.duration_days} يوم تبدأ من يوم التفعيل${r.is_trial ? " (تجريبي)" : ""}`,
     `المحطات: ${r.modules.map(moduleLabel).join("، ")}`,
+    `ومع كل رمز: ${ALWAYS_STATIONS.map((x) => x.label).join("، ")}`,
     "",
     "طريقة التفعيل:",
     `1. افتح ${origin}/welcome على حاسوب المختبر مع اتصال بالإنترنت.`,
@@ -216,6 +221,8 @@ export default function LicensesPage() {
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [sort, setSort] = useState<Sort>("expiry");
+  const dq = useDeferredValue(q); // typing stays quick with many codes
+  const [limit, setLimit] = useState(PAGE);
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [test, setTest] = useState<Storage | null>(null);
   const [backupMsg, setBackupMsg] = useState("");
@@ -250,6 +257,13 @@ export default function LicensesPage() {
     }
   }, []);
   useEffect(() => { load(); }, [load]);
+  // Fresh numbers when the owner comes back to this tab (at most once a minute).
+  useEffect(() => {
+    let last = Date.now();
+    const onVis = () => { if (document.visibilityState === "visible" && Date.now() - last > 60_000) { last = Date.now(); load(); } };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, [load]);
   const flash = (k: string) => { setCopied(k); setTimeout(() => setCopied(""), 1500); };
 
   async function login(e: React.FormEvent) {
@@ -291,12 +305,13 @@ export default function LicensesPage() {
     }
     return c;
   }, [all, now, soonMs, data?.version]);
+  const online = useMemo(() => all.filter((r) => r.last_seen_at && now - r.last_seen_at < DAY).length, [all, now]);
   const money = useMemo(() => ({
     paid: all.filter((r) => r.paid).reduce((n, r) => n + amount(r.price), 0),
     due: all.filter((r) => !r.paid).reduce((n, r) => n + amount(r.price), 0),
   }), [all]);
   const rows = useMemo(() => {
-    const t = q.trim();
+    const t = dq.trim();
     const list = all.filter((r) => {
       if (t && !(r.lab_name.includes(t) || r.note.includes(t) || r.code_hint.includes(t.toUpperCase()) || deviceOf(r).includes(t))) return false;
       const k = kindOf(r, now, soonMs);
@@ -310,7 +325,8 @@ export default function LicensesPage() {
     return list.sort((a, b) =>
       sort === "expiry" ? exp(a) - exp(b) : sort === "name" ? a.lab_name.localeCompare(b.lab_name, "ar")
       : sort === "seen" ? (b.last_seen_at ?? 0) - (a.last_seen_at ?? 0) : b.created_at - a.created_at);
-  }, [all, q, filter, sort, now, soonMs, data?.version]);
+  }, [all, dq, filter, sort, now, soonMs, data?.version]);
+  useEffect(() => { setLimit(PAGE); }, [dq, filter, sort]);
   const eventsOf = useMemo(() => {
     const m = new Map<string, Ev[]>();
     for (const e of data?.events ?? []) (m.get(e.license_id) ?? m.set(e.license_id, []).get(e.license_id)!).push(e);
@@ -387,18 +403,24 @@ export default function LicensesPage() {
       {section === "codes" && (
         <>
           <SectionTitle icon={<KeyRound className="size-6" />} title="إدارة الرموز" desc="رمز لكل مختبر، يعمل على جهاز واحد، وتبدأ مدته من يوم التفعيل." />
+          <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="codes-kpis">
+            <Kpi icon={<KeyRound className="size-5" />} tone="from-teal-500 to-teal-700" label="رموز فعّالة" value={counts.active} sub={`من ${counts.all} رمز`} />
+            <Kpi icon={<Wifi className="size-5" />} tone="from-sky-500 to-sky-700" label="اتصلت اليوم" value={online} sub="آخر 24 ساعة" />
+            <Kpi icon={<AlarmClock className="size-5" />} tone="from-amber-500 to-orange-600" label="تنتهي قريباً" value={counts.soon} sub={`خلال ${prefs.soonDays} يوماً`} onClick={() => setFilter("soon")} />
+            <Kpi icon={<CircleDollarSign className="size-5" />} tone="from-violet-500 to-violet-700" label="غير مدفوع" value={money.due.toLocaleString("en-US")} sub={`المدفوع ${money.paid.toLocaleString("en-US")}`} onClick={() => setFilter("unpaid")} />
+          </div>
           {data.storage && !data.storage.ok && (
             <button onClick={() => go("system")} className="mb-4 w-full rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-right text-sm text-red-800">
               قاعدة الرموز غير متصلة — افتح «حالة النظام» للتفاصيل.
             </button>
           )}
       {/* Summary tiles = filters */}
-      <div className="mb-2 grid grid-cols-3 gap-2">
+      <div className="mb-2 grid grid-cols-3 gap-2 sm:grid-cols-5 lg:grid-cols-9">
         {TILES.map((t) => (
           <button key={t.k} onClick={() => setFilter(t.k)} aria-pressed={filter === t.k}
-            className={`rounded-xl border px-2.5 py-2 text-right shadow-[var(--shadow-card)] transition-colors sm:px-3.5 sm:py-2.5 ${filter === t.k ? TILE_TONE[t.k].on : "border-line bg-surface hover:border-slate-300"}`}>
-            <div className={`font-mono text-2xl font-extrabold leading-tight tabular-nums ${filter === t.k ? "" : t.tone ?? ""}`}>{counts[t.k]}</div>
-            <div className={`mt-0.5 flex items-center gap-1.5 text-xs ${filter === t.k ? "text-white/85" : "text-muted"}`}>
+            className={`rounded-xl border px-2.5 py-2 text-right shadow-[var(--shadow-card)] transition-colors ${filter === t.k ? TILE_TONE[t.k].on : "border-line bg-surface hover:border-slate-300"}`}>
+            <div className={`font-mono text-xl font-extrabold leading-tight tabular-nums ${filter === t.k ? "" : t.tone ?? ""}`}>{counts[t.k]}</div>
+            <div className={`mt-0.5 flex items-center gap-1.5 text-[11px] leading-tight ${filter === t.k ? "text-white/85" : "text-muted"}`}>
               <span className={`size-2 shrink-0 rounded-full ${filter === t.k ? "bg-white/80" : TILE_TONE[t.k].dot}`} />{t.l}
             </div>
           </button>
@@ -413,7 +435,10 @@ export default function LicensesPage() {
 
       {/* Codes toolbar */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="بحث باسم المختبر أو الملاحظة أو الجهاز أو آخر 4 خانات…" aria-label="بحث" className={`${inp} min-w-56 flex-1`} />
+        <label className="relative min-w-56 flex-1">
+          <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="بحث باسم المختبر أو الملاحظة أو الجهاز أو آخر 4 خانات…" aria-label="بحث" className={`${inp} ps-9`} />
+        </label>
         <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} aria-label="الترتيب" className="rounded-lg border border-line bg-surface px-2 py-2 text-sm">
           <option value="expiry">الأقرب انتهاءً</option>
           <option value="newest">الأحدث إنشاءً</option>
@@ -427,16 +452,21 @@ export default function LicensesPage() {
       </div>
       <div className="mb-2 text-xs text-muted">المعروض: {rows.length} من {all.length}</div>
 
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3" data-testid="codes-list">
         {rows.length === 0 && <p className="rounded-2xl border border-dashed border-line p-8 text-center text-sm text-muted">{all.length ? "لا رموز مطابقة." : "لا رموز بعد."}</p>}
-        {rows.map((r) => {
+        {rows.slice(0, limit).map((r) => {
           const st = status(r, now, soonMs);
           const isOpen = open.has(r.id);
           const evs = eventsOf.get(r.id) ?? [];
           return (
-            <div key={r.id} className={`rounded-2xl border border-s-4 border-line bg-surface p-4 shadow-[var(--shadow-card)] ${st.stripe}`} data-lab={r.lab_name}>
+            <div key={r.id} className={`rounded-2xl border border-s-4 border-line bg-surface p-4 shadow-[var(--shadow-card)] transition-shadow hover:shadow-[var(--shadow-pop)] ${st.stripe}`} data-lab={r.lab_name}>
               <div className="flex flex-wrap items-start justify-between gap-2">
-                <div>
+                <div className="flex min-w-0 items-start gap-3">
+                  <span className="relative grid size-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-slate-600 to-slate-800 text-sm font-bold text-white" aria-hidden>
+                    {initials(r.lab_name)}
+                    {r.last_seen_at && now - r.last_seen_at < DAY && <span title="اتصل خلال 24 ساعة" className="absolute -bottom-0.5 -end-0.5 size-3 rounded-full bg-green-500 ring-2 ring-surface" />}
+                  </span>
+                  <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-lg font-bold">{r.lab_name}</span>
                     <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${st.c}`}>{st.t}</span>
@@ -447,6 +477,7 @@ export default function LicensesPage() {
                     {r.pin?.hash && <span data-testid="pin-badge" title="عيّنتَ رمز دخول للمحطات" className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700"><Lock className="size-3" /> PIN</span>}
                   </div>
                   {r.note && <div className="mt-0.5 text-xs text-muted">{r.note}</div>}
+                  </div>
                 </div>
                 <div className="flex flex-wrap gap-1">
                   <select defaultValue="" onChange={(e) => { const d = Number(e.target.value); e.target.value = ""; if (d) change(r, { action: "extend", days: d }); }}
@@ -509,8 +540,20 @@ export default function LicensesPage() {
             </div>
           );
         })}
+        {rows.length > limit && (
+          <button onClick={() => setLimit((n) => n + PAGE)} data-testid="codes-more" className="rounded-2xl border border-dashed border-line py-3 text-sm font-semibold text-brand-dark hover:bg-surface">
+            عرض المزيد ({rows.length - limit})
+          </button>
+        )}
       </div>
 
+        </>
+      )}
+
+      {section === "stations" && (
+        <>
+          <SectionTitle icon={<LayoutGrid className="size-6" />} title="المحطات" desc="كل محطات المنظومة: ما يُفعَّل لكل رمز، وما يأتي مع كل رمز، وما هو مفتوح للجميع — مع عدد الرموز التي تستعمل كل محطة." />
+          <StationsOverview rows={all} now={now} defaults={prefs.defaultModules} onSettings={() => go("settings")} />
         </>
       )}
 
@@ -867,9 +910,32 @@ function ModuleChips({ value, onChange }: { value: LicenseModule[]; onChange: (m
           </button>
         );
       })}
+      {ALWAYS_STATIONS.map((a) => (
+        <span key={a.id} title={a.note} className="inline-flex items-center gap-1 rounded-full border border-dashed border-line px-2.5 py-1 text-xs text-muted" data-always={a.id}>
+          <Lock className="size-3" /> {a.label} <span className="text-[10px]">({a.short})</span>
+        </span>
+      ))}
     </div>
   );
 }
+
+/** One figure at the top of the codes (clicking it filters the list, when it can). */
+function Kpi({ icon, tone, label, value, sub, onClick }: { icon: React.ReactNode; tone: string; label: string; value: React.ReactNode; sub: string; onClick?: () => void }) {
+  const body = (
+    <>
+      <span className={`grid size-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br text-white shadow-sm ${tone}`}>{icon}</span>
+      <span className="min-w-0 flex-1 text-right">
+        <span className="block text-xs text-muted">{label}</span>
+        <span className="block font-mono text-2xl font-extrabold leading-tight tabular-nums">{value}</span>
+        <span className="block truncate text-[11px] text-muted">{sub}</span>
+      </span>
+    </>
+  );
+  const cls = "flex items-center gap-3 rounded-2xl border border-line bg-surface p-3.5 shadow-[var(--shadow-card)]";
+  return onClick ? <button type="button" onClick={onClick} className={`${cls} transition-colors hover:border-slate-300`}>{body}</button> : <div className={cls}>{body}</div>;
+}
+
+const initials = (name: string) => name.trim().split(/\s+/).filter((w) => !["مختبر", "مختبرات", "ال"].includes(w)).slice(0, 2).map((w) => w.replace(/^ال/, "")[0] ?? "").join("") || "م";
 
 /** A settings card: a large coloured icon, a clear title and what the card is for. */
 const PANEL_TONE = {
@@ -1623,9 +1689,12 @@ function OwnerNav({ section, go, total, soon, soonDays, dbDown, showErrors, open
 /** A section's heading, as on the lab station's pages. */
 function SectionTitle({ icon, title, desc }: { icon: React.ReactNode; title: string; desc: string }) {
   return (
-    <div className="mb-5">
-      <h1 className="flex items-center gap-2 text-2xl font-bold"><span className="text-brand">{icon}</span> {title}</h1>
-      <p className="mt-1 text-sm text-muted">{desc}</p>
+    <div className="mb-5 flex items-start gap-3">
+      <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-brand to-brand-dark text-white shadow-[0_6px_16px_-6px_color-mix(in_oklab,var(--color-brand)_70%,transparent)] [&>svg]:size-6">{icon}</span>
+      <div className="min-w-0">
+        <h1 className="text-2xl font-bold">{title}</h1>
+        <p className="mt-0.5 text-sm text-muted">{desc}</p>
+      </div>
     </div>
   );
 }

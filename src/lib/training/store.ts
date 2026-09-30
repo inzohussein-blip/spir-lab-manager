@@ -12,6 +12,7 @@ import { kvGet, kvSet, kvBytes } from "@/lib/local/kv";
 import { clearOldDefault } from "@/lib/local/util";
 import { exportImages, importImages, exportImagesByIds, importImageIfMissing, type MediaExport } from "./media";
 import { libraryTests, LIB_TUBES, LIB_TOOLS } from "./library";
+import { GUIDE, CATEGORY_WHY, type GuideBlock, type GuideChapter } from "./guide";
 
 export interface TStep { id: string; text: string; imageId?: string; warn?: boolean }
 export interface TGalleryItem { id: string; imageId: string; caption: string }
@@ -86,6 +87,8 @@ export interface TrainingSettings {
   /** Printed in the SOP safety box when a test has none of its own. */
   defaultSafety: string;
   preparedBy?: string;
+  /** Address and phone, under the name on the printed guide's cover and pages. */
+  contact?: string;
   /** Default months until an SOP's next review (document control). */
   reviewMonths?: number;
   /** Optional read-only mode: editing needs a PIN (off by default). */
@@ -148,6 +151,8 @@ const K_TRAINEES = "training.trainees.v1";
 const K_QUIZ = "training.quiz.v1";
 /** Set once the full library (every test of the lab station's list) has been added. */
 const K_LIBRARY = "training.library.v1";
+/** «الدليل» as edited by the lab (null / missing = the built-in text). */
+const K_GUIDE = "training.guide.v1";
 
 export const today = () => new Date().toLocaleDateString("en-CA");
 /** YYYY-MM-DD `months` from now. */
@@ -382,6 +387,7 @@ export function imageUsage(imageId: string): string[] {
   for (const t of getTubes()) if (t.imageId === imageId) out.push(t.name);
   for (const t of getTools()) if (t.imageId === imageId) out.push(t.name);
   if (getSettings().logoImageId === imageId) out.push("شعار الطباعة");
+  if (guideEdited() && guideImages(getGuide()).includes(imageId)) out.push("الدليل");
   return out;
 }
 /** Drop every reference to a deleted image. */
@@ -396,6 +402,12 @@ export function removeImageRefs(imageId: string): void {
   write(K_TOOLS, getTools().map((t) => (t.imageId === imageId ? { ...t, imageId: undefined } : t)));
   const st = getSettings();
   if (st.logoImageId === imageId) write(K_SETTINGS, { ...st, logoImageId: undefined });
+  if (guideEdited()) {
+    const g = getGuide();
+    if (guideImages(g).includes(imageId)) {
+      saveGuide({ ...g, chapters: g.chapters.map((c) => ({ ...c, sections: c.sections.map((sec) => ({ ...sec, blocks: sec.blocks.filter((b) => !("img" in b && b.img === imageId)) })) })) });
+    }
+  }
 }
 
 // ── Tubes & tools ────────────────────────────────────────────────────────────
@@ -403,6 +415,29 @@ export function getTubes(): Tube[] { ensureSeed(); return read<Tube[]>(K_TUBES, 
 export function saveTubes(list: Tube[]): void { write(K_TUBES, list); }
 export function getTools(): Tool[] { ensureSeed(); return read<Tool[]>(K_TOOLS, []); }
 export function saveTools(list: Tool[]): void { write(K_TOOLS, list); }
+
+// ── «الدليل» (editable) ──────────────────────────────────────────────────────
+export interface GuideData {
+  chapters: GuideChapter[];
+  /** Why each category matters (the categories block); "" hides a category's line. */
+  why: Record<string, string>;
+  edited?: number;
+}
+const copy = <T,>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
+export const defaultGuide = (): GuideData => ({ chapters: copy(GUIDE), why: { ...CATEGORY_WHY } });
+/** The built-in chapter with this id (to bring back one chapter), if any. */
+export const defaultChapter = (id: string): GuideChapter | null => copy(GUIDE.find((c) => c.id === id) ?? null);
+export function getGuide(): GuideData {
+  const g = read<GuideData | null>(K_GUIDE, null);
+  if (!g || !Array.isArray(g.chapters)) return defaultGuide();
+  return { ...g, why: { ...CATEGORY_WHY, ...(g.why ?? {}) } };
+}
+export function guideEdited(): boolean { return !!read<GuideData | null>(K_GUIDE, null); }
+export function saveGuide(g: GuideData): boolean { return write(K_GUIDE, { ...g, edited: Date.now() }); }
+/** Back to the built-in guide (the lab's edits are dropped). */
+export function resetGuide(): void { write(K_GUIDE, null); }
+const guideImages = (g: GuideData): string[] =>
+  g.chapters.flatMap((c) => c.sections.flatMap((s) => s.blocks.flatMap((b: GuideBlock) => ("img" in b && b.img ? [b.img] : []))));
 
 // ── Settings ─────────────────────────────────────────────────────────────────
 export function getSettings(): TrainingSettings {
@@ -432,6 +467,8 @@ export interface TrainingBackup {
   trainees?: Trainee[];
   quiz?: QuizAttempt[];
   favs?: string[];
+  /** «الدليل» when the lab edited it. */
+  guide?: GuideData | null;
   images: MediaExport[];
 }
 export async function exportBackup(): Promise<TrainingBackup> {
@@ -439,6 +476,7 @@ export async function exportBackup(): Promise<TrainingBackup> {
     app: "spir-training", version: 1, exported_at: new Date().toISOString(),
     tests: getTests(), tubes: getTubes(), tools: getTools(), settings: getSettings(),
     trainees: getTrainees(), quiz: getQuizHistory(), favs: getFavs(),
+    guide: guideEdited() ? getGuide() : null,
     images: await exportImages(),
   };
 }
@@ -452,6 +490,7 @@ export async function importBackup(data: unknown): Promise<boolean> {
   if (b.trainees) write(K_TRAINEES, b.trainees);
   if (b.quiz) write(K_QUIZ, b.quiz);
   if (b.favs) write(K_FAVS, b.favs);
+  if (b.guide !== undefined) write(K_GUIDE, b.guide && Array.isArray(b.guide.chapters) ? b.guide : null);
   write(K_SEEDED, true);
   if (Array.isArray(b.images)) await importImages(b.images);
   return true;
