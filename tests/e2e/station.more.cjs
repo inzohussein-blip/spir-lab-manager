@@ -154,11 +154,38 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   ok(await settled(async () => (await ureaQty()) === 3), 'issued by the examiner (4 → 3)');
   await p.click('button[aria-label="تجاهل مريض اليوريا 3"]');
   ok(await settled(async () => (await p.locator('[data-testid="stock-pending"] li').count()) === 0) && (await ureaQty()) === 3, 'skipped without taking stock; nothing waits');
+  // The same choice shows in the lab station's settings.
+  await p.goto(B + '/station/settings#stock'); await p.waitForSelector('[data-sec="stock"] [data-testid="stock-mode"]', { timeout: 20000 });
+  ok(await p.locator('[data-sec="stock"] button[aria-label="الحسم يدوي"]').getAttribute('aria-pressed') === 'true', 'the lab station\'s settings show the same choice (manual)');
+
+  // «صرف المواد» on the lab station's entry screen.
+  await ureaVisit('مريض اليوريا 5');
+  const issueBtn = p.locator('[data-testid="entry-issue"]');
+  const issueText = (await issueBtn.innerText().catch(() => '')).trim();
+  ok(/\(\d+\)/.test(issueText) && ((await issueBtn.getAttribute('title')) || '').includes(MAT), `entry screen: «صرف المواد من المخزن» after saving, with the test's material and tube (${issueText})`);
+  await issueBtn.click();
+  ok(await settled(async () => (await ureaQty()) === 2), 'issued from the entry screen (3 → 2)');
+  ok(await p.locator('[data-testid="entry-issued"]').isVisible(), 'the visit shows its materials were issued');
+  await p.locator('[data-result-idx="0"]').fill('33'); await p.keyboard.press('Control+s'); await p.waitForTimeout(700);
+  ok((await ureaQty()) === 2 && await p.locator('[data-testid="entry-issue"]').count() === 0, 'saving it again takes nothing more');
+
+  // Quality control runs wait too.
+  await p.goto(B + '/qc/analytes'); await p.waitForTimeout(1200);
+  const mat = ((await kv(p, 'station.stock.v1')) || []).find((x) => x.name === MAT);
+  await kvPut(p, 'qc.analytes.v1', (await kv(p, 'qc.analytes.v1')).map((a, i) => (i === 0 ? { ...a, stockId: mat.id } : a)));
+  await p.goto(B + '/qc/entry'); await p.waitForSelector('input[placeholder="القيمة"]', { timeout: 20000 });
+  const qv = p.locator('input[placeholder="القيمة"]').first(); await qv.fill('95'); await qv.press('Tab'); await p.waitForTimeout(800);
+  ok((await ureaQty()) === 2, 'manual: a control run leaves the stock as it is');
+  await p.goto(B + '/store/inventory'); await p.waitForSelector('[data-testid="stock-pending-qc"] li', { timeout: 20000 });
+  ok(await p.locator('[data-testid="stock-pending-qc"] li').count() === 1 && (await p.locator('[data-testid="stock-pending-count"]').innerText()).trim() === '1', 'the control run waits in «بانتظار الصرف»');
+  await p.locator('[data-testid="stock-pending-qc"] button:has-text("صرف")').first().click();
+  ok(await settled(async () => (await ureaQty()) === 1) && await p.locator('[data-testid="stock-pending-qc"]').count() === 0, 'issued: one unit of the control material (2 → 1)');
+
   await p.goto(B + '/store/settings#stock'); await p.waitForSelector('[data-testid="stock-mode"]', { timeout: 20000 });
   await p.click('button[aria-label="الحسم تلقائي"]');
   ok(await settled(async () => (await kv(p, 'station.stockOptions.v1'))?.mode === 'auto'), 'automatic deduction chosen again');
   await ureaVisit('مريض اليوريا 4');
-  ok(await settled(async () => (await ureaQty()) === 2), 'back to automatic (3 → 2)');
+  ok(await settled(async () => (await ureaQty()) === 0), 'back to automatic (1 → 0)');
 
   ok(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.slice(0, 3).join(' | ') : ''));
   await b.close();

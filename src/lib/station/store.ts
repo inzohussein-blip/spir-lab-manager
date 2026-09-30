@@ -670,8 +670,21 @@ export function skipVisitStock(visitId: string, testIds: string[]): void { markU
 /** On saving results in the lab station: deduct now (auto), or leave them waiting in the stock room
  *  (manual — nothing changes until they are issued). */
 export function stockForVisit(visitId: string, testIds: string[], before: string[] = []): StockShort[] {
-  if (stockOptions().mode === "manual") return [];
+  if (stockOptions().mode === "manual") {
+    // Recorded with nothing issued yet, so the visit's tests wait (even after later edits).
+    if (!getUsed()[visitId]) markUsed(visitId, []);
+    return [];
+  }
   return issueVisitStock(visitId, testIds, before);
+}
+
+/** What issuing a visit's materials would take now (tests not handled yet) — for «صرف المواد» on the
+ *  entry screen. `visitId` null: a visit not saved yet. */
+export function visitStockToIssue(visitId: string | null, testIds: string[], before: string[] = []): { name: string; use: number; qty: number }[] {
+  const list = getStock();
+  const had = visitId ? handled(visitId, before) : [];
+  const use = stockUse(list, testIds.filter((id) => !had.includes(id)), had);
+  return list.filter((s) => use.has(s.id)).map((s) => ({ name: s.name, use: use.get(s.id)!, qty: Number(s.qty) || 0 }));
 }
 
 /** A saved visit whose materials wait to be issued by hand, with what they would use. */

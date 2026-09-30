@@ -58,29 +58,27 @@ export function StockOptionsCard({ from }: { from: "station" | "purchasing" }) {
   useEffect(() => { setO(stockOptions()); }, []);
   const set = (patch: StockOptions) => { setStockOptions(patch); setO((cur) => ({ ...cur, ...patch })); notifySaved(); };
   return (
-    <SettingCard title={from === "purchasing" ? "الحسم من المخزن" : "عند نفاد المادة من المخزن"} icon={<Boxes />} testid="stock-options"
-      desc={<>خيار واحد للمخزن كله: التحذير والرصيد السالب يظهران نفسهما في إعدادات محطة المختبر وإعدادات المخزن والمشتريات.{from === "station" && <> الأصناف وربطها بالفحوصات في <Link href="/store/inventory" className="text-brand-dark underline">المخزن والمشتريات ← المخزن</Link>.</>}</>}>
-      {from === "purchasing" && (
-        <div data-testid="stock-mode">
-          <div className="text-sm font-medium">حسم المواد عند إدخال النتائج</div>
-          <div className="mt-2 grid gap-2 sm:grid-cols-2">
-            {([
-              ["auto", "تلقائي", "تُحسم مواد الفحص من المخزن عند حفظ نتائجه في محطة المختبر."],
-              ["manual", "يدوي", "تبقى النتائج في «المخزن ← نتائج بانتظار الصرف» حتى يصرفها الفاحص أو يتجاهلها."],
-            ] as const).map(([v, label, hint]) => {
-              const on = (o.mode ?? "auto") === v;
-              return (
-                <button key={v} type="button" aria-pressed={on} aria-label={`الحسم ${label}`}
-                  onClick={() => { if (!on) set(v === "manual" ? { mode: "manual", manualSince: Date.now() } : { mode: "auto" }); }}
-                  className={`rounded-xl border px-3 py-2 text-start ${on ? "border-amber-500 bg-amber-50" : "border-line hover:bg-canvas"}`}>
-                  <span className="block text-sm font-semibold">{label}</span>
-                  <span className="block text-[11px] text-muted">{hint}</span>
-                </button>
-              );
-            })}
-          </div>
+    <SettingCard title="الحسم من المخزن" icon={<Boxes />} testid="stock-options"
+      desc={<>خيار واحد للمخزن كله: يظهر نفسه في إعدادات محطة المختبر وإعدادات المخزن والمشتريات.{from === "station" && <> الأصناف وربطها بالفحوصات في <Link href="/store/items" className="text-brand-dark underline">المخزن والمشتريات ← الأصناف</Link>.</>}</>}>
+      <div data-testid="stock-mode">
+        <div className="text-sm font-medium">حسم المواد عند إدخال النتائج</div>
+        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+          {([
+            ["auto", "تلقائي", "تُحسم مواد الفحص عند حفظ نتائجه في محطة المختبر، ومادة الكنترول عند كل إدخال سيطرة."],
+            ["manual", "يدوي", "يصرفها الفاحص بزر «صرف المواد» في شاشة الإدخال، أو من «المخزن ← بانتظار الصرف» (النتائج وإدخالات السيطرة)."],
+          ] as const).map(([v, label, hint]) => {
+            const on = (o.mode ?? "auto") === v;
+            return (
+              <button key={v} type="button" aria-pressed={on} aria-label={`الحسم ${label}`}
+                onClick={() => { if (!on) set(v === "manual" ? { mode: "manual", manualSince: Date.now() } : { mode: "auto" }); }}
+                className={`rounded-xl border px-3 py-2 text-start ${on ? "border-brand bg-brand-light" : "border-line hover:bg-canvas"}`}>
+                <span className="block text-sm font-semibold">{label}</span>
+                <span className="block text-[11px] text-muted">{hint}</span>
+              </button>
+            );
+          })}
         </div>
-      )}
+      </div>
       <Toggle
         checked={o.warnOut === true}
         onChange={(v) => set({ warnOut: v })}

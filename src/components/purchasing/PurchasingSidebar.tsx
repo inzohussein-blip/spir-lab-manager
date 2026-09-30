@@ -7,6 +7,7 @@ import { ShoppingCart, Truck, Settings, Home, FileBarChart, Menu, X, Boxes, Tags
 import { cn } from "@/lib/utils";
 import { useSideCollapsed, SideCollapseButton, SideReopenButton } from "@/components/local/SideCollapse";
 import { getStock, daysToExpiry, pendingStock } from "@/lib/station/store";
+import { pendingQcStock } from "@/lib/local/links";
 
 const FIXED = [
   { href: "/store", label: "المشتريات", icon: ShoppingCart },
@@ -28,7 +29,7 @@ export function PurchasingSidebar() {
   const [pending, setPending] = useState(0);
   useEffect(() => {
     setOpen(false);
-    setPending(pendingStock().length);
+    setPending(pendingStock().length + pendingQcStock().length);
     setStockAlerts(getStock().filter((s) => {
       const d = daysToExpiry(s.expiry);
       return (s.minQty != null && Number(s.qty) <= Number(s.minQty)) || (d != null && d <= 30);
@@ -73,7 +74,7 @@ export function PurchasingSidebar() {
             <it.icon className="size-4.5 shrink-0" />
             {it.label}
             {it.href === "/store/inventory" && pending > 0 && (
-              <span data-testid="stock-pending-count" title="نتائج بانتظار الصرف" className="ms-auto rounded-full bg-sky-600 px-1.5 text-[11px] font-bold text-white tabular-nums">{pending}</span>
+              <span data-testid="stock-pending-count" title="بانتظار الصرف" className="ms-auto rounded-full bg-sky-600 px-1.5 text-[11px] font-bold text-white tabular-nums">{pending}</span>
             )}
             {it.href === "/store/inventory" && stockAlerts > 0 && (
               <span data-testid="stock-alerts" className={`${pending > 0 ? "" : "ms-auto "}rounded-full bg-amber-500 px-1.5 text-[11px] font-bold text-white tabular-nums`}>{stockAlerts}</span>

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { FlaskConical, CheckCircle2, AlertTriangle, XCircle, ChevronRight, ChevronLeft } from "lucide-react";
 import { getAnalytes, getResults, setResult, evaluateAnalyte, RULES, type Analyte, type QcResult } from "@/lib/qc/store";
 import { todayYmd, addDays } from "@/lib/local/util";
-import { staffNames, stockItems, takeFromStock, stockOptions, type StockRef } from "@/lib/local/links";
+import { staffNames, stockItems, qcRunStock, qcRunKey, stockOptions, type StockRef } from "@/lib/local/links";
 
 const inp = "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
 
@@ -35,8 +35,9 @@ export default function QcEntryPage() {
     const raw = drafts[k].trim();
     const had = results.some((r) => r.analyteId === a.id && r.levelId === levelId && r.date === date);
     setResult(a.id, levelId, date, raw === "" ? null : Number(raw), by.trim() ? { by: by.trim() } : {});
-    // A new control run uses one unit of its control material from the stock room.
-    if (!had && raw !== "") takeFromStock(a.stockId);
+    // A new control run uses one unit of its control material from the stock room — now, or later
+    // from «المخزن ← بانتظار الصرف» when the stock room is set to manual.
+    if (!had && raw !== "") qcRunStock(qcRunKey(a.id, levelId, date), a.stockId);
     setDrafts((d) => { const n = { ...d }; delete n[k]; return n; });
     reload();
   }

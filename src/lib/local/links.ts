@@ -44,6 +44,47 @@ export function setStockOptions(patch: StockOptions): void {
 /** A new stock count: below zero only when the lab allows it. */
 export const stockFloor = (n: number): number => (stockOptions().allowNegative ? n : Math.max(0, n));
 
+// ── Quality control runs ↔ stock ────────────────────────────────────────────────
+/** Control runs whose unit of control material was already taken (or skipped by hand), by
+ *  "<analyteId>|<levelId>|<date>" — so a run never uses stock twice, whichever way it was issued. */
+const K_QC_USED = "station.stockUsedQc.v1";
+const QC_USED_DAYS = 60;
+const qcUsed = (): Record<string, number> => { try { return JSON.parse(kvGet(K_QC_USED) ?? "{}") ?? {}; } catch { return {}; } };
+function markQcUsed(key: string): void {
+  const used = qcUsed(), cut = Date.now() - QC_USED_DAYS * 86400000;
+  for (const [k, at] of Object.entries(used)) if (at < cut) delete used[k];
+  used[key] = Date.now();
+  kvSet(K_QC_USED, JSON.stringify(used));
+}
+export const qcRunKey = (analyteId: string, levelId: string, date: string) => `${analyteId}|${levelId}|${date}`;
+/** A new control run: its material leaves the stock room now (automatic), or waits to be issued (manual). */
+export function qcRunStock(key: string, stockId: string | undefined): void {
+  if (!stockId || stockOptions().mode === "manual" || qcUsed()[key]) return;
+  takeFromStock(stockId);
+  markQcUsed(key);
+}
+/** A control run waiting (manual) for its unit of control material. */
+export interface PendingQc { key: string; analyte: string; level: string; date: string; stockId: string; stock: string; qty: number }
+export function pendingQcStock(): PendingQc[] {
+  const o = stockOptions();
+  if (o.manualSince == null) return [];
+  const since = Math.max(o.manualSince, Date.now() - QC_USED_DAYS * 86400000);
+  const used = qcUsed(), stock = stockItems();
+  const analytes = new Map(list<{ id: string; name: string; stockId?: string; levels?: { id: string; label: string }[] }>("qc.analytes.v1").map((a) => [a.id, a]));
+  const out: PendingQc[] = [];
+  for (const r of list<{ analyteId: string; levelId: string; date: string; at: number }>("qc.results.v1")) {
+    const a = analytes.get(r.analyteId);
+    const s = a?.stockId ? stock.find((x) => x.id === a.stockId) : undefined;
+    const key = qcRunKey(r.analyteId, r.levelId, r.date);
+    if (!a || !s || (r.at ?? 0) < since || used[key]) continue;
+    out.push({ key, analyte: a.name, level: a.levels?.find((l) => l.id === r.levelId)?.label ?? "", date: r.date, stockId: s.id, stock: s.name, qty: Number(s.qty) || 0 });
+  }
+  return out;
+}
+/** Issue (take one unit) or skip a waiting control run. */
+export function issueQcStock(p: PendingQc): void { if (!qcUsed()[p.key]) takeFromStock(p.stockId); markQcUsed(p.key); }
+export function skipQcStock(p: PendingQc): void { markQcUsed(p.key); }
+
 /** Take units out of a stock item (not below 0 unless negative stock is allowed). */
 export function takeFromStock(id: string | undefined, units = 1): void {
   if (!id) return;
