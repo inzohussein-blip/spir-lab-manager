@@ -16,17 +16,23 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
 
   // ── A kit: defined in «الأصناف» ──
   await p.goto(B + '/store/items'); await p.waitForSelector('[data-testid="items-list"]', { timeout: 20000 });
-  await p.click('button[role=tab]:has-text("الكتات")'); await p.click('[data-testid="kit-new"]');
+  await p.click('[data-testid="kit-new"]');
   const kf = p.locator('[data-testid="kit-form"]');
   await kf.locator('input[aria-label="اسم الكت"]').fill('كت السكر');
-  await kf.locator('select[aria-label="صنف في الكت"]').first().selectOption('glu');
+  await kf.locator('input[aria-label="صنف في الكت"]').first().fill('كاشف السكر');
   await kf.locator('input[aria-label="الكمية في الكت"]').first().fill('4');
   await kf.locator('button:has-text("صنف آخر في الكت")').click();
-  await kf.locator('select[aria-label="صنف في الكت"]').nth(1).selectOption('cal');
+  await kf.locator('input[aria-label="صنف في الكت"]').nth(1).fill('محلول المعايرة');
   await kf.locator('input[aria-label="الكمية في الكت"]').nth(1).fill('1');
+  await kf.locator('button:has-text("صنف آخر في الكت")').click();
+  await kf.locator('input[aria-label="صنف في الكت"]').nth(2).fill('محلول التنظيف');
+  ok(await kf.locator('[data-testid="kit-part-new"]').count() === 1, 'a name not in the stock room is marked «جديد»');
   await p.click('[data-testid="kit-save"]');
-  ok(await settled(async () => JSON.stringify(((await kv(p, 'station.kits.v1')) || [])[0]?.parts) === JSON.stringify([{ stockId: 'glu', qty: 4 }, { stockId: 'cal', qty: 1 }])), 'kit saved: 4 × reagent + 1 × calibrator');
+  const clean = async () => ((await stock()).find((s) => s.name === 'محلول التنظيف'));
+  ok(await settled(async () => !!(await clean())) && (await clean()).qty === 0, 'saving the kit adds the new item to the stock room (0)');
+  ok(await settled(async () => JSON.stringify(((await kv(p, 'station.kits.v1')) || [])[0]?.parts) === JSON.stringify([{ stockId: 'glu', qty: 4 }, { stockId: 'cal', qty: 1 }, { stockId: (await clean()).id, qty: 1 }])), 'kit saved: 4 × reagent + 1 × calibrator + 1 × the new item');
   ok(await kf.count() === 0 && (await p.locator('li[data-kit="كت السكر"]').innerText()).includes('كاشف السكر'), 'kit listed with what it holds');
+  ok((await p.locator('tr[data-item="كاشف السكر"] [data-testid="item-kits"]').innerText()).includes('كت السكر × 4'), 'the item shows the kit it comes in');
 
   // ── Bought in «المشتريات»: its contents go to the stock room ──
   await p.goto(B + '/store'); await p.waitForSelector('[data-testid="purchase-new"]', { timeout: 20000 });

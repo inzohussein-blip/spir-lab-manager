@@ -130,8 +130,14 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   const MAT = `كاشف ${urea.name_ar}`;
   ok(await settled(async () => ((await kv(p, 'station.stock.v1')) || []).some((x) => x.name === MAT && x.testIds?.includes(urea.id) && x.qty === 0)), 'one click: the test\'s material in the stock room (0, linked)');
   ok((await p.locator('tr[data-test="UREA"] [data-testid="test-materials"]').innerText()).includes(MAT), 'and shown beside the test');
-  await p.click('button[role=tab]:has-text("الأصناف")'); await p.locator('[data-testid="stock-presets"]').click();
-  ok(await settled(async () => (await p.locator('[data-testid="items-list"] tbody tr', { hasText: 'أنبوب' }).count()) >= 3), 'tubes and containers listed with the items');
+  await p.click('button[role=tab]:has-text("الأصناف والكتات")'); await p.locator('[data-testid="stock-presets"]').click();
+  ok(await settled(async () => (await p.locator('[data-section="supplies"] tbody tr', { hasText: 'أنبوب' }).count()) >= 2), 'tubes, syringe and containers listed under «المستلزمات»');
+  ok(await p.locator(`[data-section="reagents"] tr[data-item="${MAT}"]`).count() === 1, 'the test\'s material under «الكواشف»');
+  await p.click('[data-testid="supply-new"]');
+  await p.fill('[data-testid="item-form"] label:has-text("اسم الصنف") input', 'شريط لاصق');
+  ok(await p.locator('[data-testid="item-form"] button[aria-pressed="true"]:has-text("مستلزم")').count() === 1, '«مستلزم جديد» opens as a supply');
+  await p.click('[data-testid="item-form"] button[type=submit]');
+  ok(await settled(async () => ((await kv(p, 'station.stock.v1')) || []).some((x) => x.name === 'شريط لاصق' && x.byHand)), 'a supply saved (issued by hand)');
 
   // ── «المخزن»: add and issue by hand ──
   const ureaQty = async () => ((await kv(p, 'station.stock.v1')) || []).find((x) => x.name === MAT)?.qty;

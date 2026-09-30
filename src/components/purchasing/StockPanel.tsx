@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Minus, Plus, History, Pencil, Search, PackagePlus } from "lucide-react";
 import {
-  getStock, saveStock, getTests, daysToExpiry, stockTestIds, pendingStock, issueVisitStock, skipVisitStock,
+  getStock, saveStock, getTests, daysToExpiry, stockTestIds, isByHand, pendingStock, issueVisitStock, skipVisitStock,
   type StockItem, type StationTest, type PendingStock,
 } from "@/lib/station/store";
 import { NumberInput } from "@/components/local/NumberInput";
@@ -13,13 +13,14 @@ import { fmtDateTime, money } from "@/lib/utils";
 import { ScanBox, Modal, Chips } from "./stockParts";
 import { getSettings, type PurchasingSettings } from "@/lib/purchasing/store";
 
-type Filter = "all" | "low" | "soon";
+type Filter = "all" | "low" | "soon" | "supplies";
 type Move = { item: StockItem; sign: 1 | -1 };
 
 /**
  * «المخزن»: what is in the stock room now — one clear list. Search, a filter for what needs attention,
  * and on each item «إضافة» / «صرف» (a small window asks how many). Items are made in «الأصناف»;
- * purchases and the lab's results change the counts by themselves.
+ * purchases and the lab's results change the counts of reagents by themselves; supplies (tubes,
+ * syringes, gloves…) are issued here by the examiner.
  */
 export function StockPanel() {
   const [rows, setRows] = useState<StockItem[]>([]);
@@ -39,9 +40,10 @@ export function StockPanel() {
 
   const isLow = (s: StockItem) => Number(s.qty) <= 0 || (s.minQty != null && Number(s.qty) <= Number(s.minQty));
   const isSoon = (s: StockItem) => { const d = daysToExpiry(s.expiry); return d != null && d <= 30; };
-  const counts = useMemo(() => ({ low: rows.filter(isLow).length, soon: rows.filter(isSoon).length }), [rows]);
+  const counts = useMemo(() => ({ low: rows.filter(isLow).length, soon: rows.filter(isSoon).length, supplies: rows.filter(isByHand).length }), [rows]);
   const term = q.trim().toLowerCase();
-  const shown = rows.filter((s) => (filter === "all" || (filter === "low" ? isLow(s) : isSoon(s))) && (!term || s.name.toLowerCase().includes(term)));
+  const inFilter = (s: StockItem) => filter === "all" || (filter === "low" ? isLow(s) : filter === "soon" ? isSoon(s) : isByHand(s));
+  const shown = rows.filter((s) => inFilter(s) && (!term || s.name.toLowerCase().includes(term)));
   const value = rows.reduce((t, s) => t + (s.price != null ? Math.max(0, Number(s.qty) || 0) * s.price : 0), 0);
 
   /** The add / issue window's «حفظ»: the count changes and goes to «سجل الحركة». */
@@ -76,10 +78,9 @@ export function StockPanel() {
     const d = daysToExpiry(s.expiry);
     return (
       <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted">
+        {isByHand(s) && <span data-testid="stock-byhand" className="rounded-full bg-sky-50 px-1.5 text-sky-700">مستلزم · يصرفه الفاحص</span>}
         {ids.length > 0 && (
-          <span data-testid="stock-tests" title={names.join("، ")}>
-            {s.perVisit ? "لكل زيارة · " : ""}{ids.length === 1 ? names[0] : `${ids.length} فحص`}
-          </span>
+          <span data-testid="stock-tests" title={names.join("، ")}>{ids.length === 1 ? names[0] : `${ids.length} فحص`}</span>
         )}
         {qc.has(s.id) && <span data-testid="qc-link" className="text-rose-700">سيطرة: {qc.get(s.id)!.join("، ")}</span>}
         {s.expiry && <span className={d != null && d < 0 ? "text-red-600" : d != null && d <= 30 ? "text-amber-700" : ""}>ينتهي {s.expiry}</span>}
@@ -145,7 +146,7 @@ export function StockPanel() {
       {store.barcode && <ScanBox onScan={onScan} hint="امسح باركود صنف لتصرف منه…" />}
       <div className="flex flex-wrap items-center gap-3">
         <Chips label="عرض" value={filter} onChange={setFilter}
-          options={[["all", "الكل", rows.length], ["low", "نفد أو ناقص", counts.low], ["soon", "قرب الانتهاء", counts.soon]]} />
+          options={[["all", "الكل", rows.length], ["low", "نفد أو ناقص", counts.low], ["soon", "قرب الانتهاء", counts.soon], ["supplies", "المستلزمات", counts.supplies]]} />
         {store.prices && <span className="ms-auto text-sm text-muted" data-testid="stock-value">قيمة المخزن: <b className="tabular-nums text-amber-700">{money(value)}</b> د.ع</span>}
       </div>
       {msg && <p className="rounded-lg bg-teal-50 px-3 py-2 text-sm text-brand-dark" role="status">{msg}</p>}
