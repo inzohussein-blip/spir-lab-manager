@@ -135,7 +135,13 @@ export function ReportSheet({
     const measure = () => {
       const sign = el.querySelector<HTMLElement>(".report-sign");
       const foot = el.querySelector<HTMLElement>(".report-footer");
-      setBottomPx(Math.ceil((sign?.offsetHeight ?? 0) + (foot ? foot.offsetHeight + (paper === "A5" ? 8 : 16) : 0)));
+      // The signature row is as tall as its taller side: the signature block, or the QR card, whose
+      // code prints smaller than on screen (22 mm → 19 mm, A5 16 mm).
+      const qr = sign?.querySelector<HTMLElement>(".report-qr");
+      const signBlock = sign?.firstElementChild as HTMLElement | null | undefined;
+      const qrPx = qr ? qr.offsetHeight - ((22 - (paper === "A5" ? 16 : 19)) * 96) / 25.4 : 0;
+      const row = Math.max(signBlock && signBlock !== qr ? signBlock.offsetHeight : 0, qrPx);
+      setBottomPx(Math.ceil(row + (foot ? foot.offsetHeight + (paper === "A5" ? 8 : 16) : 0)));
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -264,6 +270,8 @@ export function ReportSheet({
         #report-sheet .cs-ast-title { display: none; }
         #report-sheet .report-pbc > span { width: 36mm !important; height: 8mm !important; }
         #report-sheet [data-fill-head] h2 { font-size: 18px; }
+        #report-sheet [data-testid="report-logo"] { width: 15mm !important; height: 15mm !important; }
+        #report-sheet [data-testid="report-head"] { padding-bottom: 2mm; }
         #report-sheet [data-testid="report-patient"] { margin-top: 2.5mm; padding: 5px 8px; font-size: 11px; row-gap: 2px; }
         #report-sheet .report-pbc > div { font-size: 9.5px !important; }
         #report-sheet .report-qr img { width: 16mm !important; height: 16mm !important; }
