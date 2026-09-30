@@ -118,7 +118,7 @@ export default function PayrollPage() {
 
       <div className="print-doc hidden bg-white text-[12px] text-black print:block">
         <PrintStyle />
-        <Letterhead title={settings.title} subtitle={settings.subtitle} color="#0369a1" right={<><div className="font-bold" style={{ color: "#0369a1" }}>كشف الرواتب</div><div>{monthLabel(month)}</div></>} />
+        <Letterhead title={settings.title} subtitle={settings.subtitle} logo={settings.logo} color="#0369a1" right={<><div className="font-bold" style={{ color: "#0369a1" }}>كشف الرواتب</div><div>{monthLabel(month)}</div></>} />
         <div className="mt-3">{sheet(true)}</div>
         <SignRow labels={["المحاسب", "مدير المختبر"]} />
         <PrintFooter text={settings.footer} color="#0369a1" />

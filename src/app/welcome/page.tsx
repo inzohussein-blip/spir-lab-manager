@@ -1,7 +1,8 @@
 import { OfflineReady } from "@/components/local/OfflineReady";
 import { ActivationGate } from "@/components/local/ActivationGate";
 import { ACTIVATION_SCRIPT } from "@/lib/local/activation";
-import { Beaker, ShoppingCart, GraduationCap, ShieldCheck, Users, ArrowLeft, Phone } from "lucide-react";
+import Link from "next/link";
+import { Beaker, ShoppingCart, GraduationCap, ShieldCheck, Users, ArrowLeft, Phone, RefreshCw } from "lucide-react";
 import { LicensedLink, AdminPanelCard } from "@/components/local/WelcomeLicense";
 import { WelcomeAccount } from "@/components/local/WelcomeAccount";
 
@@ -50,8 +51,8 @@ export default function WelcomePage() {
             <span className="grid size-12 place-items-center rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 text-white shadow-sm">
               <ShoppingCart className="size-6" />
             </span>
-            <div className="mt-4 text-lg font-bold">منظومة المشتريات</div>
-            <p className="mt-1 flex-1 text-sm text-muted">نسخة محلية مستقلة لإدارة المشتريات والموردين ومتابعة المصروف — منفصلة تماماً عن النسختين الأخريين.</p>
+            <div className="mt-4 text-lg font-bold">المخزن والمشتريات</div>
+            <p className="mt-1 flex-1 text-sm text-muted">إدارة المشتريات والموردين ومتابعة المصروف، والمخزن المرتبط بمحطة المختبر والجودة: يُضاف إليه ما يُشترى ويُحسم منه ما يُستعمل.</p>
             <span className="mt-5 inline-flex items-center justify-center gap-1.5 rounded-lg bg-amber-600 px-4 py-2.5 text-sm font-semibold text-white group-hover:bg-amber-700">
               الدخول <ArrowLeft className="size-4" />
             </span>
@@ -77,7 +78,7 @@ export default function WelcomePage() {
               <ShieldCheck className="size-6" />
             </span>
             <div className="mt-4 text-lg font-bold">محطة الجودة والأجهزة</div>
-            <p className="mt-1 flex-1 text-sm text-muted">سيطرة نوعية يومية مع مخطط Levey-Jennings وقواعد Westgard، سجلات حرارة الثلاجات والحاضنات، وصيانة ومعايرة الأجهزة. محطة منفصلة بالكامل.</p>
+            <p className="mt-1 flex-1 text-sm text-muted">سيطرة نوعية يومية مع مخطط Levey-Jennings وقواعد Westgard، سجلات حرارة الثلاجات والحاضنات، وصيانة ومعايرة الأجهزة. مرتبطة بالمخزن والكادر والموردين.</p>
             <span className="mt-5 inline-flex items-center justify-center gap-1.5 rounded-lg bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white group-hover:bg-rose-700">
               الدخول <ArrowLeft className="size-4" />
             </span>
@@ -90,11 +91,24 @@ export default function WelcomePage() {
               <Users className="size-6" />
             </span>
             <div className="mt-4 text-lg font-bold">محطة الكادر والدوام</div>
-            <p className="mt-1 flex-1 text-sm text-muted">جدول المناوبات الأسبوعي، الحضور والانصراف والتأخير، الإجازات وأرصدتها، السلف وكشف الرواتب الشهري. محطة منفصلة بالكامل.</p>
+            <p className="mt-1 flex-1 text-sm text-muted">جدول المناوبات الأسبوعي، الحضور والانصراف والتأخير، الإجازات وأرصدتها، السلف وكشف الرواتب الشهري. أسماء الكادر متاحة في المحطات الأخرى.</p>
             <span className="mt-5 inline-flex items-center justify-center gap-1.5 rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white group-hover:bg-sky-700">
               الدخول <ArrowLeft className="size-4" />
             </span>
           </LicensedLink>
+
+          {/* Free — Sync between the lab's computers (every activated computer) */}
+          <Link href="/sync" data-testid="sync-card" className="group flex flex-col rounded-2xl border-2 border-violet-300 bg-surface p-6 shadow-[var(--shadow-card)] transition-colors hover:border-violet-500">
+            <span className="absolute -mt-9 ms-auto inline-flex items-center rounded-full bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-700">مجانية</span>
+            <span className="grid size-12 place-items-center rounded-xl bg-gradient-to-br from-violet-500 to-violet-700 text-white shadow-sm">
+              <RefreshCw className="size-6" />
+            </span>
+            <div className="mt-4 text-lg font-bold">محطة المزامنة</div>
+            <p className="mt-1 flex-1 text-sm text-muted">مزامنة بيانات المحطات بين حواسيب المختبر نفسه: ملف مزامنة من حاسوب يُدخل في الآخر، أو مزامنة تلقائية عبر الإنترنت، فيُضاف الناقص ويؤخذ الأحدث.</p>
+            <span className="mt-5 inline-flex items-center justify-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white group-hover:bg-violet-700">
+              الدخول <ArrowLeft className="size-4" />
+            </span>
+          </Link>
         </div>
 
         {/* Contact */}

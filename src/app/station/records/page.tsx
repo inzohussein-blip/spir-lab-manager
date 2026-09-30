@@ -8,6 +8,7 @@ import {
   getPatients, addPatientNote, deletePatients, getVisits, getTests, TRASH_DAYS,
   type StationPatient, type StationVisit, type Gender,
 } from "@/lib/station/store";
+import { fmtDateTime, fmtDate } from "@/lib/utils";
 
 const genderText = (g: Gender) => (g === "male" ? "ذكر" : g === "female" ? "أنثى" : "—");
 
@@ -124,7 +125,7 @@ export default function RecordsPage() {
                   {sel.notes.length === 0 && <p className="text-sm text-muted">لا ملاحظات بعد.</p>}
                   {sel.notes.map((n, i) => (
                     <div key={i} className="rounded-lg bg-canvas p-3 text-sm">
-                      <div className="text-[11px] text-muted">{new Date(n.ts).toLocaleString("ar-IQ-u-nu-latn")}</div>
+                      <div className="text-[11px] text-muted">{fmtDateTime(n.ts)}</div>
                       <div className="mt-0.5">{n.text}</div>
                     </div>
                   ))}
@@ -142,10 +143,10 @@ export default function RecordsPage() {
                       <div key={v.id} className="px-4 py-3">
                         <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
                           <div className="text-sm font-medium">
-                            {new Date(v.created_at).toLocaleDateString("ar-IQ-u-nu-latn")}
+                            {fmtDate(v.created_at)}
                             {v.accession && <span className="ms-2 font-mono text-xs text-muted">{v.accession}</span>}
                           </div>
-                          <Link href={`/station/visits`} className="inline-flex items-center gap-1 text-xs text-brand-dark hover:underline"><Printer className="size-3.5" /> الزيارات</Link>
+                          <Link href={`/station/visits?open=${v.id}`} data-testid="open-visit" className="inline-flex items-center gap-1 text-xs text-brand-dark hover:underline"><Printer className="size-3.5" /> عرض / طباعة</Link>
                         </div>
                         <div className="flex flex-wrap gap-1.5">
                           {v.results.map((r, i) => (

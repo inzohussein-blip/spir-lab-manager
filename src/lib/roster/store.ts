@@ -17,6 +17,8 @@ export interface Leave { id: string; staffId: string; type: LeaveType; from: str
 export interface Advance { id: string; staffId: string; date: string; amount: number; deductMonth: string; note?: string }
 export interface RosterSettings {
   title: string; subtitle: string; footer?: string;
+  /** Letterhead logo (image data URL); empty → the default logo. */
+  logo?: string;
   graceMin: number; annualLeaveDays: number;
   /** 0 = Sunday … 6 = Saturday */
   weekStart: number;

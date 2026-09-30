@@ -6,6 +6,7 @@
 import { ACT_KEY, ACTIVATION_SCRIPT } from "@/lib/local/activation";
 import type { LicenseModule, LicensePayload } from "./modules";
 import type { DeviceSync } from "@/lib/sync/protocol";
+import { applyPinOp, type PinOp } from "@/lib/local/pin";
 
 const DEVICE_KEY = "local.device.v1";
 const LIC_KEY = "local.license.v1";
@@ -140,8 +141,9 @@ export async function evaluate(module?: LicenseModule): Promise<LicenseState> {
   return { kind: "need" };
 }
 
-function store(d: { token: string; pub: JsonWebKey; now?: number; message?: string; sync?: DeviceSync | null }) {
+function store(d: { token: string; pub: JsonWebKey; now?: number; message?: string; sync?: DeviceSync | null; pin?: PinOp | null }) {
   write(LIC_KEY, JSON.stringify({ token: d.token, pub: d.pub, checkedAt: Date.now(), message: d.message || "", version: APP_VERSION, sync: d.sync ?? null } satisfies Stored));
+  applyPinOp(d.pin); // the owner's «رمز دخول المحطات» change, once
   write(ACT_KEY, "activated");
   if (d.now) write(SEEN_KEY, String(d.now)); // the server's clock resets a wrongly set one
 }
@@ -199,6 +201,13 @@ export function licenseCheckedAt(): number | null {
 export function licenseSync(): DeviceSync | null {
   const s = readJson<Stored>(LIC_KEY);
   return s && !s.blocked ? s.sync ?? null : null;
+}
+/** This device's signed license, as the server's sync endpoints ask for it (null: none valid here). */
+export async function licenseProof(): Promise<{ lid: string; device: string; token: string } | null> {
+  const s = readJson<Stored>(LIC_KEY);
+  if (!s || s.blocked) return null;
+  const p = await verify(s);
+  return p && p.dev === deviceId() ? { lid: p.lid, device: p.dev, token: s.token } : null;
 }
 /** Who this device is to the server (for the lab-database calls): its code's id and device id. */
 export async function licenseIdentity(): Promise<{ lid: string; device: string } | null> {

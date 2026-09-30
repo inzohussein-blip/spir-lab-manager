@@ -27,11 +27,11 @@ const { B, ok, launch, pdfPages, done, kv, kvPut, resetLocal } = require('./lib.
     await dlg.locator(`li button:has-text("${option}")`).first().click();
   };
 
-  await card('تحليل البول العام').locator('button:has-text("ملء الطبيعي")').click();
-  await card('تحليل البول العام').locator('button:has-text("الاستمارة")').click(); await p.waitForTimeout(300);
+  await card('فحص الإدرار العام').locator('button:has-text("ملء الطبيعي")').click();
+  await card('فحص الإدرار العام').locator('button:has-text("الاستمارة")').click(); await p.waitForTimeout(300);
   await choose('Color', 'Dark Yellow'); await choose('Bacteria', 'More than (++++)');
   await dlg.locator('button:has-text("تم")').click();
-  ok(await badge('تحليل البول العام') === '21/21', 'urine: every field filled');
+  ok(await badge('فحص الإدرار العام') === '21/21', 'urine: every field filled');
   await card('فحص الخروج').locator('button:has-text("ملء الطبيعي")').click();
 
   await card('السائل المنوي').locator('button:has-text("الاستمارة")').click(); await p.waitForTimeout(300);
@@ -52,7 +52,7 @@ const { B, ok, launch, pdfPages, done, kv, kvPut, resetLocal } = require('./lib.
   await p.click('button:has-text("حفظ")'); await p.waitForTimeout(500);
   const vid = (await kv(p, 'station.visits.v1'))[0].id;
   await p.goto(B + '/station?edit=' + vid); await p.waitForTimeout(1000);
-  ok(await badge('تحليل البول العام') === '21/21' && await badge('الزرع والحساسية') === '2/2', 'forms kept after reopening the visit');
+  ok(await badge('فحص الإدرار العام') === '21/21' && await badge('الزرع والحساسية') === '2/2', 'forms kept after reopening the visit');
 
   const sheet = await p.locator('#report-sheet').innerText();
   ok(sheet.includes('Growth of Klebsiella spp.') && sheet.includes('Conclusion'), 'printed sheet: culture line and semen conclusion');

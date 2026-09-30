@@ -22,7 +22,7 @@ const fs = require('node:fs');
   await p.locator('[data-result-idx="0"]').fill('9');
   const flag = await p.locator('div.group', { hasText: hb.name_ar }).locator('span.rounded-full.size-6').first().innerText().catch(() => '?');
   ok(flag === 'L', `Hb 9 (female) flagged L — got ${flag}`);
-  await p.locator('div.group.rounded-xl', { hasText: 'تحليل البول العام' }).locator('button:has-text("ملء الطبيعي")').click();
+  await p.locator('div.group.rounded-xl', { hasText: 'فحص الإدرار العام' }).locator('button:has-text("ملء الطبيعي")').click();
   ok(await p.locator('text=غير محفوظ').count() > 0, 'unsaved badge shows before saving');
   await p.keyboard.press('Control+s'); await p.waitForTimeout(400);
   ok((await ls('station.visits.v1')).length === 1, 'Ctrl+S saved one visit');
@@ -79,7 +79,7 @@ const fs = require('node:fs');
   ok(await p.locator('text=سجل الزيارات والفحوصات (2)').count() === 1, 'patient history shows both visits');
   // custom form edit then backup round trip
   await kvPut(p, 'station.formTemplates.v1', { CS: { title: 'MY CULTURE', specimens: [], colony: [], organisms: [], antibiotics: [{ group: 'x', items: ['Abc'] }] } });
-  await p.goto(B + '/station/settings'); await p.waitForTimeout(600);
+  await p.goto(B + '/station/settings#device'); await p.waitForTimeout(600);
   const [bk] = await Promise.all([p.waitForEvent('download'), p.click('button:has-text("تصدير نسخة احتياطية")')]);
   const backup = JSON.parse(fs.readFileSync(await bk.path(), 'utf8'));
   ok(backup.visits.length === 2 && backup.patients.length === 1 && backup.stock.length === 1, 'backup has visits, patients, stock');

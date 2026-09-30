@@ -13,15 +13,16 @@
 
 const META_CACHE = "local-meta";
 const PREFIX = "local-app-";
-const BASES = ["/welcome", "/station", "/store", "/training", "/qc", "/roster"];
+const BASES = ["/welcome", "/station", "/store", "/training", "/qc", "/roster", "/sync"];
 const ROUTES = [
   "/welcome",
   "/station", "/station/inventory", "/station/records", "/station/settings", "/station/tests", "/station/visits", "/station/trash", "/station/page/_",
-  "/store", "/store/report", "/store/settings", "/store/suppliers",
+  "/store", "/store/inventory", "/store/items", "/store/report", "/store/settings", "/store/suppliers",
   "/training", "/training/cards", "/training/edit", "/training/exam", "/training/manual", "/training/map", "/training/media",
   "/training/quiz", "/training/settings", "/training/tools", "/training/trainees", "/training/tubes", "/training/test/_",
   "/qc", "/qc/analytes", "/qc/chart", "/qc/devices", "/qc/entry", "/qc/settings", "/qc/temps",
   "/roster", "/roster/attendance", "/roster/leaves", "/roster/payroll", "/roster/schedule", "/roster/settings", "/roster/staff",
+  "/sync", "/sync/file", "/sync/auto", "/sync/log", "/sync/settings",
 ];
 // Pages with an id in the URL are client pages: one saved copy serves every id.
 const TEMPLATES = [["/training/test/", "/training/test/_"], ["/station/page/", "/station/page/_"]];

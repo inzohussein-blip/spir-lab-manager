@@ -42,7 +42,7 @@ const { PG, freshDb, fakeSupabase, waitFor } = require('./pgfake.cjs');
     await p.keyboard.press('Control+s'); await p.waitForTimeout(500);
   };
   const names = async (p) => ((await kv(p, 'station.visits.v1')) || []).map((v) => v.patient.name);
-  const settings = async (p) => { await p.goto(B + '/station/settings'); await p.waitForSelector('[data-testid="sync-panel"]', { timeout: 20000 }); };
+  const settings = async (p) => { await p.goto(B + '/station/settings#device'); await p.waitForSelector('[data-testid="sync-panel"]', { timeout: 20000 }); };
   const link = async (p, { url = sb.url, password = sb.password } = {}) => {
     await p.fill('input[aria-label="Project URL"]', url); await p.fill('input[aria-label="anon key"]', sb.anon);
     await p.fill('input[aria-label="بريد مستخدم المختبر"]', sb.email); await p.fill('input[aria-label="كلمة مرور مستخدم المختبر"]', password);
@@ -115,9 +115,9 @@ const { PG, freshDb, fakeSupabase, waitFor } = require('./pgfake.cjs');
 
   // ── Both offline change the lab name; the later change wins everywhere ──
   const setName = async (p, name) => {
-    await p.goto(B + '/station/settings'); await p.waitForSelector('text=اسم المختبر', { timeout: 15000 });
-    await p.locator('label:has-text("اسم المختبر") input').fill(name);
-    await p.locator('button:has-text("حفظ")').first().click(); await p.waitForTimeout(400);
+    await p.goto(B + '/station/settings#lab'); await p.waitForSelector('text=اسم المختبر', { timeout: 15000 });
+    await p.locator('label:has-text("اسم المختبر") input').first().fill(name);
+    await p.keyboard.press('Tab'); await p.waitForTimeout(400); // a field saves when you leave it
   };
   await A.ctx.setOffline(true); await B2.ctx.setOffline(true);
   await setName(A.p, 'مختبر أ (قديم)');
@@ -132,7 +132,7 @@ const { PG, freshDb, fakeSupabase, waitFor } = require('./pgfake.cjs');
 
   // ── Text only: a device's logo (an image) stays on it; text changes still arrive ──
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
-  await A.p.goto(B + '/station/settings'); await A.p.waitForSelector('text=اسم المختبر', { timeout: 15000 });
+  await A.p.goto(B + '/station/settings#lab'); await A.p.waitForSelector('text=اسم المختبر', { timeout: 15000 });
   await A.p.setInputFiles('input[type=file][accept="image/*"]', { name: 'logo.png', mimeType: 'image/png', buffer: png }); await A.p.waitForTimeout(600);
   ok(String((await kv(A.p, 'station.settings.v1'))?.logo).startsWith('data:image'), 'A has its logo');
   await syncNow(A.p);

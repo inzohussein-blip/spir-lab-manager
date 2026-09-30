@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { OfflineReady } from "@/components/local/OfflineReady";
 import { ActivationGate } from "@/components/local/ActivationGate";
+import { PinGate } from "@/components/local/PinGate";
 import { LocalDataGate } from "@/components/local/LocalDataGate";
 import { ACTIVATION_SCRIPT } from "@/lib/local/activation";
 import { LocalThemeApplier } from "@/components/local/LocalTheme";
@@ -14,6 +15,7 @@ export default function TrainingLayout({ children }: { children: ReactNode }) {
     <div className="training min-h-screen md:flex">
       <script dangerouslySetInnerHTML={{ __html: ACTIVATION_SCRIPT }} />
       <ActivationGate module="training" />
+      <PinGate station="training" title="محطة التدريب والمعلومات" />
       <script dangerouslySetInnerHTML={{ __html: themeScript(THEME_KEYS.training) }} />
       <LocalThemeApplier storageKey={THEME_KEYS.training} />
       <LocalDataGate>

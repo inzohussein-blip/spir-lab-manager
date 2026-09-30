@@ -5,6 +5,7 @@ import Link from "next/link";
 import { FlaskConical, CheckCircle2, AlertTriangle, XCircle, ChevronRight, ChevronLeft } from "lucide-react";
 import { getAnalytes, getResults, setResult, evaluateAnalyte, RULES, type Analyte, type QcResult } from "@/lib/qc/store";
 import { todayYmd, addDays } from "@/lib/local/util";
+import { staffNames, stockItems, takeFromStock, stockOptions, type StockRef } from "@/lib/local/links";
 
 const inp = "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
 
@@ -14,9 +15,11 @@ export default function QcEntryPage() {
   const [results, setResults] = useState<QcResult[]>([]);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [by, setBy] = useState("");
+  const [staff, setStaff] = useState<string[]>([]);
+  const [stock, setStock] = useState<StockRef[]>([]);
 
-  const reload = () => setResults(getResults());
-  useEffect(() => { setAnalytes(getAnalytes().filter((a) => a.active)); reload(); }, []);
+  const reload = () => { setResults(getResults()); setStock(stockItems()); };
+  useEffect(() => { setAnalytes(getAnalytes().filter((a) => a.active)); setStaff(staffNames()); reload(); }, []);
   useEffect(() => { setDrafts({}); }, [date]);
 
   const evals = useMemo(() => {
@@ -30,7 +33,10 @@ export default function QcEntryPage() {
     const k = key(a.id, levelId);
     if (!(k in drafts)) return;
     const raw = drafts[k].trim();
+    const had = results.some((r) => r.analyteId === a.id && r.levelId === levelId && r.date === date);
     setResult(a.id, levelId, date, raw === "" ? null : Number(raw), by.trim() ? { by: by.trim() } : {});
+    // A new control run uses one unit of its control material from the stock room.
+    if (!had && raw !== "") takeFromStock(a.stockId);
     setDrafts((d) => { const n = { ...d }; delete n[k]; return n; });
     reload();
   }
@@ -46,7 +52,8 @@ export default function QcEntryPage() {
           <p className="mt-1 text-sm text-muted">أدخل قيمة كل مستوى — تُقيَّم فوراً بقواعد Westgard وتُحفظ عند مغادرة الحقل.</p>
         </div>
         <div className="flex flex-wrap items-end gap-2">
-          <label className="text-xs text-muted">المنفّذ<input value={by} onChange={(e) => setBy(e.target.value)} className={`mt-1 ${inp} w-36`} /></label>
+          <label className="text-xs text-muted">المنفّذ<input value={by} onChange={(e) => setBy(e.target.value)} list="staff-names" className={`mt-1 ${inp} w-36`} /></label>
+          <datalist id="staff-names">{staff.map((n) => <option key={n} value={n} />)}</datalist>
           <div className="flex items-center gap-1">
             <button onClick={() => setDate(addDays(date, -1))} title="اليوم السابق" className="grid size-9 place-items-center rounded-lg border border-line hover:bg-canvas"><ChevronRight className="size-4" /></button>
             <input type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} className={`${inp} w-40`} />
@@ -63,7 +70,10 @@ export default function QcEntryPage() {
           <div key={a.id} className="rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
             <div className="mb-3 flex items-baseline justify-between gap-2">
               <div className="font-bold">{a.name}</div>
-              <div className="text-xs text-muted">{a.device}{a.unit && <span dir="ltr"> · {a.unit}</span>}</div>
+              <div className="text-xs text-muted">
+                {a.device}{a.unit && <span dir="ltr"> · {a.unit}</span>}
+                {(() => { const s = stock.find((x) => x.id === a.stockId); return s ? <span data-testid="qc-stock" className={Number(s.qty) <= Number(s.minQty ?? 0) ? " font-semibold text-red-600" : ""}> · المخزن: <b className="tabular-nums" dir="ltr">{s.qty}</b>{Number(s.qty) <= 0 && stockOptions().warnOut ? " — غير متوفر في المخزن" : ""}</span> : null; })()}
+              </div>
             </div>
             <div className="flex flex-col gap-3">
               {a.levels.map((l) => {

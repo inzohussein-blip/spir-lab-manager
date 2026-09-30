@@ -1,7 +1,7 @@
 /** What a lab code can switch on (shared by the server, the stations and the code manager). */
 export const LICENSE_MODULES = [
   { id: "station", label: "محطة المختبر", path: "/station" },
-  { id: "purchasing", label: "منظومة المشتريات", path: "/store" },
+  { id: "purchasing", label: "المخزن والمشتريات", path: "/store" },
   { id: "training", label: "محطة التدريب والمعلومات", path: "/training" },
   { id: "qc", label: "محطة الجودة والأجهزة", path: "/qc" },
   { id: "roster", label: "محطة الكادر والدوام", path: "/roster" },

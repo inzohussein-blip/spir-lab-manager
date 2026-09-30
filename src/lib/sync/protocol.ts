@@ -19,6 +19,25 @@
  */
 export const STATION_SYNC = process.env.NEXT_PUBLIC_STATION_SYNC === "1";
 
+/** «المزامنة التلقائية» of the lab's computers (switched on per computer in «محطة المزامنة»):
+ *  through the site's server into the lab's own place, for devices activated with its code. */
+export const COMPANY_SYNC_KEY = "lab-company-sync";
+/** Stations this computer keeps to itself (not synced, by network or by file): data prefixes,
+ *  chosen in «محطة المزامنة ← الإعدادات». */
+export const SYNC_EXCLUDE_KEY = "lab-sync-exclude";
+export const SYNC_STATIONS: [string, string][] = [
+  ["station.", "محطة المختبر"], ["purchasing.", "المخزن والمشتريات"], ["training.", "التدريب والمعلومات"],
+  ["qc.", "الجودة والأجهزة"], ["roster.", "الكادر والدوام"],
+];
+export function syncExcluded(): string[] {
+  try { const v = JSON.parse(localStorage.getItem(SYNC_EXCLUDE_KEY) || "[]"); return Array.isArray(v) ? v.filter((x) => typeof x === "string") : []; } catch { return []; }
+}
+/** A station data key this computer shares with the lab's others (not a kept-to-itself station). */
+export const sharedStation = (k: string) => !syncExcluded().some((p) => k.startsWith(p));
+export function companySyncOn(): boolean {
+  try { return localStorage.getItem(COMPANY_SYNC_KEY) === "1"; } catch { return false; }
+}
+
 /** One record as stored in the lab's database (table lab_sync_records). */
 export interface SyncRow {
   /** The station data key the record belongs to (e.g. "station.visits.v1"). */
@@ -47,6 +66,9 @@ export type DeviceSync = SupabaseConfig | { kind: "postgres"; host: string };
 export const SYNC_TABLE = "lab_sync_records";
 export const PULL_LIMIT = 500;
 export const PUSH_LIMIT = 200;
+/** Byte budgets per request (large records such as pictures): what one push sends, one pull returns. */
+export const PUSH_BYTES = 1_500_000;
+export const PULL_BYTES = 3_000_000;
 
 /** How long a deletion is kept in the lab's database, so every device learns of it (the 180 in SCHEMA_SQL). */
 export const TOMBSTONE_DAYS = 180;

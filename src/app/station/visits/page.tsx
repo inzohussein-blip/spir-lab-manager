@@ -10,6 +10,7 @@ import {
 import { ReportSheet } from "@/components/station/ReportSheet";
 import { TubeLabels } from "@/components/station/TubeLabel";
 import { valueText, isFormCode } from "@/lib/station/templates";
+import { fmtDateTime } from "@/lib/utils";
 
 
 /** Rows drawn at first; more appear while scrolling (a lab's list grows to thousands of visits). */
@@ -44,7 +45,16 @@ export default function StationVisitsPage() {
     return () => window.removeEventListener("afterprint", done);
   }, [labelFor]);
 
-  useEffect(() => { setVisits(getVisits()); setTests(getTests()); setSettings(getSettings()); }, []);
+  // Opened for one visit (?open=<id>, e.g. from «سجل المراجعين»): show it at once.
+  const [fromRecords, setFromRecords] = useState(false);
+  const sheetRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const all = getVisits();
+    setVisits(all); setTests(getTests()); setSettings(getSettings());
+    const id = new URLSearchParams(window.location.search).get("open");
+    const v = id ? all.find((x) => x.id === id) : undefined;
+    if (v) { setSel(v); setFromRecords(true); setTimeout(() => sheetRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 80); }
+  }, []);
 
   const testMap = useMemo(() => new Map(tests.map((t) => [t.id, t])), [tests]);
   const byId = (id: string) => testMap.get(id);
@@ -244,7 +254,7 @@ export default function StationVisitsPage() {
                 <td className="px-4 py-3">
                   <input type="checkbox" checked={checked.has(v.id)} onChange={() => toggleCheck(v.id)} className="size-4 align-middle" />
                 </td>
-                <td className="px-4 py-3 text-muted whitespace-nowrap">{new Date(v.created_at).toLocaleString("ar-IQ-u-nu-latn")}</td>
+                <td className="px-4 py-3 text-muted whitespace-nowrap">{fmtDateTime(v.created_at)}</td>
                 <td className="px-4 py-3 font-mono text-xs text-muted">{v.accession ?? "—"}</td>
                 <td className="px-4 py-3 font-medium">{v.patient.name || "—"}</td>
                 <td className="px-4 py-3">{v.results.length}</td>
@@ -288,7 +298,10 @@ export default function StationVisitsPage() {
 
       {sel && (
         <>
-          <div className="no-print mt-4 flex items-center justify-center gap-2">
+          <div ref={sheetRef} className="no-print mt-4 flex scroll-mt-4 flex-wrap items-center justify-center gap-2" data-testid="visit-open">
+            {fromRecords && (
+              <button onClick={() => history.back()} className="rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas">رجوع إلى سجل المراجع</button>
+            )}
             <div className="flex overflow-hidden rounded-lg border border-line text-sm">
               {(["A4", "A5"] as const).map((x) => (
                 <button key={x} onClick={() => setPaper(x)} className={`px-3 py-1.5 ${paper === x ? "bg-brand text-white" : "hover:bg-canvas"}`}>{x}</button>
@@ -306,7 +319,7 @@ export default function StationVisitsPage() {
             accession={sel.accession}
             patient={sel.patient}
             referrer={sel.referrer}
-            rows={sel.results.map((r) => ({ key: r.testId, name: r.name_ar, value: r.value, unit: r.unit, test: byId(r.testId) }))}
+            rows={sel.results.map((r) => ({ key: r.testId, name: r.name_ar, value: r.value, unit: r.unit, test: byId(r.testId), hl: r.hl }))}
             prev={prev}
             printPrev={printPrev}
             emptyText="No results"

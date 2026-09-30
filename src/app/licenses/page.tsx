@@ -12,6 +12,7 @@ import { SYNC_ERRORS } from "@/components/local/SyncPanel";
 import { adminDbError } from "@/lib/db/labErrors";
 import { PROVIDERS, providerById, providerOf, type ProviderId } from "@/lib/db/providers";
 import { ConnInput, ProviderGuide, ProviderMark, ProviderPicker } from "@/components/DbProviders";
+import { fmtDateTime } from "@/lib/utils";
 
 /** «إدارة الرموز» — the owner's page: one code per lab, bound to one device, with a period and stations. */
 
@@ -33,6 +34,8 @@ interface Row {
   devices: { device_id: string; label: string; activated_at: number; last_seen_at: number | null; app_version: string }[];
   /** "signup": registered by the lab itself. */
   source: string;
+  /** The last «رمز دخول المحطات» change (applied by the devices at their next check). */
+  pin: { id: string; hash: string | null; scope: LicenseModule | "all"; at: number } | null;
 }
 interface Ev { license_id: string; at: number; kind: string; detail: string }
 interface Storage { source: "license-db" | "app-db" | "embedded"; ok: boolean; codes?: number; roundTripMs?: number; error?: string; keySealed?: boolean }
@@ -64,7 +67,7 @@ const DAY = 86_400_000;
 const OWNER_PHONE = "07803993585";
 const PERIODS = [{ d: 30, l: "شهر" }, { d: 90, l: "3 أشهر" }, { d: 180, l: "6 أشهر" }, { d: 365, l: "سنة" }];
 const fmt = (ms: number | null) => (ms ? new Date(ms).toLocaleDateString("en-CA") : "—");
-const fmtTime = (ms: number | null) => (ms ? new Date(ms).toLocaleString("ar-IQ-u-nu-latn") : "—");
+const fmtTime = (ms: number | null) => (ms ? fmtDateTime(ms) : "—");
 const deviceOf = (r: Row) => r.device_name || r.device_label || (r.device_id ? "مربوط" : "");
 /** Where a code's full admin panel keeps its data (see lib/db/lab.ts). */
 type Place = "own" | "site" | "waiting" | "none";
@@ -78,7 +81,7 @@ const EVENT_LABEL: Record<string, string> = {
   resumed: "إعادة تفعيل", device_reset: "فك ربط الجهاز", modules: "تغيير المحطات", renamed: "تعديل الاسم",
   paid: "تسجيل الدفع", unpaid: "إلغاء الدفع", message: "رسالة للمختبر", new_code: "رمز جديد", sync: "قاعدة بيانات المختبر",
   admin_db: "قاعدة لوحة الإدارة", device_added: "جهاز إضافي", device_removed: "إزالة جهاز", max_devices: "عدد الأجهزة",
-  data_export: "تصدير البيانات",
+  data_export: "تصدير البيانات", pin: "رمز دخول المحطات",
 };
 const eventDetail = (e: Ev) => (e.kind === "modules" ? e.detail.split(",").filter(Boolean).map(moduleLabel).join("، ") || "لا شيء" : e.detail);
 
@@ -441,6 +444,7 @@ export default function LicensesPage() {
                     {r.source === "signup" && <span data-testid="signup-badge" className="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-700">تسجيل ذاتي</span>}
                     {r.price.trim() && <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${r.paid ? "bg-teal-50 text-brand-dark" : "bg-amber-50 text-amber-700"}`}>{r.paid ? "مدفوع" : "غير مدفوع"} · <span className="tabular-nums">{r.price}</span></span>}
                     {r.message && <span title={r.message} className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-xs text-sky-700"><MessageSquare className="size-3" /> رسالة</span>}
+                    {r.pin?.hash && <span data-testid="pin-badge" title="عيّنتَ رمز دخول للمحطات" className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700"><Lock className="size-3" /> PIN</span>}
                   </div>
                   {r.note && <div className="mt-0.5 text-xs text-muted">{r.note}</div>}
                 </div>
@@ -456,6 +460,10 @@ export default function LicensesPage() {
                   {/* Less frequent actions: one size of square icon buttons, named by their tooltip */}
                   {r.device_id && <IconBtn label="نقل لجهاز جديد" onClick={() => change(r, { action: "reset_device" }, "فك ربط الجهاز؟ يستطيع المختبر بعدها إدخال نفس الرمز على جهاز جديد، والمدة تستمر كما هي.")}><MonitorSmartphone className="size-4" /></IconBtn>}
                   {STATION_SYNC && <IconBtn label="قاعدة بيانات المختبر" onClick={() => setDbFor(r)}><Database className="size-4" /></IconBtn>}
+                  <IconBtn label="رمز دخول المحطات (PIN)" onClick={() => {
+                    setOpen((s) => new Set(s).add(r.id));
+                    setTimeout(() => document.querySelector(`[data-lab="${CSS.escape(r.lab_name)}"] [data-testid="pin-owner"] input`)?.scrollIntoView({ block: "center" }), 80);
+                  }}><Lock className="size-4" /></IconBtn>
                   <IconBtn label="رمز جديد" onClick={() => change(r, { action: "new_code" }, "إنشاء رمز جديد لهذا المختبر؟ الرمز القديم لا يعمل بعدها لتفعيل جهاز، والجهاز الحالي يستمر.")}><KeyRound className="size-4" /></IconBtn>
                   <IconBtn label="تعديل الاسم" onClick={() => { const lab = window.prompt("اسم المختبر:", r.lab_name); if (lab == null) return; const note = window.prompt("ملاحظة:", r.note) ?? r.note; change(r, { action: "rename", lab, note }); }}><Pencil className="size-4" /></IconBtn>
                   {r.status === "active"
@@ -662,6 +670,37 @@ export default function LicensesPage() {
   );
 }
 
+/** «رمز دخول المحطات»: set a new PIN (a lab that forgot its own) or remove it; the devices apply it at their next check. */
+function PinOwner({ r, onChange }: { r: Row; onChange: (c: Record<string, unknown>) => void }) {
+  const stations = LICENSE_MODULES.filter((m) => m.id !== "admin" && r.modules.includes(m.id));
+  const [scope, setScope] = useState<string>("all");
+  const [pin, setPin] = useState("");
+  const ok = /^\d{4,8}$/.test(pin);
+  const scopeLabel = (s: string) => (s === "all" ? "كل المحطات" : moduleLabel(s));
+  return (
+    <div className="md:col-span-2" data-testid="pin-owner">
+      <div className="mb-1 flex items-center gap-1 text-xs font-semibold"><Lock className="size-3.5" /> رمز دخول المحطات (PIN)</div>
+      <p className="mb-1 text-[11px] text-muted">لمختبر نسي رمزه: عيّن رمزاً جديداً أو أزِله. يُطبَّق عند اتصال الجهاز التالي، أو فوراً بـ«نسيت الرمز؟ ← تحديث من المزوّد» في شاشة الدخول.</p>
+      <div className="flex flex-wrap gap-2">
+        <select value={scope} onChange={(e) => setScope(e.target.value)} aria-label="المحطة" className={`${inp} w-auto`}>
+          <option value="all">كل المحطات</option>
+          {stations.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+        </select>
+        <input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 8))} inputMode="numeric" dir="ltr" placeholder="4–8 أرقام"
+          aria-label="رمز الدخول الجديد" className={`${inp} w-32 text-center tracking-widest`} />
+        <button onClick={() => { onChange({ action: "pin", pin, scope }); setPin(""); }} disabled={!ok} className="rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-dark disabled:opacity-40">تعيين الرمز</button>
+        <button onClick={() => { if (window.confirm(`إزالة رمز الدخول من ${scopeLabel(scope)}؟`)) onChange({ action: "pin", pin: "", scope }); }} className="rounded-lg border border-line px-3 py-1.5 text-xs hover:bg-surface">إزالة الرمز</button>
+      </div>
+      {r.pin && (
+        <div className="mt-1 text-[11px] text-muted">
+          آخر تغيير: {r.pin.hash ? "رمز جديد" : "إزالة الرمز"} — {scopeLabel(r.pin.scope)} — {fmtTime(r.pin.at)}
+          {r.last_seen_at != null && r.last_seen_at >= r.pin.at ? " — وصل الجهاز" : " — بانتظار اتصال الجهاز"}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Payment, device name, message to the lab and the code's history. */
 function Details({ r, evs, multi, onChange }: { r: Row; evs: Ev[]; multi: boolean; onChange: (c: Record<string, unknown>) => void }) {
   const [maxDev, setMaxDev] = useState(r.max_devices);
@@ -720,6 +759,7 @@ function Details({ r, evs, multi, onChange }: { r: Row; evs: Ev[]; multi: boolea
           {r.message && <button onClick={() => onChange({ action: "message", text: "" })} className="rounded-lg border border-line px-3 py-1.5 text-xs hover:bg-surface">إزالة</button>}
         </div>
       </div>
+      <PinOwner r={r} onChange={onChange} />
       <div className="md:col-span-2">
         <div className="mb-1 flex items-center gap-1 text-xs font-semibold"><History className="size-3.5" /> السجل</div>
         {evs.length === 0 ? <p className="text-xs text-muted">لا أحداث بعد.</p> : (
@@ -1049,7 +1089,8 @@ function Databases({ rows, now, needsOwn, onOpen, onReset, onChecked, onExport }
   const [pick, setPick] = useState("");
   const [checks, setChecks] = useState<Record<string, { busy?: boolean; ok?: boolean; text?: string }>>({});
   const [checkingAll, setCheckingAll] = useState(false);
-  const clients = useMemo(() => rows.filter((r) => r.modules.includes("admin") || r.admin_db), [rows]);
+  // Every code is listed: its admin panel's database, and the one its stations sync through.
+  const clients = rows;
   const count = (t: DbTab) => (t === "all" ? clients.length : clients.filter((r) => providerOfRow(r) === t).length);
   const list = useMemo(() => {
     const t = q.trim();
@@ -1058,6 +1099,7 @@ function Databases({ rows, now, needsOwn, onOpen, onReset, onChecked, onExport }
       .filter((r) => !t || r.lab_name.includes(t) || r.note.includes(t) || deviceOf(r).includes(t) || (r.admin_db?.host ?? "").includes(t))
       .sort((a, b) => Number(!!b.admin_db) - Number(!!a.admin_db) || a.lab_name.localeCompare(b.lab_name, "ar"));
   }, [clients, tab, q]);
+  const panels = clients.filter((r) => r.modules.includes("admin"));
   const own = clients.filter((r) => r.admin_db);
   const down = own.filter((r) => r.admin_db_check && !r.admin_db_check.ok);
 
@@ -1100,14 +1142,14 @@ function Databases({ rows, now, needsOwn, onOpen, onReset, onChecked, onExport }
     setChecks((c) => ({ ...c, [r.id]: d.ok ? { ok: true, text: `✓ نُقلت البيانات القديمة: ${d.copied?.rows ?? 0} سجلاً` } : { ok: false, text: adminDbError(d.error) } }));
   }
   const tabs: [DbTab, string][] = [["all", "الكل"], ...PROVIDERS.map((p) => [p.id, p.name] as [DbTab, string])];
-  const candidates = clients.filter((r) => r.modules.includes("admin"));
+  const candidates = clients;
 
   return (
     <>
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        {([["عملاء بلوحة الإدارة", candidates.length, ""], ["بقاعدة خاصة", own.length, ""],
-          ["أقسام في قاعدة الموقع", candidates.filter((r) => placeOf(r, needsOwn) === "site").length, ""],
-          ["بانتظار قاعدة", candidates.filter((r) => placeOf(r, needsOwn) === "waiting").length, candidates.some((r) => placeOf(r, needsOwn) === "waiting") ? "text-amber-700" : ""],
+        {([["كل الرموز", clients.length, ""], ["بقاعدة خاصة", own.length, ""],
+          ["أقسام في قاعدة الموقع", panels.filter((r) => placeOf(r, needsOwn) === "site").length, ""],
+          ["بانتظار قاعدة", panels.filter((r) => placeOf(r, needsOwn) === "waiting").length, panels.some((r) => placeOf(r, needsOwn) === "waiting") ? "text-amber-700" : ""],
           ["لا تستجيب", down.length, down.length ? "text-red-700" : ""]] as const).map(([k, v, tone]) => (
           <div key={k} className="rounded-2xl border border-line bg-surface p-4 shadow-[var(--shadow-card)]">
             <div className="text-xs text-muted">{k}</div>
@@ -1151,7 +1193,7 @@ function Databases({ rows, now, needsOwn, onOpen, onReset, onChecked, onExport }
       </div>
       {list.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-line bg-surface p-8 text-center text-sm text-muted">
-          {q.trim() ? "لا نتائج." : tab !== "all" ? `لا عملاء على ${providerById(tab).name} بعد — اختر عميلاً أعلاه واربطه.` : "لا عملاء بلوحة الإدارة الكاملة بعد — فعّل «لوحة الإدارة الكاملة» في رمز المختبر ثم اربط قاعدته هنا."}
+          {q.trim() ? "لا نتائج." : tab !== "all" ? `لا عملاء على ${providerById(tab).name} بعد — اختر عميلاً أعلاه واربطه.` : "لا رموز بعد — أنشئ رمزاً من «رمز جديد» فيظهر هنا."}
         </div>
       ) : (
         <ul data-testid="db-list" className="overflow-hidden rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)]">
@@ -1172,7 +1214,9 @@ function Databases({ rows, now, needsOwn, onOpen, onReset, onChecked, onExport }
                       ? <>{providerById(p).name}: <span dir="ltr" className="font-mono">{r.admin_db.host}</span> · {r.admin_db.by === "lab" ? "ضبطها المختبر" : "ضبطتها أنت"} · {fmt(r.admin_db.at)}</>
                       : placeOf(r, needsOwn) === "waiting"
                         ? <span className="text-amber-700">بانتظار قاعدة خاصة — لوحة الإدارة مقفلة حتى الربط</span>
-                        : <>قسم مستقل في قاعدة الموقع{r.is_trial ? " (رمز تجريبي)" : ""} — لا يرى بيانات غيره</>}
+                        : placeOf(r, needsOwn) === "none"
+                          ? <>المحطات فقط — بلا قاعدة خاصة (اربطها لمزامنة محطاته أو قبل تفعيل لوحة الإدارة)</>
+                          : <>قسم مستقل في قاعدة الموقع{r.is_trial ? " (رمز تجريبي)" : ""} — لا يرى بيانات غيره</>}
                   </div>
                   {(r.admin_db || checks[r.id]) && <div data-testid="db-check" className="mt-1 text-xs">{lastCheck(r)}</div>}
                 </div>
@@ -1254,7 +1298,8 @@ function PrefsCard({ prefs, onSaved }: { prefs: Prefs; onSaved: () => void }) {
     if (d.ok) onSaved();
   }
   return (
-    <Panel tone="sky" icon={<Settings className="size-5" />} title="القيم الافتراضية" desc="يبدأ بها نموذج «رمز جديد» — تستطيع تغييرها لكل رمز عند إنشائه." testid="prefs-card">
+    <Panel tone="sky" icon={<Settings className="size-5" />} title="الإعدادات العامة" desc="ثلاث مجموعات: قيم الرموز الجديدة، ثم ميزات اختيارية، ثم المتقدم. تُحفظ معاً بزر «حفظ الإعدادات»." testid="prefs-card">
+      <div className="mb-2 flex items-center gap-2 text-sm font-semibold">قيم الرموز الجديدة <span className="text-xs font-normal text-muted">— يبدأ بها نموذج «رمز جديد»، وتستطيع تغييرها لكل رمز</span></div>
       <div className="grid gap-3 sm:grid-cols-3">
         <label className="text-sm font-medium">مدة الرمز الجديد
           <div className="mt-1 flex gap-2">
@@ -1285,8 +1330,10 @@ function PrefsCard({ prefs, onSaved }: { prefs: Prefs; onSaved: () => void }) {
         </span>
       </label>
 
-      <div className="mt-4 rounded-lg border border-line p-3" data-testid="extra-features">
-        <div className="text-sm font-semibold">خصائص إضافية <span className="text-xs font-normal text-muted">— موقوفة افتراضياً</span></div>
+      <div className="mt-5 rounded-lg border border-line p-3" data-testid="extra-features">
+        <div className="flex items-center gap-2 text-sm font-semibold">ميزات اختيارية <span className="text-xs font-normal text-muted">— موقوفة افتراضياً</span>
+          {(() => { const n = [p.multiDevice, p.selfSignup, p.errorLog].filter(Boolean).length; return n ? <span className="ms-auto rounded-full bg-brand-light px-2 py-0.5 text-[11px] font-semibold text-brand-dark" data-testid="extra-count">{n} مفعّلة</span> : null; })()}
+        </div>
         <div className="mt-2 grid gap-2">
           {([
             ["multiDevice", "حساب واحد بعدة أجهزة", "يُدخل المختبر الرمز نفسه على أكثر من جهاز حتى العدد الذي تحدّده لكل رمز (في «رمز جديد» وفي تفاصيل الرمز)."],
@@ -1302,7 +1349,7 @@ function PrefsCard({ prefs, onSaved }: { prefs: Prefs; onSaved: () => void }) {
       </div>
 
       <details className="mt-3 rounded-lg border border-dashed border-line p-3" data-testid="secret-features">
-        <summary className="flex cursor-pointer items-center gap-1.5 text-sm font-semibold"><Lock className="size-3.5" /> خاصية سرية</summary>
+        <summary className="flex cursor-pointer items-center gap-1.5 text-sm font-semibold"><Lock className="size-3.5" /> متقدم (خاصية سرية)</summary>
         <label className="mt-2 flex items-start gap-2 text-sm">
           <input type="checkbox" checked={p.dataExport} onChange={(e) => setP({ ...p, dataExport: e.target.checked })} aria-label="تصدير بيانات المختبر" className="mt-1" />
           <span>

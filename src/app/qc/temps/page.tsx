@@ -5,6 +5,7 @@ import { Thermometer, Printer, Plus, Trash2, ChevronRight, ChevronLeft, Settings
 import { getUnits, saveUnits, getTemps, setTemp, tempOk, getSettings, type TempUnit, type TempReading, type QcSettings } from "@/lib/qc/store";
 import { todayYmd, addDays, newId, monthLabel } from "@/lib/local/util";
 import { PrintStyle, Letterhead, PrintFooter, SignRow, exact } from "@/components/local/PrintDoc";
+import { staffNames } from "@/lib/local/links";
 
 const inp = "w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-brand";
 
@@ -17,9 +18,10 @@ export default function TempsPage() {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [by, setBy] = useState("");
   const [manage, setManage] = useState(false);
+  const [staff, setStaff] = useState<string[]>([]);
 
   const reload = () => setTemps(getTemps());
-  useEffect(() => { setUnits(getUnits()); reload(); setSettings(getSettings()); }, []);
+  useEffect(() => { setUnits(getUnits()); reload(); setSettings(getSettings()); setStaff(staffNames()); }, []);
   useEffect(() => { setDrafts({}); }, [date]);
 
   const reading = (u: string, slot: "AM" | "PM", d = date) => temps.find((t) => t.unitId === u && t.slot === slot && t.date === d);
@@ -50,7 +52,8 @@ export default function TempsPage() {
             <p className="mt-1 text-sm text-muted">قراءة صباحية ومسائية لكل جهاز. القراءة خارج المدى تُلوَّن بالأحمر وتطلب إجراءً تصحيحياً.</p>
           </div>
           <div className="flex flex-wrap items-end gap-2">
-            <label className="text-xs text-muted">القارئ<input value={by} onChange={(e) => setBy(e.target.value)} className={`mt-1 ${inp} w-32`} /></label>
+            <label className="text-xs text-muted">القارئ<input value={by} onChange={(e) => setBy(e.target.value)} list="staff-names" className={`mt-1 ${inp} w-32`} /></label>
+            <datalist id="staff-names">{staff.map((n) => <option key={n} value={n} />)}</datalist>
             <div className="flex items-center gap-1">
               <button onClick={() => setDate(addDays(date, -1))} className="grid size-9 place-items-center rounded-lg border border-line hover:bg-canvas"><ChevronRight className="size-4" /></button>
               <input type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} className={`${inp} w-40 py-2`} />
@@ -116,7 +119,7 @@ export default function TempsPage() {
       {settings && (
         <div className="print-doc hidden bg-white text-[9.5px] leading-[1.2] text-black print:block">
           <PrintStyle landscape={units.length > 3} />
-          <Letterhead title={settings.title} subtitle={settings.subtitle} color="#be123c"
+          <Letterhead title={settings.title} subtitle={settings.subtitle} logo={settings.logo} color="#be123c"
             right={<><div className="font-bold" style={{ color: "#be123c" }}>سجل درجات الحرارة</div><div>{monthLabel(month)}</div></>} />
           <table className="mt-2 w-full border-collapse text-center">
             <thead>

@@ -6,6 +6,7 @@ export const THEME_KEYS = {
   training: "training.theme.v1",
   qc: "qc.theme.v1",
   roster: "roster.theme.v1",
+  sync: "sync.theme.v1",
 } as const;
 export type ThemeStation = keyof typeof THEME_KEYS;
 

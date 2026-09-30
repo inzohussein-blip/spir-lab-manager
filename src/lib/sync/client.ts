@@ -13,9 +13,13 @@
  * - Linking a device that already has data to a database that already has data asks first:
  *   take the lab's data (this device's copy is kept aside and can be restored), or merge both.
  */
-import { kvReady, kvGet, kvApply, kvSyncedEntries, isSyncedKey, onKvChange, KV_REMOTE_EVENT, type KvOrigin } from "@/lib/local/kv";
-import { licenseIdentity, licenseSync, refreshLicense } from "@/lib/license/client";
-import { PULL_LIMIT, PUSH_LIMIT, type SupabaseConfig, type SyncRow } from "./protocol";
+import { kvReady, kvGet, kvApply, kvSyncedEntries as kvAllSynced, isSyncedKey as kvIsSynced, onKvChange, KV_REMOTE_EVENT, type KvOrigin } from "@/lib/local/kv";
+import { licenseIdentity, licenseProof, licenseSync, refreshLicense } from "@/lib/license/client";
+import { PULL_LIMIT, PUSH_LIMIT, PULL_BYTES, PUSH_BYTES, COMPANY_SYNC_KEY, companySyncOn, sharedStation, type SupabaseConfig, type SyncRow } from "./protocol";
+
+// Stations this computer keeps to itself («محطة المزامنة ← الإعدادات») are neither sent nor received.
+const isSyncedKey = (k: string) => kvIsSynced(k) && sharedStation(k);
+const kvSyncedEntries = () => kvAllSynced().filter(([k]) => sharedStation(k));
 import { SupaError, supaProbe, supaPull, supaPush, supaRefresh, supaSignIn, type SupaSession } from "./supabase";
 
 // ── Local bookkeeping (IndexedDB "lab-sync": outbox + meta) ──────────────────
@@ -79,9 +83,10 @@ async function outboxPut(entries: OutEntry[]) {
 // ── The link: which database, and this device's place in it ─────────────────
 type Link =
   | { kind: "supabase"; cfg: SupabaseConfig; source: "local" | "code" }
-  | { kind: "postgres"; host: string; source: "code" };
+  | { kind: "postgres"; host: string; source: "code" }
+  | { kind: "company"; source: "company" };
 export type LinkInfo = { kind: Link["kind"]; where: string; source: Link["source"]; email?: string };
-interface State { link: string; node: string; cursor: number; joined: boolean; lastSync?: number; catchUpAt?: number }
+interface State { link: string; node: string; cursor: number; joined: boolean; lastSync?: number; catchUpAt?: number; place?: string }
 
 const LOCAL_KEY = "local";   // Supabase details saved on this device
 const STATE_KEY = "state";
@@ -92,22 +97,23 @@ let localCfg: SupabaseConfig | null = null;
 function currentLink(): Link | null {
   const s = licenseSync();
   if (s) return s.kind === "postgres" ? { kind: "postgres", host: s.host, source: "code" } : { kind: "supabase", cfg: s, source: "code" };
-  return localCfg ? { kind: "supabase", cfg: localCfg, source: "local" } : null;
+  if (localCfg) return { kind: "supabase", cfg: localCfg, source: "local" };
+  return companySyncOn() ? { kind: "company", source: "company" } : null;
 }
-const fingerprint = (l: Link) => l.kind === "postgres" ? `pg|${l.host}` : `sb|${l.cfg.url}|${l.cfg.email}`;
-const info = (l: Link): LinkInfo => l.kind === "postgres"
+const fingerprint = (l: Link) => l.kind === "company" ? "company" : l.kind === "postgres" ? `pg|${l.host}` : `sb|${l.cfg.url}|${l.cfg.email}`;
+const info = (l: Link): LinkInfo => l.kind === "company" ? { kind: "company", where: "مكان المختبر على الخادم", source: "company" } : l.kind === "postgres"
   ? { kind: "postgres", where: l.host, source: l.source }
   : { kind: "supabase", where: (() => { try { return new URL(l.cfg.url).host; } catch { return l.cfg.url; } })(), source: l.source, email: l.cfg.email };
 const newNode = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`);
 
 // ── Talking to the database ──────────────────────────────────────────────────
-export type SyncErrorCode = "auth" | "no_table" | "unreachable" | "db" | "no_code" | "offline" | "private_host" | "bad_url" | "owner_set" | "bad_config" | "no_secret" | "tls";
+export type SyncErrorCode = "auth" | "no_table" | "unreachable" | "db" | "no_code" | "offline" | "private_host" | "bad_url" | "owner_set" | "bad_config" | "no_secret" | "tls" | "needs_db" | "bad_hub_key";
 class SyncError extends Error { constructor(public code: SyncErrorCode) { super(code); } }
 
 interface Adapter {
   pull(since: number, node: string): Promise<SyncRow[]>;
   push(rows: SyncRow[], node: string): Promise<number>;
-  probe(): Promise<{ records: number; rev: number }>;
+  probe(): Promise<{ records: number; rev: number; place?: string }>;
 }
 function supabaseAdapter(cfg: SupabaseConfig): Adapter {
   const fp = `sb|${cfg.url}|${cfg.email}`;
@@ -140,18 +146,21 @@ function supabaseAdapter(cfg: SupabaseConfig): Adapter {
     probe: () => run((s) => supaProbe(cfg, s)),
   };
 }
-async function server(op: string, body: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
-  const who = await licenseIdentity();
+async function server(op: string, body: Record<string, unknown> = {}, url = "/api/labsync"): Promise<Record<string, unknown>> {
+  // The signed license goes along: the server serves only the lab it names, on this device.
+  // On the lab's local network hub, its key instead (a local install has no lab codes).
+  const hub = url === "/api/company-sync" ? hubKey() : "";
+  const who = hub ? { hub } : await licenseProof();
   if (!who) throw new SyncError("no_code");
   let r: Response;
   try {
-    r = await fetch("/api/labsync", { method: "POST", headers: { "content-type": "application/json" }, cache: "no-store", body: JSON.stringify({ op, ...who, ...body }) });
+    r = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, cache: "no-store", body: JSON.stringify({ op, ...who, ...body }) });
   } catch { throw new SyncError("unreachable"); }
   const d = (await r.json().catch(() => null)) as Record<string, unknown> | null;
   if (!d) throw new SyncError("unreachable");
   if (!d.ok) {
     const e = String(d.error ?? "db");
-    throw new SyncError((["auth", "no_table", "unreachable", "private_host", "bad_url", "owner_set", "bad_config", "no_secret", "tls"].includes(e) ? e : e === "no_db" || e === "db" ? "db" : "no_code") as SyncErrorCode);
+    throw new SyncError((["auth", "no_table", "unreachable", "private_host", "bad_url", "owner_set", "bad_config", "no_secret", "tls", "needs_db", "bad_hub_key"].includes(e) ? e : e === "no_db" || e === "db" ? "db" : "no_code") as SyncErrorCode);
   }
   return d;
 }
@@ -160,7 +169,23 @@ const serverAdapter: Adapter = {
   push: async (rows, node) => Number((await server("push", { rows, node })).written) || 0,
   probe: async () => { const d = await server("probe"); return { records: Number(d.records) || 0, rev: Number(d.rev) || 0 }; },
 };
-const adapterFor = (l: Link): Adapter => (l.kind === "postgres" ? serverAdapter : supabaseAdapter(l.cfg));
+/** The key of the lab's local network hub, kept on this computer («محطة المزامنة»). */
+export const HUB_KEY = "lab-hub-key";
+export function hubKey(): string { try { return localStorage.getItem(HUB_KEY) ?? ""; } catch { return ""; } }
+export async function setHubKey(k: string) {
+  try { if (k) localStorage.setItem(HUB_KEY, k); else localStorage.removeItem(HUB_KEY); } catch { /* ignore */ }
+  await metaDel(STATE_KEY); await outboxClear(); state = null; base.clear();
+  await syncNow();
+}
+
+/** The lab's own place, through the site's server (or its local network hub). */
+const co = (op: string, body: Record<string, unknown> = {}) => server(op, body, "/api/company-sync");
+const companyAdapter: Adapter = {
+  pull: async (since, node) => ((await co("pull", { since, node })).rows as SyncRow[]) ?? [],
+  push: async (rows, node) => Number((await co("push", { rows, node })).written) || 0,
+  probe: async () => { const d = await co("probe"); return { records: Number(d.records) || 0, rev: Number(d.rev) || 0, place: String(d.place ?? "") }; },
+};
+const adapterFor = (l: Link): Adapter => (l.kind === "company" ? companyAdapter : l.kind === "postgres" ? serverAdapter : supabaseAdapter(l.cfg));
 
 // ── Text only: images stay on the device ─────────────────────────────────────
 // Only text travels to the lab's database. An image or file kept inside a record as a data URL
@@ -346,7 +371,9 @@ async function pullInto(ad: Adapter, st: State): Promise<number> {
     since = Math.max(since, ...rows.map((r) => Number(r.rev) || 0));
     st.cursor = Math.max(st.cursor, since);
     await metaSet(STATE_KEY, st);
-    if (rows.length < PULL_LIMIT) break;
+    // A page may come back shorter than the limit when its records are large: ask again until
+    // nothing is left, unless the page was clearly small.
+    if (rows.length < PULL_LIMIT && JSON.stringify(rows).length < PULL_BYTES / 2) break;
   }
   if (catchUp) { st.catchUpAt = Date.now(); await metaSet(STATE_KEY, st); }
   if (applied) { try { window.dispatchEvent(new CustomEvent(KV_REMOTE_EVENT, { detail: applied })); } catch { /* ignore */ } }
@@ -375,10 +402,14 @@ async function pushFrom(ad: Adapter, st: State) {
     const all = (await outboxAll()).sort((a, b) => a.mtime - b.mtime);
     setStatus({ pending: all.length });
     if (!all.length) return;
-    const batch = all.slice(0, PUSH_LIMIT);
-    await ad.push(rowsFor(batch), st.node);
+    // A batch stays under ~1.5 MB (the site takes about 4 MB per request).
+    const rows = rowsFor(all.slice(0, PUSH_LIMIT));
+    let size = 0, n = 0;
+    while (n < rows.length) { size += JSON.stringify(rows[n]).length; if (n > 0 && size > PUSH_BYTES) break; n++; }
+    const batch = all.slice(0, n);
+    await ad.push(rows.slice(0, n), st.node);
     await outboxDone(batch);
-    if (all.length <= PUSH_LIMIT) { setStatus({ pending: (await outboxAll()).length }); return; }
+    if (all.length <= n) { setStatus({ pending: (await outboxAll()).length }); return; }
   }
 }
 
@@ -419,10 +450,20 @@ export function syncNow(): Promise<void> {
       setStatus({ link: info(link), hasSnapshot: !!(await metaGet(SNAPSHOT_KEY)) });
       if (typeof navigator !== "undefined" && navigator.onLine === false) { setStatus({ state: st.joined ? "ok" : "needs_join", error: "offline" }); return; }
       try {
+        let probed: Awaited<ReturnType<Adapter["probe"]>> | null = null;
+        if (link.kind === "company") {
+          // The lab's place moved (it linked its own database) or was emptied (a temporary
+          // store started over): join again, so this device's records reach it.
+          probed = await ad.probe();
+          if (st.joined && ((st.place && probed.place !== st.place) || probed.rev < st.cursor)) st.joined = false;
+          st.place = probed.place;
+        }
         if (!st.joined) {
-          const { records } = await ad.probe();
+          const { records } = probed ?? (await ad.probe());
           // An empty lab database: this device's data becomes the lab's, without asking.
           if (records === 0) await joinWith(ad, st, "upload");
+          // The lab's own computers merge without asking (nothing is removed on either side).
+          else if (link.kind === "company") await joinWith(ad, st, "merge");
           else { setStatus({ state: "needs_join", remoteRecords: records, error: undefined }); return; }
         }
         setStatus({ state: "syncing", error: undefined });
@@ -472,7 +513,7 @@ async function joinWith(ad: Adapter, st: State, mode: JoinMode) {
       const page = await ad.pull(since, "");
       rows.push(...page);
       if (page.length) since = Math.max(since, ...page.map((r) => Number(r.rev) || 0));
-      if (page.length < PULL_LIMIT) break;
+      if (!page.length || (page.length < PULL_LIMIT && JSON.stringify(page).length < PULL_BYTES / 2)) break;
     }
     const byColl = new Map<string, SyncRow[]>();
     for (const r of rows.sort((a, b) => (a.rev ?? 0) - (b.rev ?? 0))) if (isSyncedKey(r.coll)) (byColl.get(r.coll) ?? byColl.set(r.coll, []).get(r.coll)!).push(r);
@@ -581,6 +622,20 @@ export async function unlink(): Promise<{ ok: boolean; error?: SyncErrorCode }> 
 /** Ask the server for this code's link again (after the owner changed it). */
 export async function refreshLink() {
   await refreshLicense(true);
+  await syncNow();
+}
+
+/** «محطة المزامنة»: switch this computer's automatic sync with the lab's computers on or off
+ *  (off: its data stays; switched on again later, it merges again). */
+export async function setCompanySync(on: boolean): Promise<void> {
+  try { if (on) localStorage.setItem(COMPANY_SYNC_KEY, "1"); else localStorage.removeItem(COMPANY_SYNC_KEY); } catch { /* ignore */ }
+  if (!on) {
+    await metaDel(STATE_KEY);
+    await outboxClear();
+    state = null;
+    base.clear();
+  }
+  if (!started) { await startSync(); return; }
   await syncNow();
 }
 

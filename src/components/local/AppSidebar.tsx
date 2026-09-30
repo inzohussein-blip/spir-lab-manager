@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, Menu, X, ChevronLeft, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useSideCollapsed, SideCollapseButton, SideReopenButton } from "@/components/local/SideCollapse";
 
 export interface SideItem { href: string; label: string; hint: string; icon: LucideIcon; exact?: boolean }
 export interface SideSection { title: string; items: SideItem[] }
@@ -27,6 +28,7 @@ export function AppSidebar({
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [collapsed, setCollapsed] = useSideCollapsed();
   const [badges, setBadges] = useState<SideBadges>({});
 
   useEffect(() => {
@@ -59,11 +61,13 @@ export function AppSidebar({
 
       <div onClick={() => setOpen(false)} className={cn("no-print fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-[2px] transition-opacity md:hidden", open ? "opacity-100" : "pointer-events-none opacity-0")} />
 
+      {collapsed && <SideReopenButton onClick={() => setCollapsed(false)} />}
       <aside
         className={cn(
           "no-print fixed inset-y-0 start-0 z-50 flex h-screen w-72 shrink-0 flex-col border-e border-line bg-surface shadow-[var(--shadow-pop)] transition-transform duration-200",
           "md:sticky md:top-0 md:z-auto md:translate-x-0 md:shadow-none",
-          open ? "translate-x-0" : "translate-x-full"
+          open ? "translate-x-0" : "translate-x-full",
+          collapsed && "md:hidden"
         )}
       >
         <div className="px-4 pb-4 pt-5">
@@ -75,6 +79,7 @@ export function AppSidebar({
               <div className="truncate text-[15px] font-bold">{appName}</div>
               <div className="mt-1 inline-flex rounded-full bg-brand-light px-2 py-0.5 text-[10px] font-medium text-brand-dark">{appTag}</div>
             </div>
+            <SideCollapseButton onClick={() => setCollapsed(true)} />
             <button onClick={() => setOpen(false)} aria-label="إغلاق القائمة" className="grid size-8 place-items-center rounded-lg text-muted hover:bg-canvas hover:text-ink md:hidden"><X className="size-4" /></button>
           </div>
         </div>

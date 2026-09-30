@@ -159,7 +159,7 @@ export default function SchedulePage() {
 
       <div className="print-doc hidden bg-white text-black print:block">
         <PrintStyle landscape />
-        <Letterhead title={settings.title} subtitle={settings.subtitle} color="#0369a1" right={<><div className="font-bold" style={{ color: "#0369a1" }}>جدول المناوبات الأسبوعي</div><div dir="ltr">{start} → {addDays(start, 6)}</div></>} />
+        <Letterhead title={settings.title} subtitle={settings.subtitle} logo={settings.logo} color="#0369a1" right={<><div className="font-bold" style={{ color: "#0369a1" }}>جدول المناوبات الأسبوعي</div><div dir="ltr">{start} → {addDays(start, 6)}</div></>} />
         <div className="mt-3">{grid(true)}</div>
         <div className="mt-2 flex flex-wrap gap-3 text-[10px]">{shifts.map((x) => <span key={x.id}><span className="me-1 inline-block size-2.5 rounded-sm" style={{ background: x.color, ...exact }} />{x.name} <span dir="ltr">{x.start}–{x.end}</span></span>)}</div>
         <PrintFooter text={settings.footer} color="#0369a1" />

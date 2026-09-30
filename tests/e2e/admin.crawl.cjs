@@ -4,6 +4,8 @@ const { B, ok, launch, done } = require('./lib.cjs');
 const routes = ['/', '/appointments', '/audit', '/calendar', '/insights', '/inventory', '/invoices', '/orders', '/orders/new',
   '/orders-expenses', '/patients', '/patients/new', '/purchase-orders', '/quality', '/referrers', '/release', '/reorder', '/settings',
   '/staff', '/stock-balance', '/suppliers', '/tests', '/tools', '/users', '/worklist'];
+// The page streams in: for a moment React keeps a hidden copy beside the shown one.
+const settingsReady = (pg) => pg.waitForFunction(() => document.querySelectorAll('[data-testid="settings-layout"]').length === 1 && !document.querySelector('[hidden] [data-testid="settings-layout"]'), null, { timeout: 15000 });
 (async () => {
   const b = await launch();
   const p = await b.newPage({ viewport: { width: 1440, height: 900 } });
@@ -49,7 +51,9 @@ const routes = ['/', '/appointments', '/audit', '/calendar', '/insights', '/inve
   // The page streams in: for a moment the shown sheet and React's hidden copy are both there.
   const sheetReady = () => p.waitForFunction(() => document.querySelectorAll('#report-sheet').length === 1 && !document.querySelector('[hidden] #report-sheet'), null, { timeout: 15000 });
   const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEUlEQVR4nGOI0mr6D8IMMAYARDgIFbiRq5wAAAAASUVORK5CYII=', 'base64');
-  await p.goto(B + '/settings'); await p.waitForSelector('[data-testid="identity-form"]', { timeout: 15000 });
+  await p.goto(B + '/settings'); await settingsReady(p); await p.waitForSelector('[data-testid="identity-form"]', { timeout: 15000 });
+  ok(await p.locator('[data-testid="settings-nav"] [data-section]').count() === 4 && await p.locator('[data-sec="database"]').isHidden() && (await p.locator('[data-testid="badge-tests"]').innerText()).includes('فحص'),
+    'Settings: four sections, one shown at a time, the tests count beside «الفحوصات»');
   await p.fill('[data-testid="identity-form"] input[name="name"]', LAB);
   await p.click('[data-testid="identity-form"] button:has-text("حفظ")'); await p.waitForTimeout(1500);
   await p.setInputFiles('input[aria-label="ملف الشعار"]', { name: 'logo.png', mimeType: 'image/png', buffer: PNG });
@@ -64,7 +68,7 @@ const routes = ['/', '/appointments', '/audit', '/calendar', '/insights', '/inve
     // for the patient made above.
     await p.goto(B + '/orders/new?patient=' + patientId); await p.waitForTimeout(1200);
     if (await p.locator('text=لا فحوصات مطابقة').count()) {
-      await p.goto(B + '/settings'); await p.waitForSelector('[data-testid="import-tests-card"]', { timeout: 15000 });
+      await p.goto(B + '/settings#tests'); await settingsReady(p); await p.waitForSelector('[data-testid="import-tests-card"]', { timeout: 15000 });
       await p.click('button:has-text("استيراد قائمة الفحوصات الافتراضية")');
       await p.waitForSelector('[data-testid="import-tests-msg"]', { timeout: 30000 });
       await p.goto(B + '/orders/new?patient=' + patientId); await p.waitForTimeout(1200);
@@ -86,7 +90,7 @@ const routes = ['/', '/appointments', '/audit', '/calendar', '/insights', '/inve
     const color = (loc) => loc.first().evaluate((e) => getComputedStyle(e).color);
     await p.goto(B + order + '/report'); await sheetReady();
     ok(await color(p.locator('#report-sheet h1')) === 'rgb(90, 42, 130)' && await p.locator('[data-testid="report-signature"]').count() === 0, 'report: the original purple, the empty signature box');
-    await p.goto(B + '/settings'); await p.waitForSelector('[data-testid="report-look"]', { timeout: 15000 });
+    await p.goto(B + '/settings'); await settingsReady(p); await p.waitForSelector('[data-testid="report-look"]', { timeout: 15000 });
     const look = p.locator('[data-testid="report-look"]');
     await look.locator('button[aria-label="أزرق طبي"]').click();
     await look.locator('input[aria-label="التوقيع والختم على التقرير"]').check();
@@ -113,7 +117,7 @@ const routes = ['/', '/appointments', '/audit', '/calendar', '/insights', '/inve
     await p.goto(B + order + '/receipt'); await sheetReady();
     ok(await color(p.locator('#report-sheet .text-base.font-bold')) === 'rgb(30, 79, 145)', 'receipt: the lab\'s colour');
     // Back to the original look.
-    await p.goto(B + '/settings'); await p.waitForSelector('[data-testid="report-look"]', { timeout: 15000 });
+    await p.goto(B + '/settings'); await settingsReady(p); await p.waitForSelector('[data-testid="report-look"]', { timeout: 15000 });
     await look.locator('button[aria-label="إزالة صورة التوقيع"]').click(); await p.waitForSelector('[data-testid="look-signature-preview"]', { state: 'detached', timeout: 15000 });
     await look.locator('button[aria-label="إزالة صورة الختم"]').click(); await p.waitForSelector('[data-testid="look-stamp-preview"]', { state: 'detached', timeout: 15000 });
     await look.locator('button:has-text("الألوان الأصلية")').click();
@@ -129,7 +133,7 @@ const routes = ['/', '/appointments', '/audit', '/calendar', '/insights', '/inve
   ok((await lp.locator('[data-testid="login-lab-name"]').innerText()).includes(LAB), 'sign-in page: the lab\'s name');
   await lctx.close();
   // Back to the defaults.
-  await p.goto(B + '/settings'); await p.waitForSelector('[data-testid="identity-form"]', { timeout: 15000 });
+  await p.goto(B + '/settings'); await settingsReady(p); await p.waitForSelector('[data-testid="identity-form"]', { timeout: 15000 });
   await p.fill('[data-testid="identity-form"] input[name="name"]', '');
   await p.click('[data-testid="identity-form"] button:has-text("حفظ")'); await p.waitForTimeout(1500);
   await p.click('button:has-text("الشعار الافتراضي")');

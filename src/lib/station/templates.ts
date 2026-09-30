@@ -39,11 +39,12 @@ export const isSub = (r: TRow): r is { sub: string } => "sub" in r;
 // ── Shared option lists ──────────────────────────────────────────────────────
 /** Amount scale — printed exactly as chosen: Nil, Few, +, ++, +++, ++++, More than (++++). */
 const AMOUNT = [o("Nil", "لا يوجد"), o("Few", "قليل"), o("+", "بسيط"), o("++", "متوسط"), o("+++", "كثير"), o("++++", "كثير جداً"), o("More than (++++)", "مملوء")];
-const CHEM = plain("Nil", "Trace", "+", "++", "+++", "++++");
+const CHEM = plain("Nil", "+", "++", "+++", "++++", "More than (++++)");
 const PERCENT = Array.from({ length: 21 }, (_, i) => ({ v: `${i * 5}%` }));
 
 // ── General Urine Examination ────────────────────────────────────────────────
-const HPF_U = [...plain("0 - 1", "1 - 2", "2 - 3", "2 - 4", "3 - 5", "5 - 10", "10 - 15", "15 - 20", "20 - 30", "30 - 50"), o("Over 100 / Plenty / Loaded", "مملوء")];
+/** Pus cells and red cells are read as a sign scale, not counts (a count can still be typed). */
+const CELLS = [o("Nil", "لا يوجد"), o("+", "بسيط"), o("++", "متوسط"), o("+++", "كثير"), o("++++", "كثير جداً"), o("More than (++++)", "مملوء")];
 export const GUE: Template = {
   code: "GUE",
   title: "GENERAL URINE EXAMINATION (G.U.E)",
@@ -69,8 +70,8 @@ export const GUE: Template = {
     {
       title: "2. Microscopic Examination", col: "Unit / Field",
       rows: [
-        { k: "pus", label: "Pus Cells (WBCs)", unit: "/ H.P.F", normal: "0 - 1", ok: ["1 - 2", "2 - 3", "2 - 4", "3 - 5"], opts: HPF_U },
-        { k: "rbc", label: "R.B.Cs (Red Blood Cells)", unit: "/ H.P.F", normal: "0 - 1", ok: ["1 - 2", "2 - 3"], opts: HPF_U },
+        { k: "pus", label: "Pus Cells (WBCs)", unit: "/ H.P.F", normal: "Nil", ok: ["+", "0 - 1", "1 - 2", "2 - 3", "2 - 4", "3 - 5"], opts: CELLS },
+        { k: "rbc", label: "R.B.Cs (Red Blood Cells)", unit: "/ H.P.F", normal: "Nil", ok: ["+", "0 - 1", "1 - 2", "2 - 3"], opts: CELLS },
         { k: "epi", label: "Epithelial Cells", unit: "/ H.P.F", normal: "Few", ok: ["Nil", "+"], opts: AMOUNT },
         { k: "casts", label: "Casts (Hyaline / Granular / Others)", unit: "/ L.P.F", normal: "Nil",
           opts: [o("Nil"), o("Hyaline Casts (Few)"), o("Hyaline Casts (Many)"), o("Granular Casts (Few)"), o("Granular Casts (Many)"), o("WBC Casts"), o("RBC Casts")] },
@@ -339,15 +340,23 @@ export function valueText(value: string | undefined, code?: string, short = fals
 }
 
 // ── Options from the station settings (each can be switched off / on) ────────
-export interface FormOptions { diagnosis: boolean; autoCalc: boolean; hideEmpty: boolean; testedOnly: boolean; boldAbnormal: boolean }
+export interface FormOptions { diagnosis: boolean; autoCalc: boolean; hideEmpty: boolean; testedOnly: boolean; boldAbnormal: boolean; highlight: boolean }
 export function formOptionsOf(st: {
-  sfaDiagnosis?: boolean; sfaAutoCalc?: boolean; formHideEmpty?: boolean; csTestedOnly?: boolean; formBoldAbnormal?: boolean;
+  sfaDiagnosis?: boolean; sfaAutoCalc?: boolean; formHideEmpty?: boolean; csTestedOnly?: boolean; formBoldAbnormal?: boolean; entryHighlight?: boolean;
 }): FormOptions {
   return {
     diagnosis: st.sfaDiagnosis !== false, autoCalc: st.sfaAutoCalc !== false,
     hideEmpty: st.formHideEmpty === true, testedOnly: st.csTestedOnly === true, boldAbnormal: st.formBoldAbnormal !== false,
+    highlight: st.entryHighlight !== false,
   };
 }
+
+/** «تمييز» inside a form: a field (or a culture line, or an antibiotic as "ab:<name>") ticked to
+ *  be highlighted on the printed report — kept with the answers as "hl:<key>" = "1". */
+const HL = "hl:";
+export const isHl = (v: FormValues, k: string) => v[HL + k] === "1";
+export const withHl = (v: FormValues, k: string, on: boolean): FormValues => ({ ...v, [HL + k]: on ? "1" : "" });
+export const hlCount = (v: FormValues) => Object.entries(v).filter(([k, x]) => k.startsWith(HL) && x === "1").length;
 
 const firstNum = (s?: string) => { const m = /(\d+(?:\.\d+)?)/.exec(s ?? ""); return m ? Number(m[1]) : null; };
 const numOf = (s?: string) => { const m = /^\s*[<>]?\s*(\d+(?:\.\d+)?)/.exec(s ?? ""); return m ? Number(m[1]) : null; };

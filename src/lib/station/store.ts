@@ -8,6 +8,7 @@
  */
 
 import { kvGet, kvSet, kvBytes, kvLarge, storageQuota } from "@/lib/local/kv";
+import { stockFloor, stockOptions } from "@/lib/local/links";
 import { clearOldDefault } from "@/lib/local/util";
 import { DEFAULT_TESTS } from "./defaultTests";
 
@@ -73,7 +74,8 @@ export interface StationVisit {
   patientId?: string; // links to a saved patient record
   patient: { name: string; gender: Gender; age?: string; phone?: string };
   referrer?: string;
-  results: { testId: string; name_ar: string; value: string; unit?: string }[];
+  /** hl: the result is highlighted on the printed report (the «تمييز» tick). */
+  results: { testId: string; name_ar: string; value: string; unit?: string; hl?: boolean }[];
   /** When the results were handed to the patient (Settings → «حالة التسليم»). */
   delivered_at?: number;
 }
@@ -97,15 +99,24 @@ export interface StationDoctor {
   clinic?: string;
 }
 
-/** A stock (reagent/kit) item; one unit is deducted per linked test ordered. */
+/** A stock item: a reagent / kit (one unit per linked test ordered) or a consumable such as a
+ *  tube (`perVisit`: one unit per visit that has any of its tests). */
 export interface StockItem {
   id: string;
   name: string;
   qty: number;
   minQty?: number;
   expiry?: string; // YYYY-MM-DD
+  /** The lab station's tests that use this item. */
+  testIds?: string[];
+  /** One unit per visit (tubes, containers, needles) instead of one per test. */
+  perVisit?: boolean;
+  /** Older single link (kept readable). */
   linkedTestId?: string;
 }
+/** The tests a stock item is linked to (old single link included). */
+export const stockTestIds = (s: StockItem): string[] =>
+  Array.from(new Set([...(s.testIds ?? []), ...(s.linkedTestId ? [s.linkedTestId] : [])]));
 
 export interface StationPage {
   id: string;
@@ -137,6 +148,8 @@ const K_DEVICE_TAG = "station.deviceTag.v1";
 const K_CATALOG_VER = "station.catalogVersion.v1";
 /** One-time fix: the urine test's built-in range text became English ("Normal"). */
 const K_FIX_GUE = "station.fixGueNormal.v1";
+/** One-time rename of the urine test: «تحليل البول العام» → «فحص الإدرار العام (G.U.E)» (only if not renamed by the lab). */
+const K_RENAME_GUE = "station.renameGue.v1";
 /** One-time addition of the structured-form tests (stool, semen, culture) to existing catalogs. */
 const K_ADD_FORMS = "station.addFormTests.v1";
 /** Bump when DEFAULT_TESTS gains tests, so existing installs receive them. */
@@ -159,6 +172,17 @@ export interface StationSettings {
   derivedEgfr?: boolean;
   /** Under autoDerived: LDL by Sampson when TG 400–800 — off by default. */
   derivedSampson?: boolean;
+  /** The sample-number barcode at the top of the report, beside the patient's details — on by default
+   *  (the sample number itself is always printed). */
+  reportBarcode?: boolean;
+  /** Few tests: a larger results table that fills more of the page (off by default). */
+  reportFill?: boolean;
+  /** A «واتساب» button beside it: the report as a PDF to share — on by default. */
+  entryWhatsApp?: boolean;
+  /** A «طباعة» button under the results entry box — on by default. */
+  entryPrintButton?: boolean;
+  /** A «تمييز» tick beside each result that colours it on the report — on by default. */
+  entryHighlight?: boolean;
   /** Tube label printing from the entry screen — off (and hidden) by default. */
   tubeLabel?: boolean;
   labelSize?: "50x25" | "60x30";
@@ -241,6 +265,7 @@ export function getTests(): StationTest[] {
     write(K_TESTS, seed);
     write(K_CATALOG_VER, CATALOG_VERSION);
     write(K_ADD_FORMS, true);
+    write(K_RENAME_GUE, true);
     return seed;
   }
   if (!read<boolean>(K_FIX_GUE, false)) {
@@ -248,6 +273,14 @@ export function getTests(): StationTest[] {
     write(K_TESTS, fixed);
     write(K_FIX_GUE, true);
     t.splice(0, t.length, ...fixed);
+  }
+  if (!read<boolean>(K_RENAME_GUE, false)) {
+    if (t.some((x) => x.code === "GUE" && x.name_ar.trim() === "تحليل البول العام")) {
+      const renamed = t.map((x) => (x.code === "GUE" && x.name_ar.trim() === "تحليل البول العام" ? { ...x, name_ar: "فحص الإدرار العام (G.U.E)" } : x));
+      t.splice(0, t.length, ...renamed);
+      write(K_TESTS, t);
+    }
+    write(K_RENAME_GUE, true);
   }
   if (!read<boolean>(K_ADD_FORMS, false)) {
     const have = new Set(t.map((x) => x.code));
@@ -572,20 +605,111 @@ export function getStock(): StockItem[] {
 export function saveStock(list: StockItem[]): void {
   write(K_STOCK, list);
 }
-/** Deduct one unit from each stock item linked to one of these tests. */
-export function deductStockForTests(testIds: string[]): void {
-  if (testIds.length === 0) return;
-  const set = new Set(testIds);
-  const next = getStock().map((s) =>
-    s.linkedTestId && set.has(s.linkedTestId) ? { ...s, qty: Math.max(0, Number(s.qty) - 1) } : s
-  );
-  saveStock(next);
+/** Units each stock item gives to the tests newly ordered on a visit: a reagent one per linked
+ *  test, a consumable (per visit) one when the visit has any of its tests — and none when the
+ *  visit already had one of them (`already`: the visit's tests before this save). */
+export function stockUse(list: StockItem[], testIds: string[], already: string[]): Map<string, number> {
+  const added = new Set(testIds), before = new Set(already);
+  const use = new Map<string, number>();
+  for (const s of list) {
+    const ids = stockTestIds(s);
+    const n = ids.filter((id) => added.has(id)).length;
+    if (!n) continue;
+    const u = s.perVisit ? (ids.some((id) => before.has(id)) ? 0 : 1) : n;
+    if (u) use.set(s.id, u);
+  }
+  return use;
 }
-/** Clear the link on any stock item that pointed at a now-deleted test. */
+/** A stock item a save needs more of than is in stock. */
+export interface StockShort { name: string; qty: number; need: number }
+/** Use stock for the tests newly ordered on a visit (see stockUse). Returns what was not in stock
+ *  (the count stops at 0, or goes below it when the lab allows negative stock). */
+export function deductStockForTests(testIds: string[], already: string[] = []): StockShort[] {
+  if (testIds.length === 0) return [];
+  const list = getStock();
+  const use = stockUse(list, testIds, already);
+  if (!use.size) return [];
+  const short: StockShort[] = [];
+  saveStock(list.map((s) => {
+    const u = use.get(s.id);
+    if (!u) return s;
+    const qty = Number(s.qty) || 0;
+    if (qty < u) short.push({ name: s.name, qty, need: u });
+    return { ...s, qty: stockFloor(qty - u) };
+  }));
+  return short;
+}
+// ── Results ↔ stock: what each visit has used ──────────────────────────────────
+/** Per visit: the tests whose materials were already taken from stock (or skipped by hand), so a
+ *  visit never uses stock twice — whether deducted on save or issued later from the stock room. */
+const K_USED = "station.stockUsed.v1";
+type StockUsed = Record<string, { at: number; ids: string[] }>;
+const USED_DAYS = 60;
+function getUsed(): StockUsed { return read<StockUsed>(K_USED, {}); }
+function markUsed(visitId: string, ids: string[]): void {
+  const used = getUsed();
+  const cut = Date.now() - USED_DAYS * 86400000;
+  for (const [k, v] of Object.entries(used)) if (!v || v.at < cut) delete used[k];
+  used[visitId] = { at: Date.now(), ids: Array.from(new Set([...(used[visitId]?.ids ?? []), ...ids])) };
+  write(K_USED, used);
+}
+/** The tests of a visit whose stock was already handled (`before`: its tests before this edit, for
+ *  visits saved before this record existed). */
+const handled = (visitId: string, before: string[]) => getUsed()[visitId]?.ids ?? before;
+
+/** Take a visit's materials from stock (tests not handled yet) and remember them. */
+export function issueVisitStock(visitId: string, testIds: string[], before: string[] = []): StockShort[] {
+  const had = handled(visitId, before);
+  const short = deductStockForTests(testIds.filter((id) => !had.includes(id)), had);
+  markUsed(visitId, testIds);
+  return short;
+}
+/** «تجاهل»: mark a visit's tests as handled without taking anything from stock. */
+export function skipVisitStock(visitId: string, testIds: string[]): void { markUsed(visitId, testIds); }
+
+/** On saving results in the lab station: deduct now (auto), or leave them waiting in the stock room
+ *  (manual — nothing changes until they are issued). */
+export function stockForVisit(visitId: string, testIds: string[], before: string[] = []): StockShort[] {
+  if (stockOptions().mode === "manual") return [];
+  return issueVisitStock(visitId, testIds, before);
+}
+
+/** A saved visit whose materials wait to be issued by hand, with what they would use. */
+export interface PendingStock { visit: StationVisit; testIds: string[]; items: { name: string; use: number; qty: number }[] }
+/** Manual mode: visits since it began whose linked materials were not issued (or skipped) yet. */
+export function pendingStock(): PendingStock[] {
+  const o = stockOptions();
+  const since = Math.max(o.manualSince ?? Infinity, Date.now() - USED_DAYS * 86400000);
+  if (!Number.isFinite(since)) return [];
+  const list = getStock(), used = getUsed();
+  const out: PendingStock[] = [];
+  for (const v of getVisits()) {
+    if (v.created_at < since) continue;
+    const had = used[v.id]?.ids ?? [];
+    const ids = v.results.map((r) => r.testId);
+    const use = stockUse(list, ids.filter((id) => !had.includes(id)), had);
+    if (!use.size) continue;
+    out.push({ visit: v, testIds: ids, items: list.filter((s) => use.has(s.id)).map((s) => ({ name: s.name, use: use.get(s.id)!, qty: Number(s.qty) || 0 })) });
+  }
+  return out;
+}
+
+/** Per test: the linked stock items that are out (0 or less) — for the entry screen's warning. */
+export function outOfStockByTest(testIds: string[]): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  const empty = getStock().filter((s) => (Number(s.qty) || 0) <= 0);
+  for (const id of testIds) {
+    const names = empty.filter((s) => stockTestIds(s).includes(id)).map((s) => s.name);
+    if (names.length) out[id] = names;
+  }
+  return out;
+}
+/** Drop a now-deleted test from every stock item's links. */
 export function unlinkTestFromStock(testId: string): void {
   const list = getStock();
-  if (!list.some((s) => s.linkedTestId === testId)) return;
-  saveStock(list.map((s) => (s.linkedTestId === testId ? { ...s, linkedTestId: undefined } : s)));
+  if (!list.some((s) => stockTestIds(s).includes(testId))) return;
+  saveStock(list.map((s) => (stockTestIds(s).includes(testId)
+    ? { ...s, linkedTestId: undefined, testIds: stockTestIds(s).filter((id) => id !== testId) } : s)));
 }
 /** Calendar days until expiry (0 = expires today, negative = expired), or null when no expiry set. */
 export function daysToExpiry(expiry?: string): number | null {

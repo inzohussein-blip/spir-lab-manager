@@ -7,6 +7,7 @@ import { updateReportImage, updateReportLook } from "@/app/actions/settings";
 import { shrinkImage } from "@/lib/shrinkImage";
 import { REPORT_PALETTES, tableColors } from "@/lib/station/tableStyle";
 import type { ReportLook } from "@/lib/lab-identity";
+import { notifySaved } from "@/components/SettingsLayout";
 
 const field = "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
 
@@ -33,13 +34,15 @@ export function ReportLookCard({ look, lab }: { look: ReportLook; lab: { name: s
     const r = await updateReportLook(rest);
     setBusy(false);
     setMsg(r.ok ? { ok: true, text: "✓ حُفظ شكل التقرير" } : { ok: false, text: "للمدير فقط." });
-    if (r.ok) router.refresh();
+    if (r.ok) { notifySaved(); router.refresh(); }
   }
 
   return (
     <div className="mb-4 rounded-2xl border border-line bg-surface p-5 shadow-sm" data-testid="report-look">
       <div className="mb-1 font-semibold">شكل تقرير النتائج</div>
       <p className="mb-4 text-xs text-muted">ألوان المختبر والتوقيع والختم ولغة التقرير. تُطبَّق على تقرير النتائج، وتظهر الألوان في وصل الاستلام أيضاً.</p>
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,340px)]">
+      <div className="min-w-0">
 
       {/* ── Colours ── */}
       <div className="mb-2 flex items-center gap-2 text-sm font-medium"><Palette className="size-4" /> ألوان التقرير</div>
@@ -83,22 +86,6 @@ export function ReportLookCard({ look, lab }: { look: ReportLook; lab: { name: s
           className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-sm hover:bg-canvas disabled:opacity-50">
           <RotateCcw className="size-4" /> الألوان الأصلية
         </button>
-      </div>
-
-      {/* Preview */}
-      <div className="mt-3 rounded-xl border border-line bg-white p-4 text-black" data-testid="look-preview">
-        <div className="mb-2 text-[11px] text-gray-500">معاينة</div>
-        <div className="flex items-center gap-3 border-b-4 pb-2" style={{ borderColor: c.border }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={lab.logo} alt="" className="size-10 object-contain" />
-          <div>
-            <div className="text-lg font-extrabold" style={{ color: c.title }} data-testid="look-preview-name">{lab.name}</div>
-            {lab.subtitle && <div className="text-xs font-medium" style={{ color: c.subtitle }}>{lab.subtitle}</div>}
-          </div>
-        </div>
-        <div className="mt-3 border-b pb-1 text-sm font-bold" style={{ color: c.groupText, borderColor: c.line }}>وظائف الكلى</div>
-        <div className="flex justify-between border-b border-gray-100 py-1.5 text-sm"><span>اليوريا</span><b>32</b><span className="text-gray-500">15 – 45</span></div>
-        <div className="mt-3 rounded-md px-3 py-1.5 text-center text-[11px] font-medium text-white" style={{ background: c.bar }}>{lab.footer || "العنوان - الهاتف"}</div>
       </div>
 
       {/* ── Signature and stamp ── */}
@@ -148,6 +135,26 @@ export function ReportLookCard({ look, lab }: { look: ReportLook; lab: { name: s
         </button>
         {msg && <span data-testid="look-msg" className={`text-sm ${msg.ok ? "text-teal-700" : "text-red-700"}`}>{msg.text}</span>}
       </div>
+      </div>
+      {/* The preview stays beside the settings on wide screens */}
+      <div className="min-w-0 xl:sticky xl:top-4 xl:self-start">
+      {/* Preview */}
+        <div className="rounded-xl border border-line bg-white p-4 text-black" data-testid="look-preview">
+          <div className="mb-2 text-[11px] text-gray-500">معاينة</div>
+          <div className="flex items-center gap-3 border-b-4 pb-2" style={{ borderColor: c.border }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={lab.logo} alt="" className="size-10 object-contain" />
+            <div>
+              <div className="text-lg font-extrabold" style={{ color: c.title }} data-testid="look-preview-name">{lab.name}</div>
+              {lab.subtitle && <div className="text-xs font-medium" style={{ color: c.subtitle }}>{lab.subtitle}</div>}
+            </div>
+          </div>
+          <div className="mt-3 border-b pb-1 text-sm font-bold" style={{ color: c.groupText, borderColor: c.line }}>وظائف الكلى</div>
+          <div className="flex justify-between border-b border-gray-100 py-1.5 text-sm"><span>اليوريا</span><b>32</b><span className="text-gray-500">15 – 45</span></div>
+          <div className="mt-3 rounded-md px-3 py-1.5 text-center text-[11px] font-medium text-white" style={{ background: c.bar }}>{lab.footer || "العنوان - الهاتف"}</div>
+        </div>
+      </div>
+      </div>
     </div>
   );
 }
@@ -162,7 +169,7 @@ function ImagePick({ kind, label, value }: { kind: "signature" | "stamp"; label:
     setBusy(true); setErr("");
     const r = await updateReportImage(kind, dataUrl);
     setBusy(false);
-    if (r.ok) router.refresh(); else setErr(r.error === "bad_image" ? "الصورة غير مناسبة — اختر PNG أو JPG أصغر." : "للمدير فقط.");
+    if (r.ok) { notifySaved(); router.refresh(); } else setErr(r.error === "bad_image" ? "الصورة غير مناسبة — اختر PNG أو JPG أصغر." : "للمدير فقط.");
   }
   return (
     <div className="text-sm font-medium" data-testid={`look-${kind}`}>

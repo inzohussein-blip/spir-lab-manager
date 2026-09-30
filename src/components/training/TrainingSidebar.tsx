@@ -11,6 +11,7 @@ import { getTests, getTubes, getTools } from "@/lib/training/store";
 import { cn } from "@/lib/utils";
 import { useEditLock, lockNow } from "@/lib/training/lock";
 import { UnlockForm } from "./LockGate";
+import { useSideCollapsed, SideCollapseButton, SideReopenButton } from "@/components/local/SideCollapse";
 
 interface NavItem { href: string; label: string; hint: string; icon: LucideIcon; exact?: boolean }
 
@@ -52,6 +53,7 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
 export function TrainingSidebar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [collapsed, setCollapsed] = useSideCollapsed();
   const [counts, setCounts] = useState({ tests: 0, tubes: 0, tools: 0 });
   const { lockOn, canEdit } = useEditLock();
   const [showUnlock, setShowUnlock] = useState(false);
@@ -96,11 +98,13 @@ export function TrainingSidebar() {
         className={cn("no-print fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-[2px] transition-opacity md:hidden", open ? "opacity-100" : "pointer-events-none opacity-0")}
       />
 
+      {collapsed && <SideReopenButton onClick={() => setCollapsed(false)} />}
       <aside
         className={cn(
           "no-print fixed inset-y-0 start-0 z-50 flex h-screen w-72 shrink-0 flex-col border-e border-line bg-surface shadow-[var(--shadow-pop)] transition-transform duration-200",
           "md:sticky md:top-0 md:z-auto md:translate-x-0 md:shadow-none",
-          open ? "translate-x-0" : "translate-x-full"
+          open ? "translate-x-0" : "translate-x-full",
+          collapsed && "md:hidden"
         )}
       >
         <div className="px-4 pb-4 pt-5">
@@ -112,6 +116,7 @@ export function TrainingSidebar() {
               <div className="truncate text-[15px] font-bold">محطة التدريب</div>
               <div className="mt-1 inline-flex rounded-full bg-brand-light px-2 py-0.5 text-[10px] font-medium text-brand-dark">والمعلومات — عصارة الخبرة</div>
             </div>
+            <SideCollapseButton onClick={() => setCollapsed(true)} />
             <button onClick={() => setOpen(false)} aria-label="إغلاق القائمة" className="grid size-8 place-items-center rounded-lg text-muted hover:bg-canvas hover:text-ink md:hidden">
               <X className="size-4" />
             </button>

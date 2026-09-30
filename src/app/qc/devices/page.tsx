@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Wrench, Plus, Trash2, CheckCircle2, AlertOctagon, Printer, Pencil, ChevronDown, Gauge } from "lucide-react";
 import { getDevices, saveDevices, taskDue, calibDue, FREQ, getSettings, type Device, type Freq, type DeviceLog, type QcSettings } from "@/lib/qc/store";
+import { staffNames, suppliers } from "@/lib/local/links";
 import { newId, todayYmd } from "@/lib/local/util";
 import { PrintStyle, Letterhead, PrintFooter, SignRow, exact } from "@/components/local/PrintDoc";
 
@@ -23,8 +24,10 @@ export default function DevicesPage() {
   const [fault, setFault] = useState("");
   const [settings, setSettings] = useState<QcSettings | null>(null);
   const [printId, setPrintId] = useState<string | null>(null);
+  const [staff, setStaff] = useState<string[]>([]);
+  const [sups, setSups] = useState<{ name: string; phone?: string }[]>([]);
 
-  useEffect(() => { const d = getDevices(); setList(d); setOpen(d[0]?.id ?? null); setSettings(getSettings()); }, []);
+  useEffect(() => { const d = getDevices(); setList(d); setOpen(d[0]?.id ?? null); setSettings(getSettings()); setStaff(staffNames()); setSups(suppliers()); }, []);
 
   function persist(next: Device[]) { setList(next); saveDevices(next); }
   const upd = (id: string, fn: (d: Device) => Device) => persist(list.map((d) => (d.id === id ? fn(d) : d)));
@@ -47,7 +50,9 @@ export default function DevicesPage() {
             <p className="mt-1 text-sm text-muted">مهام الصيانة الدورية، موعد المعايرة، وسجل الأعطال لكل جهاز.</p>
           </div>
           <div className="flex items-end gap-2">
-            <label className="text-xs text-muted">المنفّذ<input value={by} onChange={(e) => setBy(e.target.value)} className={`mt-1 ${inp} w-32`} /></label>
+            <label className="text-xs text-muted">المنفّذ<input value={by} onChange={(e) => setBy(e.target.value)} list="staff-names" className={`mt-1 ${inp} w-32`} /></label>
+            <datalist id="staff-names">{staff.map((n) => <option key={n} value={n} />)}</datalist>
+            <datalist id="supplier-names">{sups.map((s) => <option key={s.name} value={s.name} />)}</datalist>
             <button onClick={addDevice} className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white hover:bg-brand-dark"><Plus className="size-4" /> جهاز</button>
           </div>
         </div>
@@ -85,7 +90,13 @@ export default function DevicesPage() {
                       {editing === d.id ? (
                         <div className="grid grid-cols-2 gap-2">
                           {([["name", "الاسم"], ["model", "الموديل"], ["serial", "الرقم التسلسلي"], ["location", "الموقع"], ["vendor", "شركة الصيانة"], ["vendorPhone", "هاتف الصيانة"]] as const).map(([k, l]) => (
-                            <label key={k} className="text-xs text-muted">{l}<input value={(d[k] as string) ?? ""} onChange={(e) => upd(d.id, (x) => ({ ...x, [k]: e.target.value }))} className={`mt-1 ${inp}`} /></label>
+                            <label key={k} className="text-xs text-muted">{l}<input value={(d[k] as string) ?? ""} list={k === "vendor" ? "supplier-names" : undefined} aria-label={l}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                // A supplier from procurement: its phone comes along when the device has none.
+                                const sup = k === "vendor" ? sups.find((s) => s.name === v) : undefined;
+                                upd(d.id, (x) => ({ ...x, [k]: v, ...(sup?.phone && !x.vendorPhone ? { vendorPhone: sup.phone } : {}) }));
+                              }} className={`mt-1 ${inp}`} /></label>
                           ))}
                           <label className="text-xs text-muted">تاريخ التركيب<input type="date" value={d.installed ?? ""} onChange={(e) => upd(d.id, (x) => ({ ...x, installed: e.target.value || undefined }))} className={`mt-1 ${inp}`} /></label>
                           <label className="text-xs text-muted">المعايرة كل (شهر)<input type="number" min={0} value={d.calibMonths ?? 0} onChange={(e) => upd(d.id, (x) => ({ ...x, calibMonths: Number(e.target.value) || undefined }))} className={`mt-1 ${inp}`} /></label>
@@ -176,7 +187,7 @@ export default function DevicesPage() {
       {pd && settings && (
         <div className="print-doc hidden bg-white text-[11.5px] text-black print:block">
           <PrintStyle />
-          <Letterhead title={settings.title} subtitle={settings.subtitle} color="#be123c" right={<><div className="font-bold" style={{ color: "#be123c" }}>سجل جهاز</div><div dir="ltr">{todayYmd()}</div></>} />
+          <Letterhead title={settings.title} subtitle={settings.subtitle} logo={settings.logo} color="#be123c" right={<><div className="font-bold" style={{ color: "#be123c" }}>سجل جهاز</div><div dir="ltr">{todayYmd()}</div></>} />
           <div className="keep mt-3 grid grid-cols-3 gap-2 rounded-lg border border-gray-300 p-3">
             <div className="col-span-3 text-base font-bold">{pd.name}</div>
             {[["الموديل", pd.model], ["الرقم التسلسلي", pd.serial], ["الموقع", pd.location], ["التركيب", pd.installed], ["شركة الصيانة", pd.vendor], ["الهاتف", pd.vendorPhone], ["آخر معايرة", pd.lastCalib], ["المعايرة القادمة", calibDue(pd)?.due]].map(([k, v]) => <div key={k}><b>{k}:</b> {v || "—"}</div>)}

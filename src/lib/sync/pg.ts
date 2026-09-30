@@ -2,7 +2,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
-import { SCHEMA_SQL, PULL_LIMIT, PUSH_LIMIT, type SyncRow } from "./protocol";
+import { SCHEMA_SQL, PULL_LIMIT, PUSH_LIMIT, PULL_BYTES, type SyncRow } from "./protocol";
 
 /**
  * A lab's own PostgreSQL, reached from this server with the connection string the owner (or the
@@ -86,13 +86,16 @@ export function toLabError(err: unknown): LabDbError {
   return new LabDbError("db", msg);
 }
 
+/** Anything that runs a statement: a lab's pool, or a lab's place (lib/db/lab.ts storeOf). */
+export type Queryable = { query: (sql: string, params?: unknown[]) => Promise<{ rows: Record<string, unknown>[] }> };
+
 /** Can this server open it (and create the table)? Also tells whether it already holds records. */
 export async function probe(conn: string): Promise<{ records: number }> {
-  try {
-    const pool = await poolFor(conn);
-    const r = await pool.query(`select count(*)::int as n from lab_sync_records where not deleted`);
-    return { records: Number(r.rows[0]?.n ?? 0) };
-  } catch (err) { throw toLabError(err); }
+  try { return await probeOn(await poolFor(conn)); } catch (err) { throw toLabError(err); }
+}
+export async function probeOn(q: Queryable): Promise<{ records: number }> {
+  const r = await q.query(`select count(*)::int as n from lab_sync_records where not deleted`);
+  return { records: Number(r.rows[0]?.n ?? 0) };
 }
 
 const clean = (r: SyncRow, node: string) => ({
@@ -101,34 +104,41 @@ const clean = (r: SyncRow, node: string) => ({
 });
 
 export async function push(conn: string, rows: SyncRow[], node: string): Promise<number> {
+  try { return await pushOn(await poolFor(conn), rows, node); } catch (err) { throw toLabError(err); }
+}
+export async function pushOn(q: Queryable, rows: SyncRow[], node: string): Promise<number> {
   const batch = rows.slice(0, PUSH_LIMIT).filter((r) => r && typeof r.coll === "string" && typeof r.id === "string").map((r) => clean(r, node));
   if (!batch.length) return 0;
-  try {
-    const pool = await poolFor(conn);
-    const r = await pool.query(`select lab_sync_push($1::jsonb) as n`, [JSON.stringify(batch)]);
-    return Number(r.rows[0]?.n ?? 0);
-  } catch (err) { throw toLabError(err); }
+  const r = await q.query(`select lab_sync_push($1::jsonb) as n`, [JSON.stringify(batch)]);
+  return Number(r.rows[0]?.n ?? 0);
 }
 
 /** Records changed after `since` by other devices (oldest first). */
 export async function pull(conn: string, since: number, node: string, limit = PULL_LIMIT): Promise<SyncRow[]> {
-  try {
-    const pool = await poolFor(conn);
-    const r = await pool.query(
-      `select coll, id, data, mtime, deleted, ord, rev from lab_sync_records where rev > $1 and node <> $2 order by rev limit $3`,
-      [Math.max(0, Math.floor(since)), node, Math.max(1, Math.min(PULL_LIMIT, limit))],
-    );
-    return r.rows.map((x) => ({
-      coll: String(x.coll), id: String(x.id), data: x.data ?? null, mtime: Number(x.mtime), deleted: !!x.deleted, ord: Number(x.ord), rev: Number(x.rev),
-    }));
-  } catch (err) { throw toLabError(err); }
+  try { return await pullOn(await poolFor(conn), since, node, limit); } catch (err) { throw toLabError(err); }
+}
+export async function pullOn(q: Queryable, since: number, node: string, limit = PULL_LIMIT): Promise<SyncRow[]> {
+  const r = await q.query(
+    // Backups («backup.*») are kept here but never sent to the other devices.
+    `select coll, id, data, mtime, deleted, ord, rev from lab_sync_records where rev > $1 and node <> $2 and coll not like 'backup.%' order by rev limit $3`,
+    [Math.max(0, Math.floor(since)), node, Math.max(1, Math.min(PULL_LIMIT, limit))],
+  );
+  const out: SyncRow[] = [];
+  let size = 0;
+  for (const x of r.rows) {
+    // Stay under the reply budget (large records: pictures); the rest comes with the next pull.
+    size += JSON.stringify(x.data ?? null).length + 200;
+    if (out.length && size > PULL_BYTES) break;
+    out.push({ coll: String(x.coll), id: String(x.id), data: x.data ?? null, mtime: Number(x.mtime), deleted: !!x.deleted, ord: Number(x.ord), rev: Number(x.rev) });
+  }
+  return out;
 }
 
 /** The highest rev so far (a device that replaces its data with the lab's starts from here). */
 export async function lastRev(conn: string): Promise<number> {
-  try {
-    const pool = await poolFor(conn);
-    const r = await pool.query(`select coalesce(max(rev), 0)::bigint as n from lab_sync_records`);
-    return Number(r.rows[0]?.n ?? 0);
-  } catch (err) { throw toLabError(err); }
+  try { return await lastRevOn(await poolFor(conn)); } catch (err) { throw toLabError(err); }
+}
+export async function lastRevOn(q: Queryable): Promise<number> {
+  const r = await q.query(`select coalesce(max(rev), 0)::bigint as n from lab_sync_records`);
+  return Number(r.rows[0]?.n ?? 0);
 }

@@ -54,6 +54,9 @@ const IMG = '/lab-images/test/أنبوب اختبار.png';
   ok(JSON.stringify(labels) === JSON.stringify(['Positive', 'Negative', '+', '++', '+++']), `qualitative quick choices: ${labels.join(' ')}`);
   await p.click('button:text-is("Positive")');
   ok(await p.locator('[data-result-idx="0"]').inputValue() === 'Positive', '«Positive» fills the result');
+  const qrow = p.locator('#report-sheet tbody tr', { hasText: 'Positive' }).first();
+  ok((await qrow.locator('td[data-range]').innerText()).trim() === '' && (await qrow.locator('td[data-flag]').innerText()).trim() === '',
+    'positive / negative test: no reference range and no flag on the report');
 
   // ── A long visits list: drawn in parts, searched in full ──
   const many = Array.from({ length: 260 }, (_, i) => ({
@@ -78,7 +81,7 @@ const IMG = '/lab-images/test/أنبوب اختبار.png';
   const edited = tests0.filter((t) => t.id !== gone.id).map((t) => (t.id === glu.id ? { ...t, unit: 'وحدة خاطئة' } : t));
   edited.push({ id: 'my-own', name_ar: 'فحص خاص بالمختبر', normal: { kind: 'none' } });
   await kvPut(p, 'station.tests.v1', edited);
-  await p.goto(B + '/station/settings'); await p.waitForSelector('[data-testid="defaults-card"]', { timeout: 15000 });
+  await p.goto(B + '/station/settings#tests'); await p.waitForSelector('[data-testid="defaults-card"]', { timeout: 15000 });
   await p.click('button:has-text("استعادة القيم الافتراضية للفحوصات")'); await p.waitForTimeout(400);
   let t1 = await kv(p, 'station.tests.v1');
   ok(t1.find((t) => t.id === glu.id)?.unit === glu.unit, 'a built-in test back to its default (same id)');
@@ -92,7 +95,7 @@ const IMG = '/lab-images/test/أنبوب اختبار.png';
   await p.goto(B + '/station/visits'); await p.waitForSelector('text=مراجع رقم 0', { timeout: 15000 });
   await p.click('button:has-text("عرض/طباعة")'); await p.waitForTimeout(500);
   ok(await p.locator('[data-testid="report-signature"]').count() === 0 && await p.locator('text=التوقيع / الختم').count() === 1, 'off by default: the plain «التوقيع / الختم» line');
-  await p.goto(B + '/station/settings'); await p.waitForSelector('[data-testid="signature-card"]', { timeout: 15000 });
+  await p.goto(B + '/station/settings#report'); await p.waitForSelector('[data-testid="signature-card"]', { timeout: 15000 });
   await p.locator('[data-testid="signature-card"] button[role="switch"]').click(); await p.waitForTimeout(300);
   await p.selectOption('select[aria-label="صورة التوقيع"]', IMG);
   await p.selectOption('select[aria-label="صورة الختم"]', IMG);

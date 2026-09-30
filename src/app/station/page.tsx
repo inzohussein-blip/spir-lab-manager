@@ -2,10 +2,10 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search, Printer, Save, Check, Tag, ClipboardList, Beaker, Layers, Pencil, UserRound, StickyNote, Plus, X, RotateCcw, ListChecks, ChevronDown, type LucideIcon } from "lucide-react";
+import { Search, Printer, MessageCircle, Save, Check, Tag, ClipboardList, Beaker, Layers, Pencil, UserRound, StickyNote, Plus, X, RotateCcw, ListChecks, ChevronDown, AlertTriangle, type LucideIcon } from "lucide-react";
 import {
   getTests, addVisit, updateVisit, getVisit, getSettings, getPanels, nextAccession, uid, rangeLabel, flagFor,
-  getPatients, getPatient, upsertPatient, addPatientNote, deductStockForTests, getDoctors, addDoctor,
+  getPatients, getPatient, upsertPatient, addPatientNote, stockForVisit, outOfStockByTest, getDoctors, addDoctor,
   previousResults, resultDelta, localYmd, splitAge, joinAge, type AgeUnitPick,
   type StationTest, type Gender, type StationVisit, type StationSettings, type StationPanel, type StationPatient, type NoteEntry, type StationDoctor,
 } from "@/lib/station/store";
@@ -13,9 +13,11 @@ import { ReportSheet } from "@/components/station/ReportSheet";
 import { loadBarcode } from "@/components/station/Barcode";
 import { TubeLabels } from "@/components/station/TubeLabel";
 import { FormDialog, fillNormals } from "@/components/station/ReportForms";
-import { isFormCode, decodeForm, encodeForm, formProgress, formOptionsOf, type FormCode } from "@/lib/station/templates";
+import { isFormCode, decodeForm, encodeForm, formProgress, formOptionsOf, hlCount, type FormCode } from "@/lib/station/templates";
 import { computeDerived } from "@/lib/station/derived";
 import { useToast } from "@/components/station/Toast";
+import { fmtDate } from "@/lib/utils";
+import { stockOptions } from "@/lib/local/links";
 
 const inp =
   "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
@@ -55,10 +57,11 @@ function PrevLine({ prev, current }: { prev: { value: string; at: number }; curr
 /** Serialized form state used to detect unsaved changes. */
 function formSnapshot(
   f: { name: string; gender: Gender; age: string; phone: string; referrer: string },
-  selected: Set<string>, results: Record<string, string>, tests: StationTest[],
+  selected: Set<string>, results: Record<string, string>, tests: StationTest[], hl: Set<string> = new Set(),
 ): string {
   const chosen = tests.filter((t) => selected.has(t.id));
-  return JSON.stringify([f.name.trim(), f.gender, f.age, f.phone, f.referrer, Array.from(selected).sort(), chosen.map((t) => results[t.id] ?? "")]);
+  const marks = chosen.filter((t) => hl.has(t.id)).map((t) => t.id);
+  return JSON.stringify([f.name.trim(), f.gender, f.age, f.phone, f.referrer, Array.from(selected).sort(), chosen.map((t) => results[t.id] ?? ""), ...(marks.length ? [marks] : [])]);
 }
 
 /** Card header — icon tile + title + hint, matching the sidebar style. */
@@ -89,6 +92,8 @@ function StationEntryPage() {
   const [referrer, setReferrer] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [results, setResults] = useState<Record<string, string>>({});
+  // Results ticked «تمييز» (highlighted on the printed report).
+  const [hl, setHl] = useState<Set<string>>(new Set());
   const [q, setQ] = useState("");
   const [openCats, setOpenCats] = useState<Set<string>>(new Set()); // collapsible groups
   const [paper, setPaper] = useState<"A4" | "A5">("A4");
@@ -144,9 +149,11 @@ function StationEntryPage() {
         const rmap: Record<string, string> = {};
         v.results.forEach((r) => { rmap[r.testId] = r.value; });
         setResults(rmap);
+        const marks = new Set(v.results.filter((r) => r.hl).map((r) => r.testId));
+        setHl(marks);
         setBaseline(formSnapshot(
           { name: v.patient.name, gender: v.patient.gender, age: v.patient.age ?? "", phone: v.patient.phone ?? "", referrer: v.referrer ?? "" },
-          ids, rmap, catalog,
+          ids, rmap, catalog, marks,
         ));
       }
       return;
@@ -212,6 +219,12 @@ function StationEntryPage() {
     return previousResults({ patientId, name, phone }, { before: createdAt ?? undefined, excludeId: editId });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [patientId, editId, createdAt, savedTick]);
+  // Settings → «المخزن»: the chosen tests whose linked materials are out of stock.
+  const outOfStock = useMemo(
+    () => (stockOptions().warnOut ? outOfStockByTest(Array.from(selected)) : {}),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selected, savedTick],
+  );
   const showPrev = settings.showPrevious !== false;
   const printPrev = settings.printPrevious === true && chosen.some((t) => prev[t.id] && !isFormCode(t.code));
 
@@ -248,7 +261,7 @@ function StationEntryPage() {
   const filledCount = chosen.length - missingResults.length;
 
   // Unsaved-changes tracking (note field is checked separately — it clears on save).
-  const snapshot = formSnapshot({ name, gender, age, phone, referrer }, selected, results, tests);
+  const snapshot = formSnapshot({ name, gender, age, phone, referrer }, selected, results, tests, hl);
   const unsaved = (!!name.trim() || selected.size > 0) && (snapshot !== baseline || !!newNote.trim());
 
   function resetForm() {
@@ -256,7 +269,7 @@ function StationEntryPage() {
     setEditId(null); setCreatedAt(null); setAccession("");
     setPatientId(null); setPatientNotes([]); setNewNote("");
     setName(""); setGender(""); setAge(""); setAgeU("y"); setPhone(""); setReferrer("");
-    setSelected(new Set()); setResults({}); setQ(""); setBaseline("");
+    setSelected(new Set()); setResults({}); setHl(new Set()); setQ(""); setBaseline("");
     if (searchParams.get("edit") || searchParams.get("patient")) router.replace("/station");
     nameRef.current?.focus();
   }
@@ -327,6 +340,7 @@ function StationEntryPage() {
       referrer: referrer.trim() || undefined,
       results: chosen.map((t) => ({
         testId: t.id, name_ar: t.name_ar, value: results[t.id] ?? "", unit: t.unit,
+        ...(hl.has(t.id) && !isFormCode(t.code) ? { hl: true } : {}),
       })),
     };
     // Tests already on the saved visit had their stock deducted when first saved.
@@ -339,38 +353,69 @@ function StationEntryPage() {
     if (!editId) {
       setEditId(v.id);
       setCreatedAt(v.created_at);
-      // Deduct one unit of stock per linked test.
-      deductStockForTests(Array.from(selected));
-    } else {
-      // Editing: deduct only the tests added since the last save (never twice).
-      deductStockForTests(Array.from(selected).filter((id) => !before!.has(id)));
+    }
+    // The visit's materials leave the stock room (never twice for the same test) — now, or later by
+    // hand from «المخزن ← نتائج بانتظار الصرف» when the stock room is set to manual.
+    const short = stockForVisit(v.id, Array.from(selected), before ? Array.from(before) : []);
+    // Settings → «المخزن»: say which materials were not in stock (the result is still saved).
+    if (short.length && stockOptions().warnOut) {
+      toast.show(`تنبيه المخزن — مواد غير متوفرة: ${short.map((x) => `${x.name} (${x.qty})`).join("، ")}`, "warn");
     }
     setBaseline(snapshot);
     setSavedTick((n) => n + 1);
     return true;
   }
 
-  function onPrint() {
-    if (!requireName()) return;
+  /** The checks before a sheet leaves the station (print or share): a name, a test, filled results
+   *  (or a confirmed warning), a sample number — then the visit is saved. The sample number, or null. */
+  function readyToSend(what: string): string | null {
+    if (!requireName()) return null;
     if (chosen.length === 0) {
       toast.show("اختر فحصاً واحداً على الأقل", "warn");
-      return;
+      return null;
     }
     // Incomplete-entry protection: warn before printing a sheet with blank results.
     if (missingResults.length > 0) {
       const names = missingResults.map((t) => `• ${t.name_ar}`).join("\n");
       const ok = window.confirm(
-        `${missingResults.length} فحص بدون نتيجة:\n${names}\n\nهل تريد الطباعة رغم ذلك؟`
+        `${missingResults.length} فحص بدون نتيجة:\n${names}\n\nهل تريد ${what} رغم ذلك؟`
       );
-      if (!ok) return;
+      if (!ok) return null;
     }
     const acc = accession || nextAccession();
     setAccession(acc);
-    if (!saveVisit(acc)) return;
+    if (!saveVisit(acc)) return null;
+    return acc;
+  }
+
+  function onPrint() {
+    if (!readyToSend("الطباعة")) return;
     toast.show("تم الحفظ — جارٍ فتح نافذة الطباعة");
     // The new sample number's barcode must be on the sheet before the print window opens
     // (the library normally loaded with the page; never wait more than 3 s for it).
     Promise.race([loadBarcode(), new Promise((r) => setTimeout(r, 3000))]).then(() => setTimeout(() => window.print(), 80));
+  }
+
+  /** «واتساب»: the sheet as a PDF, shared (or saved, with WhatsApp opened on the patient's number). */
+  const [sharing, setSharing] = useState(false);
+  async function onShare() {
+    const acc = readyToSend("المشاركة");
+    if (!acc || sharing) return;
+    setSharing(true);
+    try {
+      await Promise.race([loadBarcode(), new Promise((r) => setTimeout(r, 3000))]);
+      await new Promise((r) => setTimeout(r, 120)); // the new sample number drawn on the sheet
+      const el = document.getElementById("report-sheet");
+      if (!el) return;
+      const { sheetPdf, sharePdf } = await import("@/lib/station/sharePdf");
+      const pdf = await sheetPdf(el, paper);
+      const how = await sharePdf(pdf, `${acc}.pdf`, { phone, text: `نتائج التحاليل — ${name.trim()}${settings.labName ? ` — ${settings.labName}` : ""}` });
+      toast.show(how === "saved" ? "حُفظ ملف PDF — أرفقه في واتساب الذي فُتح" : "تمت المشاركة");
+    } catch {
+      toast.show("تعذّر إنشاء ملف PDF — استعمل الطباعة", "warn");
+    } finally {
+      setSharing(false);
+    }
   }
 
   // Local date (not UTC); an edited visit keeps its original date on reprint.
@@ -544,7 +589,7 @@ function StationEntryPage() {
                   <div className="mb-2 flex max-h-28 flex-col gap-1.5 overflow-y-auto">
                     {patientNotes.map((n, i) => (
                       <div key={i} className="rounded-lg bg-canvas px-3 py-1.5 text-xs">
-                        <span className="text-[10px] text-muted">{new Date(n.ts).toLocaleDateString("ar-IQ-u-nu-latn")}: </span>
+                        <span className="text-[10px] text-muted">{fmtDate(n.ts)}: </span>
                         {n.text}
                       </div>
                     ))}
@@ -674,6 +719,7 @@ function StationEntryPage() {
                           <div className="mb-2 flex items-center justify-between gap-2">
                             <span className="truncate text-sm font-medium">{t.name_ar}</span>
                             <div className="flex items-center gap-1">
+                              {hlCount(vals) > 0 && <span className="rounded-full bg-yellow-200 px-2 py-0.5 text-[11px] font-semibold text-yellow-900" data-testid="form-hl">مميّز {hlCount(vals)}</span>}
                               <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${done ? "bg-teal-50 text-brand-dark" : pr.filled ? "bg-amber-50 text-amber-700" : "bg-canvas text-muted"}`}>
                                 <span dir="ltr">{pr.filled}/{pr.total}</span>
                               </span>
@@ -693,6 +739,7 @@ function StationEntryPage() {
                               ملء الطبيعي
                             </button>
                           </div>
+                          <StockOut names={outOfStock[t.id]} />
                         </div>
                       );
                     }
@@ -706,6 +753,14 @@ function StationEntryPage() {
                         <div className="mb-1 flex items-center justify-between gap-2">
                           <span className="truncate text-sm font-medium">{t.name_ar}</span>
                           <div className="flex items-center gap-1">
+                            {settings.entryHighlight !== false && (
+                              <label title="تمييز النتيجة بلون على التقرير المطبوع" className={`inline-flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${hl.has(t.id) ? "bg-yellow-200 text-yellow-900" : "text-muted hover:bg-canvas"}`}>
+                                <input type="checkbox" checked={hl.has(t.id)} aria-label={`تمييز ${t.name_ar}`}
+                                  onChange={() => setHl((s) => { const n = new Set(s); n.has(t.id) ? n.delete(t.id) : n.add(t.id); return n; })}
+                                  className="size-3.5 accent-yellow-500" />
+                                تمييز
+                              </label>
+                            )}
                             <FlagPill f={f} />
                             <button
                               type="button"
@@ -724,7 +779,7 @@ function StationEntryPage() {
                             onChange={(e) => setResults((r) => ({ ...r, [t.id]: e.target.value }))}
                             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusNextResult(idx); } }}
                             placeholder="النتيجة"
-                            className={`${inp} text-base font-semibold ${tint}`}
+                            className={`${inp} text-base font-semibold ${tint} ${hl.has(t.id) ? "ring-2 ring-yellow-300" : ""}`}
                           />
                           {t.unit && <span dir="ltr" className="shrink-0 text-xs text-muted">{t.unit}</span>}
                         </div>
@@ -745,6 +800,7 @@ function StationEntryPage() {
                         <div className="mt-1 text-xs text-muted">
                           المعدل الطبيعي: <span dir="ltr">{rangeLabel(t.normal, gender, t.unit, age)}</span>
                         </div>
+                        <StockOut names={outOfStock[t.id]} />
                         {derived[t.id] && (() => {
                           const d = derived[t.id];
                           const isAuto = (results[t.id] ?? "") !== "" && results[t.id] === autoVals[t.id];
@@ -774,6 +830,22 @@ function StationEntryPage() {
                   {missingResults.length} فحص بدون نتيجة — أكملها قبل الطباعة.
                 </p>
               )}
+              {chosen.length > 0 && (settings.entryPrintButton !== false || settings.entryWhatsApp !== false) && (
+                <div className="mt-3 flex gap-2">
+                  {settings.entryPrintButton !== false && (
+                    <button onClick={onPrint} data-testid="entry-print" title="طباعة (Ctrl+P)"
+                      className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-brand px-3.5 py-2.5 text-sm font-semibold text-white hover:bg-brand-dark">
+                      <Printer className="size-4" /> طباعة {paper}
+                    </button>
+                  )}
+                  {settings.entryWhatsApp !== false && (
+                    <button onClick={() => void onShare()} disabled={sharing} data-testid="entry-whatsapp" title="مشاركة التقرير PDF عبر واتساب"
+                      className={`inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#25D366] px-3 py-2.5 text-sm font-semibold text-white hover:bg-[#1ebe5b] disabled:opacity-60 ${settings.entryPrintButton === false ? "flex-1" : ""}`}>
+                      <MessageCircle className={`size-4 ${sharing ? "animate-pulse" : ""}`} /> واتساب
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -788,7 +860,7 @@ function StationEntryPage() {
         accession={accession || undefined}
         patient={{ name, gender, age, phone }}
         referrer={referrer || undefined}
-        rows={chosen.map((t) => ({ key: t.id, name: t.name_ar, value: results[t.id] ?? "", unit: t.unit, test: t }))}
+        rows={chosen.map((t) => ({ key: t.id, name: t.name_ar, value: results[t.id] ?? "", unit: t.unit, test: t, hl: hl.has(t.id) }))}
         prev={prev}
         printPrev={printPrev}
         printable={!labelJob}
@@ -817,6 +889,16 @@ function StationEntryPage() {
           onReady={() => setTimeout(() => window.print(), 60)}
         />
       )}
+    </div>
+  );
+}
+
+/** «غير متوفر في المخزن»: the test's linked materials that are out (Settings → «المخزن»). */
+function StockOut({ names }: { names?: string[] }) {
+  if (!names?.length) return null;
+  return (
+    <div className="mt-1 flex items-start gap-1 rounded-md bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-800" data-testid="stock-out">
+      <AlertTriangle className="mt-px size-3.5 shrink-0" /> غير متوفر في المخزن: {names.join("، ")}
     </div>
   );
 }

@@ -5,10 +5,11 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   FlaskConical, ClipboardPlus, ListChecks, FileText, Plus, Settings, Home,
-  Archive, Boxes, Menu, X, ChevronLeft, Trash2, type LucideIcon,
+  Archive, Menu, X, ChevronLeft, Trash2, type LucideIcon,
 } from "lucide-react";
-import { getPages, savePages, getVisits, getStock, daysToExpiry, requestPersistentStorage, uid, TRASH_DAYS, type StationPage } from "@/lib/station/store";
-import { cn } from "@/lib/utils";
+import { getPages, savePages, getVisits, requestPersistentStorage, uid, TRASH_DAYS, type StationPage } from "@/lib/station/store";
+import { cn, fmtDate } from "@/lib/utils";
+import { useSideCollapsed, SideCollapseButton, SideReopenButton } from "@/components/local/SideCollapse";
 
 interface NavItem { href: string; label: string; hint: string; icon: LucideIcon }
 
@@ -26,7 +27,6 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
     title: "الإدارة",
     items: [
       { href: "/station/tests", label: "إدارة الفحوصات", hint: "الأسماء والمعدلات", icon: ListChecks },
-      { href: "/station/inventory", label: "المخزن", hint: "الكميات والصلاحية", icon: Boxes },
       { href: "/station/settings", label: "الإعدادات", hint: "الترويسة والنسخ", icon: Settings },
     ],
   },
@@ -82,20 +82,14 @@ export function StationSidebar() {
   const router = useRouter();
   const [pages, setPages] = useState<StationPage[]>([]);
   const [todayCount, setTodayCount] = useState(0);
-  const [stockAlerts, setStockAlerts] = useState(0);
   const [open, setOpen] = useState(false); // mobile drawer
+  const [collapsed, setCollapsed] = useSideCollapsed();
 
   useEffect(() => {
     setPages(getPages());
     const start = new Date();
     start.setHours(0, 0, 0, 0);
     setTodayCount(getVisits().filter((v) => v.created_at >= start.getTime()).length);
-    setStockAlerts(
-      getStock().filter((s) => {
-        const d = daysToExpiry(s.expiry);
-        return (s.minQty != null && Number(s.qty) <= Number(s.minQty)) || (d != null && d <= 30);
-      }).length
-    );
     setOpen(false);
   }, [pathname]);
 
@@ -133,7 +127,8 @@ export function StationSidebar() {
   // Computed in the browser: a page saved for offline use must not show the day it was saved.
   const [today, setToday] = useState("");
   useEffect(() => {
-    setToday(new Date().toLocaleDateString("ar-IQ-u-nu-latn", { weekday: "long", day: "numeric", month: "long" }));
+    const d = new Date();
+    setToday(`${d.toLocaleDateString("ar-IQ", { weekday: "long" })} ${fmtDate(d)}`);
   }, [pathname]);
 
   return (
@@ -165,11 +160,13 @@ export function StationSidebar() {
         )}
       />
 
+      {collapsed && <SideReopenButton onClick={() => setCollapsed(false)} />}
       <aside
         className={cn(
           "no-print fixed inset-y-0 start-0 z-50 flex h-screen w-72 shrink-0 flex-col border-e border-line bg-surface shadow-[var(--shadow-pop)] transition-transform duration-200",
           "md:sticky md:top-0 md:z-auto md:translate-x-0 md:shadow-none",
-          open ? "translate-x-0" : "translate-x-full"
+          open ? "translate-x-0" : "translate-x-full",
+          collapsed && "md:hidden"
         )}
       >
         {/* Brand header */}
@@ -188,6 +185,7 @@ export function StationSidebar() {
                 تعمل بدون إنترنت
               </div>
             </div>
+            <SideCollapseButton onClick={() => setCollapsed(true)} />
             <button
               onClick={() => setOpen(false)}
               aria-label="إغلاق القائمة"
@@ -211,8 +209,7 @@ export function StationSidebar() {
                     key={it.href}
                     {...it}
                     active={isActive(it.href)}
-                    badge={it.href === "/station/visits" ? todayCount : it.href === "/station/inventory" ? stockAlerts : undefined}
-                    badgeTone={it.href === "/station/inventory" ? "warn" : "brand"}
+                    badge={it.href === "/station/visits" ? todayCount : undefined}
                   />
                 ))}
               </div>
@@ -254,7 +251,6 @@ export function StationSidebar() {
             <div className="font-medium text-ink">{today}</div>
             <div>
               اليوم: <b className="tabular-nums text-brand-dark">{todayCount}</b> زيارة
-              {stockAlerts > 0 && <> · <b className="tabular-nums text-amber-600">{stockAlerts}</b> تنبيه مخزن</>}
             </div>
           </div>
           <Link

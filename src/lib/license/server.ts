@@ -1,8 +1,8 @@
 import "server-only";
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "node:crypto";
-import { SignJWT, exportJWK, generateKeyPair, importJWK, type JWK, type KeyLike } from "jose";
+import { SignJWT, exportJWK, generateKeyPair, importJWK, jwtVerify, type JWK, type KeyLike } from "jose";
 import { mainQuery as appQuery } from "@/lib/db";
-import { cleanModules, DEFAULT_MODULES, type LicenseModule, type LicensePayload } from "./modules";
+import { cleanModules, DEFAULT_MODULES, MODULE_IDS, moduleLabel, type LicenseModule, type LicensePayload } from "./modules";
 import { licenseDbUrl } from "./env";
 import { newTotpSecret, totpMatch, totpUri } from "./totp";
 import { providerOf, type ProviderId } from "@/lib/db/providers";
@@ -93,7 +93,14 @@ export interface LicenseRow {
   devices: ExtraDevice[];
   /** "signup": created by the lab itself («التسجيل الذاتي»); "" by the owner. */
   source: string;
+  /** The owner's last «رمز دخول المحطات» change, applied by the devices at their next check. */
+  pin: PinOp | null;
 }
+/** A PIN set (hash) or removed (null) by the owner for one station or all of them. The devices
+ *  apply each op once (by id); the PIN itself is never stored, only its hash. */
+export interface PinOp { id: string; hash: string | null; scope: LicenseModule | "all"; at: number }
+/** Same hash as the stations (lib/local/pin): sha256 of a fixed prefix and the digits. */
+export const pinHash = (pin: string) => createHash("sha256").update(`spir-station-pin:${pin.trim()}`).digest("hex");
 export interface ExtraDevice { device_id: string; label: string; activated_at: number; last_seen_at: number | null; app_version: string }
 export interface AdminDbInfo { host: string; by: "owner" | "lab"; at: number; provider?: ProviderId }
 export interface SyncInfo { kind: SyncConfig["kind"]; host: string; by: "owner" | "device"; at: number }
@@ -130,6 +137,7 @@ function ensureTables() {
       "admin_db text not null default ''", "admin_db_info text not null default ''", // 0021
       "admin_db_check_at bigint", "admin_db_ok boolean", "admin_db_error text not null default ''", // 0022
       "max_devices integer not null default 1", "source text not null default ''", // 0024
+      "station_pin text not null default ''", // 0025
     ]) await query(`alter table station_licenses add column if not exists ${col}`);
     await query(`create table if not exists license_events (
       id text primary key, license_id text not null, at bigint not null, kind text not null, detail text not null default '')`);
@@ -289,6 +297,26 @@ export async function signingKeySealed(): Promise<boolean> {
 }
 export async function publicKey(): Promise<JWK> { return (await signingKeys()!).pub; }
 
+/** A device's signed license, checked with this server's key (null: not one it signed). */
+export async function verifyDeviceToken(token: unknown): Promise<LicensePayload | null> {
+  if (typeof token !== "string" || token.length > 4000) return null;
+  try {
+    const key = await importJWK(await publicKey(), "ES256");
+    const { payload } = await jwtVerify(token, key, { algorithms: ["ES256"] });
+    const p = payload as unknown as LicensePayload;
+    return typeof p.lid === "string" && typeof p.dev === "string" ? p : null;
+  } catch { return null; }
+}
+
+/** The lab code a device may act for: its signed license, for this very device, and the code
+ *  still bound to it, running and in date. A lab code or device id alone is never enough. */
+export async function deviceFromToken(token: unknown, device: unknown): Promise<{ ok: true; lid: string; row: LicenseRow } | { ok: false; error: string }> {
+  const p = await verifyDeviceToken(token);
+  if (!p || typeof device !== "string" || p.dev !== device) return { ok: false, error: "bad_token" };
+  const lic = await deviceLicense(p.lid, device);
+  return lic.ok ? { ok: true, lid: p.lid, row: lic.row } : lic;
+}
+
 async function signLicense(p: Omit<LicensePayload, "iat">): Promise<string> {
   const { priv } = await signingKeys()!;
   return new SignJWT({ ...p }).setProtectedHeader({ alg: "ES256" }).setIssuedAt().sign(priv);
@@ -364,15 +392,17 @@ type Raw = Omit<LicenseRow, "modules" | "activated_at" | "expires_at" | "last_se
   modules: string; activated_at: string | number | null; expires_at: string | number | null; last_seen_at: string | number | null; created_at: string | number;
   paid_at: string | number | null; paid: boolean | string; is_trial: boolean | string; app_version: string | null; sync_info?: string | null; admin_db_info?: string | null;
   admin_db_check_at?: string | number | null; admin_db_ok?: boolean | string | null; admin_db_error?: string | null;
-  max_devices?: string | number | null; source?: string | null;
+  max_devices?: string | number | null; source?: string | null; station_pin?: string | null;
   sync_last_at?: string | number | null; sync_pending?: string | number | null; sync_error?: string | null; sync_reported_at?: string | number | null;
 };
 const COLS = `id, lab_name, note, code_hint, duration_days, modules, status, device_id, device_label,
   activated_at, expires_at, last_seen_at, created_at, price, paid, paid_at, message, device_name, is_trial, app_version, sync_info,
-  sync_last_at, sync_pending, sync_error, sync_reported_at, admin_db_info, admin_db_check_at, admin_db_ok, admin_db_error, max_devices, source`;
+  sync_last_at, sync_pending, sync_error, sync_reported_at, admin_db_info, admin_db_check_at, admin_db_ok, admin_db_error, max_devices, source, station_pin`;
 const bool = (v: boolean | string) => v === true || v === "t" || v === "true";
 const num = (v: string | number | null) => (v == null ? null : Number(v));
-function toRow({ sync_info, admin_db_info, admin_db_check_at, admin_db_ok, admin_db_error, max_devices, source, ...r }: Raw, devices: ExtraDevice[] = []): LicenseRow {
+function toRow({ sync_info, admin_db_info, admin_db_check_at, admin_db_ok, admin_db_error, max_devices, source, station_pin, ...r }: Raw, devices: ExtraDevice[] = []): LicenseRow {
+  let pin: PinOp | null = null;
+  try { pin = station_pin ? (JSON.parse(station_pin) as PinOp) : null; } catch { /* none */ }
   let mods: unknown = [];
   try { mods = JSON.parse(r.modules); } catch { /* keep empty */ }
   let sync: SyncInfo | null = null;
@@ -380,7 +410,7 @@ function toRow({ sync_info, admin_db_info, admin_db_check_at, admin_db_ok, admin
   let admin_db: AdminDbInfo | null = null;
   try { admin_db = admin_db_info ? (JSON.parse(admin_db_info) as AdminDbInfo) : null; } catch { /* none */ }
   return {
-    ...r, sync, admin_db,
+    ...r, sync, admin_db, pin,
     max_devices: Math.max(1, Number(max_devices ?? 1) || 1), devices, source: source ?? "",
     admin_db_check: admin_db && admin_db_check_at != null ? { at: Number(admin_db_check_at), ok: bool(admin_db_ok ?? false), error: admin_db_error ?? "" } : null, duration_days: Number(r.duration_days), modules: cleanModules(mods),
     activated_at: num(r.activated_at), expires_at: num(r.expires_at), last_seen_at: num(r.last_seen_at), created_at: Number(r.created_at),
@@ -467,7 +497,8 @@ export type LicenseAction =
   | { action: "message"; text: string }
   | { action: "device_name"; name: string }
   | { action: "max_devices"; n: number }
-  | { action: "remove_device"; device: string };
+  | { action: "remove_device"; device: string }
+  | { action: "pin"; pin: string; scope: string };
 
 /** Owner actions from /licenses. Returns the new code for "new_code". */
 export async function updateLicense(id: string, a: LicenseAction): Promise<{ row: LicenseRow | null; code?: string }> {
@@ -514,6 +545,15 @@ export async function updateLicense(id: string, a: LicenseAction): Promise<{ row
       const text = String(a.text ?? "").trim().slice(0, 300);
       await query(`update station_licenses set message = $2 where id = $1`, [id, text]);
       await logEvent(id, "message", text || "—");
+      break;
+    }
+    case "pin": {
+      const pin = String(a.pin ?? "").trim();
+      if (pin && !/^\d{4,8}$/.test(pin)) break;
+      const scope = a.scope === "all" || MODULE_IDS.includes(a.scope as LicenseModule) ? (a.scope as PinOp["scope"]) : "all";
+      const op: PinOp = { id: randomUUID(), hash: pin ? pinHash(pin) : null, scope, at: Date.now() };
+      await query(`update station_licenses set station_pin = $2 where id = $1`, [id, JSON.stringify(op)]);
+      await logEvent(id, "pin", `${pin ? "رمز دخول جديد" : "إزالة رمز الدخول"} — ${scope === "all" ? "كل المحطات" : moduleLabel(scope)}`);
       break;
     }
     case "device_name":
@@ -835,7 +875,7 @@ export async function exportCodes(): Promise<CodesBackup> {
 const LIC_COLS = ["id", "code_hash", "code_hint", "lab_name", "note", "duration_days", "modules", "status", "device_id", "device_label",
   "activated_at", "expires_at", "last_seen_at", "created_at", "price", "paid", "paid_at", "message", "device_name", "is_trial", "app_version",
   "sync_config", "sync_info", "sync_last_at", "sync_pending", "sync_error", "sync_reported_at", "admin_db", "admin_db_info",
-  "admin_db_check_at", "admin_db_ok", "admin_db_error", "max_devices", "source"] as const;
+  "admin_db_check_at", "admin_db_ok", "admin_db_error", "max_devices", "source", "station_pin"] as const;
 /** Merge a backup in: codes are added or updated by id (nothing is deleted); history is added once. */
 export async function importCodes(data: unknown): Promise<{ licenses: number; events: number }> {
   const b = data as Partial<CodesBackup>;
@@ -848,7 +888,7 @@ export async function importCodes(data: unknown): Promise<{ licenses: number; ev
       const v = r[c];
       if (c === "paid" || c === "is_trial") return v === true || v === "t" || v === "true";
       if (c === "modules") return typeof v === "string" ? v : JSON.stringify(cleanModules(v));
-      return v ?? (["note", "code_hint", "price", "message", "device_name", "app_version", "sync_config", "sync_info", "sync_error", "admin_db", "admin_db_info", "admin_db_error", "source"].includes(c) ? "" : c === "sync_pending" ? 0 : c === "max_devices" ? 1 : c === "status" ? "active" : null);
+      return v ?? (["note", "code_hint", "price", "message", "device_name", "app_version", "sync_config", "sync_info", "sync_error", "admin_db", "admin_db_info", "admin_db_error", "source", "station_pin"].includes(c) ? "" : c === "sync_pending" ? 0 : c === "max_devices" ? 1 : c === "status" ? "active" : null);
     });
     await query(
       `insert into station_licenses (${LIC_COLS.join(", ")}) values (${LIC_COLS.map((_, i) => `$${i + 1}`).join(", ")})

@@ -1,11 +1,11 @@
 // Every public page opens without errors or sideways scrolling — desktop, phone and dark mode.
 const { B, ok, launch, done, kv, resetLocal } = require('./lib.cjs');
-const routes = ['/welcome', '/station', '/station/inventory', '/station/records', '/station/settings', '/station/tests', '/station/visits',
+const routes = ['/welcome', '/station', '/station/inventory', '/store/inventory', '/store/items', '/station/records', '/station/settings', '/station/tests', '/station/visits',
   '/store', '/store/report', '/store/settings', '/store/suppliers',
   '/training', '/training/cards', '/training/edit', '/training/exam', '/training/manual', '/training/map', '/training/media', '/training/quiz',
   '/training/settings', '/training/tools', '/training/trainees', '/training/tubes', '/training/test/FIRST',
   '/qc', '/qc/analytes', '/qc/chart', '/qc/devices', '/qc/entry', '/qc/settings', '/qc/temps',
-  '/roster', '/roster/attendance', '/roster/leaves', '/roster/payroll', '/roster/schedule', '/roster/settings', '/roster/staff', '/licenses'];
+  '/roster', '/roster/attendance', '/roster/leaves', '/roster/payroll', '/roster/schedule', '/roster/settings', '/roster/staff', '/sync', '/sync/file', '/sync/auto', '/sync/log', '/sync/settings', '/licenses'];
 (async () => {
   const b = await launch();
   for (const [w, h, theme] of [[1440, 900, 'light'], [390, 844, 'light'], [1440, 900, 'dark']]) {

@@ -31,7 +31,7 @@ const { B, ok, launch, done, kv, resetLocal } = require('./lib.cjs');
   await p.click('button:has-text("حفظ العملية")'); await p.waitForTimeout(800);
   await p.reload(); await p.waitForTimeout(1500);
   ok((await p.locator('body').innerText()).includes('مورّد الفحص'), 'purchasing: purchase saved and kept after reload');
-  const purFile = await backup('/store/settings', 'تصدير نسخة');
+  const purFile = await backup('/store/settings#device', 'تصدير نسخة');
   const q1 = await restore('/store/settings', purFile);
   ok(((await kv(q1, 'purchasing.purchases.v1')) || []).length === 1, 'purchasing: backup restores the purchase');
 
@@ -40,7 +40,7 @@ const { B, ok, launch, done, kv, resetLocal } = require('./lib.cjs');
   await p.fill('label:has-text("الاسم *") input', 'موظف الفحص'); await p.click('button:has-text("إضافة")'); await p.waitForTimeout(600);
   await p.reload(); await p.waitForTimeout(1500);
   ok((await p.locator('body').innerText()).includes('موظف الفحص'), 'staff: employee saved and kept after reload');
-  const rosFile = await backup('/roster/settings', 'تصدير نسخة احتياطية');
+  const rosFile = await backup('/roster/settings#device', 'تصدير نسخة احتياطية');
   const q2 = await restore('/roster/settings', rosFile);
   ok(((await kv(q2, 'roster.staff.v1')) || []).some((s) => s.name === 'موظف الفحص'), 'staff: backup restores the employee');
 
@@ -52,7 +52,7 @@ const { B, ok, launch, done, kv, resetLocal } = require('./lib.cjs');
     await p.reload(); await p.waitForTimeout(1500);
     const n = ((await kv(p, 'qc.results.v1')) || []).length;
     ok(n >= 1, `quality: control result saved (${n})`);
-    const qcFile = await backup('/qc/settings', 'تصدير نسخة احتياطية');
+    const qcFile = await backup('/qc/settings#device', 'تصدير نسخة احتياطية');
     const q3 = await restore('/qc/settings', qcFile);
     ok(((await kv(q3, 'qc.results.v1')) || []).length === n, 'quality: backup restores the results');
   } else ok(false, 'quality: no control material to enter a value for');
@@ -63,7 +63,7 @@ const { B, ok, launch, done, kv, resetLocal } = require('./lib.cjs');
   await p.reload(); await p.waitForTimeout(1500);
   ok((await p.locator('body').innerText()).includes('متدرب الفحص'), 'training: trainee saved and kept after reload');
 
-  const trFile = await backup('/training/settings', 'تصدير نسخة احتياطية');
+  const trFile = await backup('/training/settings#device', 'تصدير نسخة احتياطية');
   const q4 = await restore('/training/settings', trFile);
   ok(((await kv(q4, 'training.trainees.v1')) || []).some((t) => t.name === 'متدرب الفحص'), 'training: backup restores the trainee');
 

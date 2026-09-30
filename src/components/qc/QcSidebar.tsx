@@ -32,5 +32,5 @@ function badges(): SideBadges {
 
 export function QcSidebar() {
   return <AppSidebar appName="محطة الجودة والأجهزة" appTag="QC · Westgard · الصيانة" icon={ShieldCheck} sections={SECTIONS} getBadges={badges}
-    footerNote="محطة مستقلة — بياناتها محفوظة على هذا الجهاز فقط ولا ترتبط بأي محطة أخرى." />;
+    footerNote="بياناتها على هذا الجهاز، ومرتبطة بالمخزن والكادر والموردين ومحطة المختبر." />;
 }

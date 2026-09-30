@@ -122,7 +122,7 @@ export default function ChartPage() {
       {a && settings && (
         <div className="print-doc hidden bg-white text-[12px] text-black print:block">
           <PrintStyle />
-          <Letterhead title={settings.title} subtitle={settings.subtitle} color="#be123c"
+          <Letterhead title={settings.title} subtitle={settings.subtitle} logo={settings.logo} color="#be123c"
             right={<><div className="font-bold" style={{ color: "#be123c" }}>تقرير السيطرة النوعية الشهري</div><div>{monthLabel(month)}</div></>} />
           <div className="my-3 text-sm"><b>{a.name}</b>{a.device && <> — {a.device}</>}{a.unit && <span dir="ltr"> ({a.unit})</span>}</div>
           {body}

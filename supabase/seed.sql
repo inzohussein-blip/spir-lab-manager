@@ -14,7 +14,7 @@ insert into suppliers (id, name, phone) values
 insert into products (id, name, unit, quantity, min_quantity, expiry_date, buy_price, supplier_id) values
   ('22222222-2222-2222-2222-222222222201', 'كاشف الجلوكوز', 'test', 40, 10, current_date + interval '120 days', 0.5, '11111111-1111-1111-1111-111111111111'),
   ('22222222-2222-2222-2222-222222222202', 'كاشف CBC', 'test', 6, 7, current_date + interval '20 days', 0.8, '11111111-1111-1111-1111-111111111111'),
-  ('22222222-2222-2222-2222-222222222203', 'شرائح تحليل البول', 'test', 25, 10, current_date + interval '200 days', 0.3, '11111111-1111-1111-1111-111111111111')
+  ('22222222-2222-2222-2222-222222222203', 'شرائح فحص الإدرار', 'test', 25, 10, current_date + interval '200 days', 0.3, '11111111-1111-1111-1111-111111111111')
   on conflict do nothing;
 
 -- ── Test catalogue (with normal ranges + reagent links) ─────────────────────
@@ -22,7 +22,7 @@ insert into test_catalog (code, name_ar, name_en, category, sample_type, unit, n
   ('GLU', 'سكر صائم', 'Fasting Glucose', 'Biochemistry', 'Blood', 'mg/dL', 70, 110, 15, '22222222-2222-2222-2222-222222222201', 1, false),
   ('HGB', 'الهيموغلوبين', 'Hemoglobin', 'Hematology', 'Blood', 'g/dL', 12, 16, 20, '22222222-2222-2222-2222-222222222202', 1, false),
   ('WBC', 'كريات الدم البيضاء', 'WBC Count', 'Hematology', 'Blood', '10^3/uL', 4, 11, 20, '22222222-2222-2222-2222-222222222202', 1, false),
-  ('URINE', 'تحليل البول العام', 'Urine Analysis', 'Urine', 'Urine', null, null, null, 25, '22222222-2222-2222-2222-222222222203', 1, true)
+  ('URINE', 'فحص الإدرار العام (G.U.E)', 'General Urine Examination', 'Urine', 'Urine', null, null, null, 25, '22222222-2222-2222-2222-222222222203', 1, true)
   on conflict (code) do nothing;
 
 -- ── Staff ───────────────────────────────────────────────────────────────────
