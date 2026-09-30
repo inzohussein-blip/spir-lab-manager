@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Search, Printer, MessageCircle, Save, Check, Tag, ClipboardList, Beaker, Layers, Pencil, UserRound, StickyNote, Plus, X, RotateCcw, ListChecks, ChevronDown, AlertTriangle, type LucideIcon } from "lucide-react";
 import {
   getTests, addVisit, updateVisit, getVisit, getSettings, getPanels, nextAccession, uid, rangeLabel, flagFor,
-  getPatients, getPatient, upsertPatient, addPatientNote, deductStockForTests, outOfStockByTest, getDoctors, addDoctor,
+  getPatients, getPatient, upsertPatient, addPatientNote, stockForVisit, outOfStockByTest, getDoctors, addDoctor,
   previousResults, resultDelta, localYmd, splitAge, joinAge, type AgeUnitPick,
   type StationTest, type Gender, type StationVisit, type StationSettings, type StationPanel, type StationPatient, type NoteEntry, type StationDoctor,
 } from "@/lib/station/store";
@@ -350,16 +350,13 @@ function StationEntryPage() {
       toast.show("تعذّر الحفظ: مساحة التخزين في المتصفح ممتلئة — خذ نسخة احتياطية واحذف زيارات قديمة من «الزيارات المحفوظة».", "warn");
       return false;
     }
-    let short;
     if (!editId) {
       setEditId(v.id);
       setCreatedAt(v.created_at);
-      // Deduct one unit of stock per linked test.
-      short = deductStockForTests(Array.from(selected));
-    } else {
-      // Editing: deduct only the tests added since the last save (never twice).
-      short = deductStockForTests(Array.from(selected).filter((id) => !before!.has(id)), Array.from(before!));
     }
+    // The visit's materials leave the stock room (never twice for the same test) — now, or later by
+    // hand from «المخزن ← نتائج بانتظار الصرف» when the stock room is set to manual.
+    const short = stockForVisit(v.id, Array.from(selected), before ? Array.from(before) : []);
     // Settings → «المخزن»: say which materials were not in stock (the result is still saved).
     if (short.length && stockOptions().warnOut) {
       toast.show(`تنبيه المخزن — مواد غير متوفرة: ${short.map((x) => `${x.name} (${x.qty})`).join("، ")}`, "warn");

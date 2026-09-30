@@ -16,7 +16,7 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   await p.goto(B + '/store/suppliers'); await p.waitForSelector('label:has-text("الاسم *") input', { timeout: 20000 });
   await p.fill('label:has-text("الاسم *") input', 'مورّد الأجهزة'); await p.fill('label:has-text("الهاتف") input', '07701112233');
   await p.click('button:has-text("إضافة")'); await p.waitForTimeout(500);
-  await p.goto(B + '/store/inventory'); await p.waitForSelector('label:has-text("اسم الصنف") input', { timeout: 20000 });
+  await p.goto(B + '/store/items'); await p.waitForSelector('label:has-text("اسم الصنف") input', { timeout: 20000 });
   await p.fill('label:has-text("اسم الصنف") input', 'كنترول السكر'); await p.fill('input[aria-label="الكمية"]', '10');
   await p.click('button:has-text("إضافة")');
   ok(await settled(async () => (await qty('كنترول السكر')) === 10), 'control material in the stock room (10)');
@@ -50,7 +50,7 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
 
   // The stock room knows the lab's tests: common tubes and containers come linked to them (one per
   // visit), and a reagent can serve several tests (one per test).
-  await p.goto(B + '/store/inventory'); await p.waitForSelector('[data-testid="stock-presets"]', { timeout: 20000 });
+  await p.goto(B + '/store/items'); await p.waitForSelector('[data-testid="stock-presets"]', { timeout: 20000 });
   await p.click('[data-testid="stock-presets"]');
   const edta = await settled(async () => ((await kv(p, 'station.stock.v1')) || []).find((s) => s.name.startsWith('أنبوب EDTA')));
   ok(!!edta, 'common tubes and containers added to the stock room');

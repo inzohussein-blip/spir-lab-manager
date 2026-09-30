@@ -14,7 +14,7 @@ const { B, ok, launch, done, kv, resetLocal } = require('./lib.cjs');
   };
   const stock = async (p) => ((await kv(p, 'station.stock.v1')) || []);
   const addStock = async (p, name, qty) => {
-    await p.goto(B + '/store/inventory'); await p.waitForSelector('label:has-text("اسم الصنف") input', { timeout: 20000 });
+    await p.goto(B + '/store/items'); await p.waitForSelector('label:has-text("اسم الصنف") input', { timeout: 20000 });
     await p.fill('label:has-text("اسم الصنف") input', name);
     await p.fill('input[aria-label="الكمية"]', String(qty));
     await p.click('button:has-text("إضافة")'); await p.waitForTimeout(500);
@@ -70,7 +70,7 @@ const { B, ok, launch, done, kv, resetLocal } = require('./lib.cjs');
   const r3 = await importInto(A, fileC);
   ok((await stock(A)).some((s) => s.name === SC) && num(r3, 'أُضيف') >= 1, 'A gets C\'s item');
   ok(!(await importInto(A, (await exportFrom(A)))).includes('تمت'), 'a computer\'s own file is refused');
-  await A.goto(B + '/store/inventory'); await A.waitForSelector('label:has-text("اسم الصنف") input', { timeout: 20000 });
+  await A.goto(B + '/store/items'); await A.waitForSelector('label:has-text("اسم الصنف") input', { timeout: 20000 });
   await A.locator('tbody tr', { hasText: SA }).first().locator('td').last().locator('button').first().click();
   await A.fill('input[aria-label="الكمية"]', '42');
   await A.click('button:has-text("حفظ التعديل")'); await A.waitForTimeout(600);

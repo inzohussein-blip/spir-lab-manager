@@ -8,7 +8,7 @@
  */
 
 import { kvGet, kvSet, kvBytes, kvLarge, storageQuota } from "@/lib/local/kv";
-import { stockFloor } from "@/lib/local/links";
+import { stockFloor, stockOptions } from "@/lib/local/links";
 import { clearOldDefault } from "@/lib/local/util";
 import { DEFAULT_TESTS } from "./defaultTests";
 
@@ -608,7 +608,7 @@ export function saveStock(list: StockItem[]): void {
 /** Units each stock item gives to the tests newly ordered on a visit: a reagent one per linked
  *  test, a consumable (per visit) one when the visit has any of its tests — and none when the
  *  visit already had one of them (`already`: the visit's tests before this save). */
-function stockUse(list: StockItem[], testIds: string[], already: string[]): Map<string, number> {
+export function stockUse(list: StockItem[], testIds: string[], already: string[]): Map<string, number> {
   const added = new Set(testIds), before = new Set(already);
   const use = new Map<string, number>();
   for (const s of list) {
@@ -639,6 +639,61 @@ export function deductStockForTests(testIds: string[], already: string[] = []): 
   }));
   return short;
 }
+// ── Results ↔ stock: what each visit has used ──────────────────────────────────
+/** Per visit: the tests whose materials were already taken from stock (or skipped by hand), so a
+ *  visit never uses stock twice — whether deducted on save or issued later from the stock room. */
+const K_USED = "station.stockUsed.v1";
+type StockUsed = Record<string, { at: number; ids: string[] }>;
+const USED_DAYS = 60;
+function getUsed(): StockUsed { return read<StockUsed>(K_USED, {}); }
+function markUsed(visitId: string, ids: string[]): void {
+  const used = getUsed();
+  const cut = Date.now() - USED_DAYS * 86400000;
+  for (const [k, v] of Object.entries(used)) if (!v || v.at < cut) delete used[k];
+  used[visitId] = { at: Date.now(), ids: Array.from(new Set([...(used[visitId]?.ids ?? []), ...ids])) };
+  write(K_USED, used);
+}
+/** The tests of a visit whose stock was already handled (`before`: its tests before this edit, for
+ *  visits saved before this record existed). */
+const handled = (visitId: string, before: string[]) => getUsed()[visitId]?.ids ?? before;
+
+/** Take a visit's materials from stock (tests not handled yet) and remember them. */
+export function issueVisitStock(visitId: string, testIds: string[], before: string[] = []): StockShort[] {
+  const had = handled(visitId, before);
+  const short = deductStockForTests(testIds.filter((id) => !had.includes(id)), had);
+  markUsed(visitId, testIds);
+  return short;
+}
+/** «تجاهل»: mark a visit's tests as handled without taking anything from stock. */
+export function skipVisitStock(visitId: string, testIds: string[]): void { markUsed(visitId, testIds); }
+
+/** On saving results in the lab station: deduct now (auto), or leave them waiting in the stock room
+ *  (manual — nothing changes until they are issued). */
+export function stockForVisit(visitId: string, testIds: string[], before: string[] = []): StockShort[] {
+  if (stockOptions().mode === "manual") return [];
+  return issueVisitStock(visitId, testIds, before);
+}
+
+/** A saved visit whose materials wait to be issued by hand, with what they would use. */
+export interface PendingStock { visit: StationVisit; testIds: string[]; items: { name: string; use: number; qty: number }[] }
+/** Manual mode: visits since it began whose linked materials were not issued (or skipped) yet. */
+export function pendingStock(): PendingStock[] {
+  const o = stockOptions();
+  const since = Math.max(o.manualSince ?? Infinity, Date.now() - USED_DAYS * 86400000);
+  if (!Number.isFinite(since)) return [];
+  const list = getStock(), used = getUsed();
+  const out: PendingStock[] = [];
+  for (const v of getVisits()) {
+    if (v.created_at < since) continue;
+    const had = used[v.id]?.ids ?? [];
+    const ids = v.results.map((r) => r.testId);
+    const use = stockUse(list, ids.filter((id) => !had.includes(id)), had);
+    if (!use.size) continue;
+    out.push({ visit: v, testIds: ids, items: list.filter((s) => use.has(s.id)).map((s) => ({ name: s.name, use: use.get(s.id)!, qty: Number(s.qty) || 0 })) });
+  }
+  return out;
+}
+
 /** Per test: the linked stock items that are out (0 or less) — for the entry screen's warning. */
 export function outOfStockByTest(testIds: string[]): Record<string, string[]> {
   const out: Record<string, string[]> = {};

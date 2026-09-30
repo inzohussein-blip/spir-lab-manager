@@ -27,7 +27,13 @@ export const stockItems = () => list<StockRef>(K_STOCK);
  *    room shows how much was used without stock.
  * Both off by default.
  */
-export interface StockOptions { warnOut?: boolean; allowNegative?: boolean }
+export interface StockOptions {
+  warnOut?: boolean; allowNegative?: boolean;
+  /** How results use stock: "auto" (default) when a visit is saved in the lab station; "manual" —
+   *  the results wait in «المخزن ← نتائج بانتظار الصرف» until someone issues (or skips) them.
+   *  `manualSince`: when manual began (older visits never wait). */
+  mode?: "auto" | "manual"; manualSince?: number;
+}
 const K_STOCK_OPT = "station.stockOptions.v1";
 export function stockOptions(): StockOptions {
   try { const v = JSON.parse(kvGet(K_STOCK_OPT) ?? "{}"); return v && typeof v === "object" ? (v as StockOptions) : {}; } catch { return {}; }

@@ -3,28 +3,32 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ShoppingCart, Truck, Settings, Home, FileBarChart, Menu, X } from "lucide-react";
+import { ShoppingCart, Truck, Settings, Home, FileBarChart, Menu, X, Boxes, Tags } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSideCollapsed, SideCollapseButton, SideReopenButton } from "@/components/local/SideCollapse";
-import { getStock, daysToExpiry } from "@/lib/station/store";
+import { getStock, daysToExpiry, pendingStock } from "@/lib/station/store";
 
 const FIXED = [
-  { href: "/store", label: "المخزن والمشتريات", icon: ShoppingCart },
-  { href: "/store/report", label: "التقارير (شهري/سنوي)", icon: FileBarChart },
+  { href: "/store", label: "المشتريات", icon: ShoppingCart },
+  { href: "/store/inventory", label: "المخزن", icon: Boxes },
+  { href: "/store/items", label: "الأصناف", icon: Tags },
   { href: "/store/suppliers", label: "الموردون", icon: Truck },
+  { href: "/store/report", label: "التقارير (شهري/سنوي)", icon: FileBarChart },
   { href: "/store/settings", label: "الإعدادات والنسخ الاحتياطي", icon: Settings },
 ];
 
 export function PurchasingSidebar() {
   const pathname = usePathname();
   const isActive = (href: string) =>
-    href === "/store" ? pathname === "/store" || pathname.startsWith("/store/inventory") : pathname.startsWith(href);
+    href === "/store" ? pathname === "/store" : pathname.startsWith(href);
   // Phones: the menu slides in from a top bar instead of taking the screen width.
   const [open, setOpen] = useState(false);
   const [collapsed, setCollapsed] = useSideCollapsed();
   const [stockAlerts, setStockAlerts] = useState(0);
+  const [pending, setPending] = useState(0);
   useEffect(() => {
     setOpen(false);
+    setPending(pendingStock().length);
     setStockAlerts(getStock().filter((s) => {
       const d = daysToExpiry(s.expiry);
       return (s.minQty != null && Number(s.qty) <= Number(s.minQty)) || (d != null && d <= 30);
@@ -68,8 +72,11 @@ export function PurchasingSidebar() {
           >
             <it.icon className="size-4.5 shrink-0" />
             {it.label}
-            {it.href === "/store" && stockAlerts > 0 && (
-              <span data-testid="stock-alerts" className="ms-auto rounded-full bg-amber-500 px-1.5 text-[11px] font-bold text-white tabular-nums">{stockAlerts}</span>
+            {it.href === "/store/inventory" && pending > 0 && (
+              <span data-testid="stock-pending-count" title="نتائج بانتظار الصرف" className="ms-auto rounded-full bg-sky-600 px-1.5 text-[11px] font-bold text-white tabular-nums">{pending}</span>
+            )}
+            {it.href === "/store/inventory" && stockAlerts > 0 && (
+              <span data-testid="stock-alerts" className={`${pending > 0 ? "" : "ms-auto "}rounded-full bg-amber-500 px-1.5 text-[11px] font-bold text-white tabular-nums`}>{stockAlerts}</span>
             )}
           </Link>
         ))}

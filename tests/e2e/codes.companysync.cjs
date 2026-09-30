@@ -37,7 +37,7 @@ const A = 'مختبر أ ' + TAG, BB = 'مختبر ب ' + TAG;
     return p;
   };
   const addStock = async (p, name) => {
-    await p.goto(B + '/store/inventory'); await p.waitForSelector('label:has-text("اسم الصنف") input', { timeout: 20000 });
+    await p.goto(B + '/store/items'); await p.waitForSelector('label:has-text("اسم الصنف") input', { timeout: 20000 });
     await p.fill('label:has-text("اسم الصنف") input', name); await p.fill('input[aria-label="الكمية"]', '3');
     await p.click('button:has-text("إضافة")'); await p.waitForTimeout(500);
   };

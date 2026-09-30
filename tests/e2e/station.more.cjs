@@ -1,6 +1,7 @@
 // Lab requests: the sample barcode can be hidden from the report, «تمييز» inside the urine / stool /
 // semen / culture forms, «المخزن والمشتريات» as the station's name, the stock room's out-of-stock
-// warning and negative stock (one choice, set from either station), and the regrouped settings.
+// warning and negative stock (one choice, set from either station), the regrouped settings, and the
+// stock station's «الأصناف» (the lab's tests and their materials) and automatic / manual deduction.
 const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
 (async () => {
   const b = await launch();
@@ -14,7 +15,7 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   await p.goto(B + '/welcome'); await p.waitForTimeout(800);
   ok(await p.locator('text=المخزن والمشتريات').count() >= 1 && await p.locator('text=منظومة المشتريات').count() === 0, 'welcome: «المخزن والمشتريات»');
   await p.goto(B + '/store'); await p.waitForSelector('aside', { timeout: 20000 });
-  ok((await p.locator('aside').innerText()).includes('المخزن والمشتريات') && (await p.locator('h1').first().innerText()).includes('المخزن والمشتريات'), 'the station and its page carry the new name');
+  ok((await p.locator('aside').innerText()).includes('المخزن والمشتريات') && (await p.locator('h1').first().innerText()).includes('المشتريات'), 'the station carries the new name');
 
   // ── Lab station settings, regrouped ──
   await p.goto(B + '/station'); await p.waitForTimeout(1200); // the catalog exists once the station opened
@@ -102,6 +103,62 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   await p.goto(B + '/store/inventory'); await p.waitForSelector('[data-testid="stock-qty"]', { timeout: 20000 });
   const q = await p.locator('[data-testid="stock-qty"]').first().innerText();
   ok(q.includes('-1') && q.includes('بالسالب'), `the stock room shows the negative count (${q.replace(/\s+/g, ' ')})`);
+
+  // ── «الأصناف»: the lab's tests (from «إدارة الفحوصات») with their materials, then tubes ──
+  await p.goto(B + '/store/items'); await p.waitForSelector('[data-testid="items-tests"] tr[data-test]', { timeout: 20000 });
+  const catalog = await kv(p, 'station.tests.v1');
+  ok(await p.locator('[data-testid="items-tests"] tr[data-test]').count() === catalog.length, `every supported test is listed as an item (${catalog.length})`);
+  ok((await p.locator('tr[data-test="HB"] [data-testid="test-materials"]').innerText()).includes('كاشف الهيموغلوبين'), 'a test shows its material');
+  await p.locator('tr[data-test="UREA"] [data-testid="add-material"]').click();
+  const urea = catalog.find((t) => t.code === 'UREA');
+  const MAT = `كاشف ${urea.name_ar}`;
+  ok(await settled(async () => ((await kv(p, 'station.stock.v1')) || []).some((x) => x.name === MAT && x.testIds?.includes(urea.id) && x.qty === 0)), 'one click: the test\'s material in the stock room (0, linked)');
+  ok((await p.locator('tr[data-test="UREA"] [data-testid="test-materials"]').innerText()).includes(MAT), 'and shown beside the test');
+  await p.locator('[data-testid="stock-presets"]').click();
+  ok(await settled(async () => (await p.locator('[data-testid="items-consumables"] tbody tr').count()) >= 5), 'tubes and containers listed with the items');
+
+  // ── «المخزن»: add and issue by hand ──
+  const ureaQty = async () => ((await kv(p, 'station.stock.v1')) || []).find((x) => x.name === MAT)?.qty;
+  await p.goto(B + '/store/inventory'); await p.waitForSelector('[data-testid="stock-mode-line"]', { timeout: 20000 });
+  ok((await p.locator('[data-testid="stock-mode-line"]').innerText()).includes('تلقائي'), 'stock room: deduction is automatic by default');
+  await p.fill(`input[aria-label="كمية ${MAT}"]`, '6'); await p.click(`button[aria-label="إضافة إلى ${MAT}"]`);
+  ok(await settled(async () => (await ureaQty()) === 6), 'added by hand (0 → 6)');
+  await p.click(`button[aria-label="صرف من ${MAT}"]`);
+  ok(await settled(async () => (await ureaQty()) === 5), 'issued by hand (6 → 5)');
+
+  // ── Results ↔ stock: automatic ──
+  const ureaVisit = async (name) => {
+    await p.goto(B + '/station'); await p.waitForSelector('label:has-text("الاسم الثلاثي") input', { timeout: 20000 });
+    await p.locator('label:has-text("الاسم الثلاثي") input').fill(name);
+    await p.fill('input[placeholder="ابحث عن فحص…"]', 'اليوريا'); await p.waitForTimeout(150);
+    await p.locator('div.grid button:has(span.flex-1)', { hasText: 'اليوريا' }).first().click();
+    await p.fill('input[placeholder="ابحث عن فحص…"]', '');
+    await p.locator('[data-result-idx="0"]').fill('30'); await p.keyboard.press('Control+s'); await p.waitForTimeout(700);
+  };
+  await ureaVisit('مريض اليوريا 1');
+  ok(await settled(async () => (await ureaQty()) === 4), 'automatic: saving the result takes the material (5 → 4)');
+  await p.locator('[data-result-idx="0"]').fill('31'); await p.keyboard.press('Control+s'); await p.waitForTimeout(700);
+  ok((await ureaQty()) === 4, 'saving the same visit again takes nothing more');
+
+  // ── Results ↔ stock: manual (set in the stock station's settings) ──
+  await p.goto(B + '/store/settings#stock'); await p.waitForSelector('[data-testid="stock-mode"]', { timeout: 20000 });
+  await p.click('button[aria-label="الحسم يدوي"]');
+  ok(await settled(async () => (await kv(p, 'station.stockOptions.v1'))?.mode === 'manual'), 'manual deduction chosen in «المخزن والمشتريات ← الإعدادات»');
+  await p.waitForTimeout(50);
+  await ureaVisit('مريض اليوريا 2');
+  ok((await ureaQty()) === 4, 'manual: saving the result leaves the stock as it is');
+  await ureaVisit('مريض اليوريا 3');
+  await p.goto(B + '/store/inventory'); await p.waitForSelector('[data-testid="stock-pending"] li', { timeout: 20000 });
+  ok(await p.locator('[data-testid="stock-pending"] li').count() === 2 && (await p.locator('[data-testid="stock-pending-count"]').innerText()).trim() === '2', 'both results wait in «نتائج بانتظار الصرف» (and on the menu)');
+  ok((await p.locator('li[data-pending="مريض اليوريا 2"]').innerText()).includes(MAT), 'with the material they use');
+  await p.click('button[aria-label="صرف مريض اليوريا 2"]');
+  ok(await settled(async () => (await ureaQty()) === 3), 'issued by the examiner (4 → 3)');
+  await p.click('button[aria-label="تجاهل مريض اليوريا 3"]');
+  ok(await settled(async () => (await p.locator('[data-testid="stock-pending"] li').count()) === 0) && (await ureaQty()) === 3, 'skipped without taking stock; nothing waits');
+  await p.goto(B + '/store/settings#stock'); await p.waitForSelector('[data-testid="stock-mode"]', { timeout: 20000 });
+  await p.click('button[aria-label="الحسم تلقائي"]');
+  await ureaVisit('مريض اليوريا 4');
+  ok(await settled(async () => (await ureaQty()) === 2), 'back to automatic (3 → 2)');
 
   ok(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.slice(0, 3).join(' | ') : ''));
   await b.close();

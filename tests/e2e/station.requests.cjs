@@ -14,14 +14,14 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   // ── The stock room lives in procurement; the old address leads there ──
   await p.goto(B + '/station/inventory'); await p.waitForURL('**/store/inventory', { timeout: 20000 });
   ok(true, 'old /station/inventory opens the stock room in procurement');
-  await p.waitForSelector('label:has-text("اسم الصنف") input', { timeout: 20000 });
+  await p.goto(B + '/store/items'); await p.waitForSelector('label:has-text("اسم الصنف") input', { timeout: 20000 });
   await p.fill('label:has-text("اسم الصنف") input', 'كاشف السكر');
   await p.locator('input[aria-label="الكمية"]').pressSequentially('٥');
   ok(await p.locator('input[aria-label="الكمية"]').inputValue() === '5', 'Arabic-keyboard digit typed as 5');
   await p.click('button:has-text("إضافة")');
   ok(await settled(async () => ((await kv(p, 'station.stock.v1')) || []).some((s) => s.name === 'كاشف السكر' && s.qty === 5)), 'stock item saved (shared key with the lab station)');
-  ok(await p.locator('[data-testid="store-tabs"] a[href="/store/inventory"]').count() === 1 && await p.locator('aside a[href="/store"]:has-text("المخزن والمشتريات")').count() === 1,
-    'procurement and the stock room on one screen (two tabs, one menu entry)');
+  ok(await p.locator('aside a[href="/store"]:has-text("المشتريات")').count() === 1 && await p.locator('aside a[href="/store/inventory"]:has-text("المخزن")').count() === 1
+    && await p.locator('aside a[href="/store/items"]:has-text("الأصناف")').count() === 1, 'purchases, stock and items: each in the side menu');
 
   // ── A purchase: typed amounts and the stock link ──
   await p.goto(B + '/store'); await p.waitForSelector('input[placeholder="الصنف"]', { timeout: 20000 });
