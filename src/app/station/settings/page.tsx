@@ -349,7 +349,7 @@ export default function StationSettingsPage() {
       </div>
       {/* Report forms (urine, stool, semen, culture) */}
       <div className="mb-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
-        <div className="mb-3 flex items-center gap-2 text-sm font-semibold"><ClipboardList className="size-4" /> استمارات التقارير (البول، الخروج، السائل المنوي، الزرع)</div>
+        <div className="mb-3 flex items-center gap-2 text-sm font-semibold"><ClipboardList className="size-4" /> استمارات التقارير (الإدرار، الخروج، السائل المنوي، الزرع)</div>
         <div className="flex flex-col gap-3">
           <Toggle
             checked={s.formBoldAbnormal !== false}

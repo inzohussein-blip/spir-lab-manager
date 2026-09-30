@@ -1,6 +1,6 @@
 // Procurement amounts (Arabic digits), the stock room in procurement linked to the lab station, the urine
 // cell scale, the print button under the results, the «تمييز» highlight, and the stations' PIN.
-const { B, ok, launch, done, kv, resetLocal } = require('./lib.cjs');
+const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
 (async () => {
   const b = await launch();
   const ctx = await b.newContext({ viewport: { width: 1440, height: 950 } });
@@ -69,14 +69,25 @@ const { B, ok, launch, done, kv, resetLocal } = require('./lib.cjs');
   await p.fill('input[placeholder="ابحث عن فحص…"]', 'General Urine'); await p.waitForTimeout(150);
   await p.locator('div.grid button:has(span.flex-1)').first().click();
   await p.fill('input[placeholder="ابحث عن فحص…"]', '');
-  await p.locator('div.group.rounded-xl', { hasText: 'تحليل البول العام' }).locator('button:has-text("الاستمارة")').click(); await p.waitForTimeout(300);
+  await p.locator('div.group.rounded-xl', { hasText: 'فحص الإدرار العام' }).locator('button:has-text("الاستمارة")').click(); await p.waitForTimeout(300);
   const dlg = p.locator('div[role=dialog]');
   await dlg.locator('input[aria-label="Pus Cells (WBCs)"]').click();
   const opts = await dlg.locator('li button').allInnerTexts();
   ok(['Nil', '+', '++', '+++', '++++', 'More than (++++)'].every((o) => opts.some((t) => t.split('\n')[0].trim() === o)) && !opts.some((t) => t.includes('0 - 1')),
     'pus cells offer Nil, +, ++, +++, ++++, More than (++++) instead of counts');
   await dlg.locator('li button:has-text("More than (++++)")').first().click();
+  await dlg.locator('input[aria-label="Albumin (Protein)"]').click();
+  const chem = (await dlg.locator('li button').allInnerTexts()).map((t) => t.split('\n')[0].trim());
+  ok(!chem.includes('Trace') && chem[chem.length - 1] === 'More than (++++)' && chem.includes('++++'), `albumin: no Trace, ends with More than (++++) (${chem.join(', ')})`);
+  await dlg.locator('li button').first().click();
   await dlg.locator('button:has-text("تم")').click();
+  ok((await p.locator('body').innerText()).includes('فحص الإدرار العام (G.U.E)'), 'urine test named «فحص الإدرار العام (G.U.E)»');
+  // An existing catalog with the old name is renamed once.
+  const cat = await kv(p, 'station.tests.v1');
+  await kvPut(p, 'station.tests.v1', cat.map((x) => (x.code === 'GUE' ? { ...x, name_ar: 'تحليل البول العام' } : x)));
+  await kvPut(p, 'station.renameGue.v1', null);
+  await p.goto(B + '/station/tests'); await p.waitForTimeout(1500);
+  ok((await kv(p, 'station.tests.v1')).find((x) => x.code === 'GUE').name_ar === 'فحص الإدرار العام (G.U.E)', 'old name «تحليل البول العام» renamed on an existing device');
 
   // ── PIN: none at first; switched on in settings; asked in a new window ──
   const q0 = await ctx.newPage();

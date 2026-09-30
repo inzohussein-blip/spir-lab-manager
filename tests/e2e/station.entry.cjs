@@ -22,7 +22,7 @@ const fs = require('node:fs');
   await p.locator('[data-result-idx="0"]').fill('9');
   const flag = await p.locator('div.group', { hasText: hb.name_ar }).locator('span.rounded-full.size-6').first().innerText().catch(() => '?');
   ok(flag === 'L', `Hb 9 (female) flagged L — got ${flag}`);
-  await p.locator('div.group.rounded-xl', { hasText: 'تحليل البول العام' }).locator('button:has-text("ملء الطبيعي")').click();
+  await p.locator('div.group.rounded-xl', { hasText: 'فحص الإدرار العام' }).locator('button:has-text("ملء الطبيعي")').click();
   ok(await p.locator('text=غير محفوظ').count() > 0, 'unsaved badge shows before saving');
   await p.keyboard.press('Control+s'); await p.waitForTimeout(400);
   ok((await ls('station.visits.v1')).length === 1, 'Ctrl+S saved one visit');

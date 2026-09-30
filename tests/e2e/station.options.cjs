@@ -12,8 +12,8 @@ const { B, OWNER, ok, launch, tmp, pdfPages, done, kv, resetLocal } = require('.
   await p.goto(B + '/station/visits'); await p.waitForTimeout(500);
   ok(await p.locator('th:has-text("التسليم")').count() === 0, 'default: no delivery column');
   await p.goto(B + '/station/tests'); await p.waitForTimeout(500);
-  await p.fill('input[aria-label="بحث في الفحوصات"]', 'البول');
-  await p.locator('tbody tr', { hasText: 'تحليل البول العام' }).locator('button:has-text("الاستمارة")').click(); await p.waitForTimeout(300);
+  await p.fill('input[aria-label="بحث في الفحوصات"]', 'الإدرار');
+  await p.locator('tbody tr', { hasText: 'فحص الإدرار العام' }).locator('button:has-text("الاستمارة")').click(); await p.waitForTimeout(300);
   ok(await p.locator('text=قيم أخرى تُعتبر طبيعية').count() === 0, 'default: no extra-normals editor');
   await p.locator('button[aria-label="إغلاق"]').click();
   // switch on from the settings page
@@ -29,8 +29,8 @@ const { B, OWNER, ok, launch, tmp, pdfPages, done, kv, resetLocal } = require('.
   ok(st.ageUnit === true && st.deliveryStatus === true && st.formExtraNormals === true, 'three switches turn on from settings');
   // extra normals: bacteria "Few" counts as normal
   await p.goto(B + '/station/tests'); await p.waitForTimeout(500);
-  await p.fill('input[aria-label="بحث في الفحوصات"]', 'البول');
-  await p.locator('tbody tr', { hasText: 'تحليل البول العام' }).locator('button:has-text("الاستمارة")').click(); await p.waitForTimeout(300);
+  await p.fill('input[aria-label="بحث في الفحوصات"]', 'الإدرار');
+  await p.locator('tbody tr', { hasText: 'فحص الإدرار العام' }).locator('button:has-text("الاستمارة")').click(); await p.waitForTimeout(300);
   const dlg = p.locator('div[role=dialog]');
   const bac = dlg.locator('div.p-3', { has: p.locator('input[aria-label="اسم الحقل"][value="Bacteria"]') });
   await bac.locator('summary:has-text("قيم أخرى")').click();
@@ -50,7 +50,7 @@ const { B, OWNER, ok, launch, tmp, pdfPages, done, kv, resetLocal } = require('.
   await p.fill('input[aria-label="العمر"]', ''); await p.fill('input[aria-label="العمر"]', '7');
   const pick = async (q) => { await p.fill('input[placeholder="ابحث عن فحص…"]', q); await p.waitForTimeout(100); await p.locator('div.grid button:has(span.flex-1)').first().click(); };
   await pick('General Urine'); await p.fill('input[placeholder="ابحث عن فحص…"]', '');
-  const card = p.locator('div.group.rounded-xl', { hasText: 'تحليل البول العام' });
+  const card = p.locator('div.group.rounded-xl', { hasText: 'فحص الإدرار العام' });
   await card.locator('button:has-text("ملء الطبيعي")').click();
   await card.locator('button:has-text("الاستمارة")').click(); await p.waitForTimeout(300);
   await dlg.locator('input[aria-label="Bacteria"]').fill('Few'); await p.keyboard.press('Escape');

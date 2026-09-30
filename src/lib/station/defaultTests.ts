@@ -149,7 +149,7 @@ export function DEFAULT_TESTS(): DefaultTest[] {
 
   cat = "أدرار";
   sample = "إدرار";
-  add("GUE", "تحليل البول العام", "General Urine Examination", "", { kind: "text", text: "Normal" });
+  add("GUE", "فحص الإدرار العام (G.U.E)", "General Urine Examination", "", { kind: "text", text: "Normal" });
 
   // Structured report forms (see ./templates): entered through a form, printed on their own page.
   cat = "الخروج";

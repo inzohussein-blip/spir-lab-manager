@@ -39,7 +39,7 @@ export const isSub = (r: TRow): r is { sub: string } => "sub" in r;
 // ── Shared option lists ──────────────────────────────────────────────────────
 /** Amount scale — printed exactly as chosen: Nil, Few, +, ++, +++, ++++, More than (++++). */
 const AMOUNT = [o("Nil", "لا يوجد"), o("Few", "قليل"), o("+", "بسيط"), o("++", "متوسط"), o("+++", "كثير"), o("++++", "كثير جداً"), o("More than (++++)", "مملوء")];
-const CHEM = plain("Nil", "Trace", "+", "++", "+++", "++++");
+const CHEM = plain("Nil", "+", "++", "+++", "++++", "More than (++++)");
 const PERCENT = Array.from({ length: 21 }, (_, i) => ({ v: `${i * 5}%` }));
 
 // ── General Urine Examination ────────────────────────────────────────────────

@@ -138,6 +138,8 @@ const K_DEVICE_TAG = "station.deviceTag.v1";
 const K_CATALOG_VER = "station.catalogVersion.v1";
 /** One-time fix: the urine test's built-in range text became English ("Normal"). */
 const K_FIX_GUE = "station.fixGueNormal.v1";
+/** One-time rename of the urine test: «تحليل البول العام» → «فحص الإدرار العام (G.U.E)» (only if not renamed by the lab). */
+const K_RENAME_GUE = "station.renameGue.v1";
 /** One-time addition of the structured-form tests (stool, semen, culture) to existing catalogs. */
 const K_ADD_FORMS = "station.addFormTests.v1";
 /** Bump when DEFAULT_TESTS gains tests, so existing installs receive them. */
@@ -246,6 +248,7 @@ export function getTests(): StationTest[] {
     write(K_TESTS, seed);
     write(K_CATALOG_VER, CATALOG_VERSION);
     write(K_ADD_FORMS, true);
+    write(K_RENAME_GUE, true);
     return seed;
   }
   if (!read<boolean>(K_FIX_GUE, false)) {
@@ -253,6 +256,14 @@ export function getTests(): StationTest[] {
     write(K_TESTS, fixed);
     write(K_FIX_GUE, true);
     t.splice(0, t.length, ...fixed);
+  }
+  if (!read<boolean>(K_RENAME_GUE, false)) {
+    if (t.some((x) => x.code === "GUE" && x.name_ar.trim() === "تحليل البول العام")) {
+      const renamed = t.map((x) => (x.code === "GUE" && x.name_ar.trim() === "تحليل البول العام" ? { ...x, name_ar: "فحص الإدرار العام (G.U.E)" } : x));
+      t.splice(0, t.length, ...renamed);
+      write(K_TESTS, t);
+    }
+    write(K_RENAME_GUE, true);
   }
   if (!read<boolean>(K_ADD_FORMS, false)) {
     const have = new Set(t.map((x) => x.code));
