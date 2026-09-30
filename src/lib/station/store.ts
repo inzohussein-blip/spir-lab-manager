@@ -8,7 +8,7 @@
  */
 
 import { kvGet, kvSet, kvBytes, kvLarge, storageQuota } from "@/lib/local/kv";
-import { stockFloor, stockOptions } from "@/lib/local/links";
+import { stockFloor, stockOptions, logStockMoves, type MoveReason } from "@/lib/local/links";
 import { clearOldDefault } from "@/lib/local/util";
 import { DEFAULT_TESTS } from "./defaultTests";
 
@@ -113,6 +113,10 @@ export interface StockItem {
   perVisit?: boolean;
   /** Older single link (kept readable). */
   linkedTestId?: string;
+  /** Unit price (from the last purchase, or set by hand) — «المخزن والمشتريات ← الإعدادات ← الأسعار». */
+  price?: number;
+  /** The package's barcode — «… ← الباركود». */
+  barcode?: string;
 }
 /** The tests a stock item is linked to (old single link included). */
 export const stockTestIds = (s: StockItem): string[] =>
@@ -602,8 +606,11 @@ export function addDoctor(name: string, clinic?: string): StationDoctor {
 export function getStock(): StockItem[] {
   return read<StockItem[]>(K_STOCK, []);
 }
-export function saveStock(list: StockItem[]): void {
+/** Save the stock room; count changes are recorded in the movement log with their reason. */
+export function saveStock(list: StockItem[], reason: MoveReason = "edit", ref?: string): void {
+  const before = getStock();
   write(K_STOCK, list);
+  logStockMoves(before, list, reason, ref);
 }
 /** Units each stock item gives to the tests newly ordered on a visit: a reagent one per linked
  *  test, a consumable (per visit) one when the visit has any of its tests — and none when the
@@ -624,7 +631,7 @@ export function stockUse(list: StockItem[], testIds: string[], already: string[]
 export interface StockShort { name: string; qty: number; need: number }
 /** Use stock for the tests newly ordered on a visit (see stockUse). Returns what was not in stock
  *  (the count stops at 0, or goes below it when the lab allows negative stock). */
-export function deductStockForTests(testIds: string[], already: string[] = []): StockShort[] {
+export function deductStockForTests(testIds: string[], already: string[] = [], ref?: string): StockShort[] {
   if (testIds.length === 0) return [];
   const list = getStock();
   const use = stockUse(list, testIds, already);
@@ -636,7 +643,7 @@ export function deductStockForTests(testIds: string[], already: string[] = []): 
     const qty = Number(s.qty) || 0;
     if (qty < u) short.push({ name: s.name, qty, need: u });
     return { ...s, qty: stockFloor(qty - u) };
-  }));
+  }), "result", ref);
   return short;
 }
 // ── Results ↔ stock: what each visit has used ──────────────────────────────────
@@ -660,7 +667,9 @@ const handled = (visitId: string, before: string[]) => getUsed()[visitId]?.ids ?
 /** Take a visit's materials from stock (tests not handled yet) and remember them. */
 export function issueVisitStock(visitId: string, testIds: string[], before: string[] = []): StockShort[] {
   const had = handled(visitId, before);
-  const short = deductStockForTests(testIds.filter((id) => !had.includes(id)), had);
+  const v = getVisit(visitId);
+  const ref = v ? [v.patient.name, v.accession].filter(Boolean).join(" · ") : undefined;
+  const short = deductStockForTests(testIds.filter((id) => !had.includes(id)), had, ref);
   markUsed(visitId, testIds);
   return short;
 }

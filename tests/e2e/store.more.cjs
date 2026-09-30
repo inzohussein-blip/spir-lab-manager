@@ -1,0 +1,118 @@
+// «المخزن والمشتريات» additions: kits (defined in «الأصناف», bought in «المشتريات»), the movement
+// log, the stocktake, and three options that start off: supplier debts, prices, barcodes.
+const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
+(async () => {
+  const b = await launch();
+  const p = await (await b.newContext({ viewport: { width: 1440, height: 950 } })).newPage();
+  const errs = []; p.on('pageerror', (e) => errs.push(`${p.url()} ${e.message.slice(0, 140)}`)); p.on('dialog', (d) => d.accept());
+  await p.goto(B + '/welcome'); await resetLocal(p, { 'local.activation.v1': 'legacy' });
+  const settled = async (fn, ms = 5000) => { const end = Date.now() + ms; while (Date.now() < end) { if (await fn()) return true; await p.waitForTimeout(150); } return false; };
+  const stock = async () => (await kv(p, 'station.stock.v1')) || [];
+  const qty = async (id) => (await stock()).find((s) => s.id === id)?.qty;
+  const sw = (label) => p.locator(`label:has(span:text-is("${label}"))`).locator('button[role=switch]');
+
+  await p.goto(B + '/station'); await p.waitForTimeout(1200); // the lab's tests exist once the station opened
+  await kvPut(p, 'station.stock.v1', [{ id: 'glu', name: 'كاشف السكر', qty: 0 }, { id: 'cal', name: 'محلول المعايرة', qty: 0 }]);
+
+  // ── A kit: defined in «الأصناف» ──
+  await p.goto(B + '/store/items'); await p.waitForSelector('[data-testid="kit-form"]', { timeout: 20000 });
+  const kf = p.locator('[data-testid="kit-form"]');
+  await kf.locator('input[aria-label="اسم الكت"]').fill('كت السكر');
+  await kf.locator('select[aria-label="صنف في الكت"]').first().selectOption('glu');
+  await kf.locator('input[aria-label="الكمية في الكت"]').first().fill('4');
+  await kf.locator('button:has-text("صنف آخر في الكت")').click();
+  await kf.locator('select[aria-label="صنف في الكت"]').nth(1).selectOption('cal');
+  await kf.locator('input[aria-label="الكمية في الكت"]').nth(1).fill('1');
+  await p.click('[data-testid="kit-save"]');
+  ok(await settled(async () => JSON.stringify(((await kv(p, 'station.kits.v1')) || [])[0]?.parts) === JSON.stringify([{ stockId: 'glu', qty: 4 }, { stockId: 'cal', qty: 1 }])), 'kit saved: 4 × reagent + 1 × calibrator');
+  ok((await p.locator('tr[data-kit="كت السكر"]').innerText()).includes('كاشف السكر'), 'kit listed with what it holds');
+
+  // ── Bought in «المشتريات»: its contents go to the stock room ──
+  await p.goto(B + '/store'); await p.waitForSelector('input[placeholder="الصنف"]', { timeout: 20000 });
+  await p.fill('input[placeholder="الصنف"]', 'كت السكر');
+  await p.locator('input[aria-label="الكمية"]').first().fill('2');
+  ok(await p.locator('[data-testid="line-kit"]').count() === 1 && (await p.locator('[data-testid="kit-contents"]').innerText()).includes('كاشف السكر × 8'), 'the line is marked as a kit, with what it adds (2 kits → 8 reagents)');
+  await p.locator('input[aria-label="سعر الوحدة"]').first().fill('50000');
+  await p.click('button:has-text("حفظ العملية")');
+  ok(await settled(async () => (await qty('glu')) === 8 && (await qty('cal')) === 2), 'buying 2 kits: 8 reagents and 2 calibrators in stock');
+  ok(((await kv(p, 'purchasing.purchases.v1')) || [])[0]?.items[0]?.kitId, 'the purchase remembers the kit');
+
+  // ── «سجل الحركة» ──
+  await p.goto(B + '/store/inventory'); await p.waitForSelector('[data-testid="stock-qty"]', { timeout: 20000 });
+  await p.click('button[aria-label="صرف من كاشف السكر"]');
+  ok(await settled(async () => (await qty('glu')) === 7), 'issued by hand (8 → 7)');
+  await p.click('a[aria-label="سجل حركة كاشف السكر"]'); await p.waitForSelector('[data-testid="moves"] tbody tr[data-reason]', { timeout: 20000 });
+  const reasons = await p.locator('[data-testid="moves"] tbody tr[data-reason]').evaluateAll((rs) => rs.map((r) => r.dataset.reason));
+  ok(JSON.stringify(reasons) === JSON.stringify(['issue', 'purchase']), `the item's history: manual issue, then the purchase (${reasons.join(', ')})`);
+  ok((await p.locator('[data-testid="moves"] tbody tr').first().innerText()).includes('7'), 'with the count after each move');
+
+  // ── «الجرد» ──
+  await p.goto(B + '/store/count'); await p.waitForSelector('[data-testid="count-table"]', { timeout: 20000 });
+  await p.fill('input[aria-label="المعدود كاشف السكر"]', '5');
+  ok((await p.locator('tr[data-count="كاشف السكر"] [data-testid="count-diff"]').innerText()).trim() === '-2', 'the difference shows (5 counted, 7 recorded → -2)');
+  await p.click('[data-testid="count-save"]');
+  ok(await settled(async () => (await qty('glu')) === 5) && (await qty('cal')) === 2, 'the stocktake sets the counted item only (7 → 5)');
+  ok(await p.locator('[data-testid="count-history"] details').count() === 1, 'the stocktake is kept');
+  ok(((await kv(p, 'station.stockMoves.v1')) || [])[0]?.reason === 'count', 'and recorded in the movement log');
+
+  // ── Options: all off at first ──
+  await p.goto(B + '/store/settings#extras'); await p.waitForSelector('[data-testid="store-extras"]', { timeout: 20000 });
+  ok((await Promise.all(['ديون الموردين', 'الأسعار وقيمة المخزن', 'الباركود'].map((l) => sw(l).getAttribute('aria-checked')))).every((x) => x === 'false'), 'debts, prices and barcode: off by default');
+  await p.goto(B + '/store'); await p.waitForSelector('input[placeholder="الصنف"]', { timeout: 20000 });
+  ok(await p.locator('input[aria-label="المدفوع الآن"]').count() === 0 && await p.locator('[data-testid="scan-box"]').count() === 0, 'purchases as before (no payments, no scanning)');
+
+  // ── Supplier debts ──
+  await p.goto(B + '/store/settings#extras'); await p.waitForSelector('[data-testid="store-extras"]', { timeout: 20000 });
+  await sw('ديون الموردين').click();
+  ok(await settled(async () => (await kv(p, 'purchasing.settings.v1'))?.debts === true), 'supplier debts switched on');
+  await kvPut(p, 'purchasing.suppliers.v1', [{ id: 'sup1', name: 'مورّد الكواشف' }]);
+  await p.goto(B + '/store'); await p.waitForSelector('input[aria-label="المدفوع الآن"]', { timeout: 20000 });
+  await p.locator('select').first().selectOption('sup1');
+  await p.fill('input[placeholder="الصنف"]', 'كاشف السكر');
+  await p.locator('input[aria-label="الكمية"]').first().fill('1');
+  await p.locator('input[aria-label="سعر الوحدة"]').first().fill('10000');
+  await p.fill('input[aria-label="المدفوع الآن"]', '4000');
+  await p.click('button:has-text("حفظ العملية")');
+  const due = p.locator('[data-testid="purchase-due"]').first();
+  ok(await settled(async () => (await due.innerText()).includes('6,000')), `paid 4,000 of 10,000: 6,000 still owed (${(await due.innerText()).replace(/\s+/g, ' ')})`);
+  await due.locator('button:has-text("دفعة")').click();
+  await p.fill('input[aria-label="مبلغ الدفعة"]', '2000'); await p.click('button:has-text("تسجيل")');
+  ok(await settled(async () => (await p.locator('[data-testid="purchase-due"]').first().innerText()).includes('4,000')), 'a further payment of 2,000: 4,000 owed');
+  await p.goto(B + '/store/suppliers'); await p.waitForSelector('tr[data-supplier="مورّد الكواشف"]', { timeout: 20000 });
+  ok((await p.locator('tr[data-supplier="مورّد الكواشف"] [data-testid="supplier-due"]').innerText()).includes('4,000'), 'the supplier\'s balance: 4,000');
+  await p.click('button[aria-label="كشف حساب مورّد الكواشف"]');
+  ok((await p.locator('[data-testid="statement"] tbody tr').count()) === 3 && (await p.locator('[data-testid="statement-due"]').innerText()).includes('4,000'), 'account statement: the purchase, two payments, 4,000 owed');
+
+  // ── Prices: unit price from the last purchase, stock value, cost per test ──
+  await p.goto(B + '/store/settings#extras'); await p.waitForSelector('[data-testid="store-extras"]', { timeout: 20000 });
+  await sw('الأسعار وقيمة المخزن').click();
+  ok(await settled(async () => (await kv(p, 'purchasing.settings.v1'))?.prices === true), 'prices switched on');
+  ok((await stock()).find((s) => s.id === 'glu')?.price === 10000, 'the reagent\'s unit price comes from its last purchase (10,000)');
+  await p.goto(B + '/store/inventory'); await p.waitForSelector('[data-testid="stock-value"]', { timeout: 20000 });
+  ok((await p.locator('[data-testid="stock-value"]').innerText()).includes('60,000'), `stock value: 6 × 10,000 = 60,000 (${(await p.locator('[data-testid="stock-value"]').innerText()).replace(/\s+/g, ' ')})`);
+  const hb = (await kv(p, 'station.tests.v1')).find((t) => t.code === 'HB');
+  await kvPut(p, 'station.stock.v1', (await stock()).map((s) => (s.id === 'glu' ? { ...s, testIds: [hb.id] } : s)));
+  await p.goto(B + '/store/items'); await p.waitForSelector('tr[data-test="HB"] [data-testid="test-cost"]', { timeout: 20000 });
+  ok((await p.locator('tr[data-test="HB"] [data-testid="test-cost"]').innerText()).includes('10,000'), 'cost per test: the material linked to it');
+
+  // ── Barcodes ──
+  await p.goto(B + '/store/settings#extras'); await p.waitForSelector('[data-testid="store-extras"]', { timeout: 20000 });
+  await sw('الباركود').click();
+  ok(await settled(async () => (await kv(p, 'purchasing.settings.v1'))?.barcode === true), 'barcodes switched on');
+  await p.goto(B + '/store/items?edit=glu'); await p.waitForSelector('input[aria-label="باركود الصنف"]', { timeout: 20000 });
+  await p.fill('input[aria-label="باركود الصنف"]', '6291041500213'); await p.click('button:has-text("حفظ التعديل")');
+  ok(await settled(async () => (await stock()).find((s) => s.id === 'glu')?.barcode === '6291041500213'), 'barcode saved on the item');
+  await p.goto(B + '/store'); await p.waitForSelector('[data-testid="scan-box"]', { timeout: 20000 });
+  const scan = async (code) => { await p.fill('input[aria-label="امسح الباركود"]', code); await p.press('input[aria-label="امسح الباركود"]', 'Enter'); await p.waitForTimeout(150); };
+  await scan('6291041500213'); await scan('6291041500213');
+  ok(await p.locator('input[placeholder="الصنف"]').first().inputValue() === 'كاشف السكر' && await p.locator('input[aria-label="الكمية"]').first().inputValue() === '2', 'purchases: scanning twice adds the item with 2');
+  await scan('000');
+  ok((await p.locator('[data-testid="scan-box"]').innerText()).includes('غير معروف'), 'an unknown code is said so');
+  await p.goto(B + '/store/count'); await p.waitForSelector('[data-testid="scan-box"]', { timeout: 20000 });
+  await scan('6291041500213'); await scan('6291041500213'); await scan('6291041500213');
+  ok(await p.locator('input[aria-label="المعدود كاشف السكر"]').inputValue() === '3', 'stocktake: each scan counts one');
+
+  ok(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.slice(0, 3).join(' | ') : ''));
+  await b.close();
+  done();
+})().catch((e) => { console.error(e); process.exit(1); });

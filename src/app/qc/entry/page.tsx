@@ -37,7 +37,7 @@ export default function QcEntryPage() {
     setResult(a.id, levelId, date, raw === "" ? null : Number(raw), by.trim() ? { by: by.trim() } : {});
     // A new control run uses one unit of its control material from the stock room — now, or later
     // from «المخزن ← بانتظار الصرف» when the stock room is set to manual.
-    if (!had && raw !== "") qcRunStock(qcRunKey(a.id, levelId, date), a.stockId);
+    if (!had && raw !== "") qcRunStock(qcRunKey(a.id, levelId, date), a.stockId, `${a.name} · ${date}`);
     setDrafts((d) => { const n = { ...d }; delete n[k]; return n; });
     reload();
   }

@@ -1,6 +1,6 @@
 // Every public page opens without errors or sideways scrolling — desktop, phone and dark mode.
 const { B, ok, launch, done, kv, resetLocal } = require('./lib.cjs');
-const routes = ['/welcome', '/station', '/station/inventory', '/store/inventory', '/store/items', '/station/records', '/station/settings', '/station/tests', '/station/visits',
+const routes = ['/welcome', '/station', '/station/inventory', '/store/inventory', '/store/items', '/store/count', '/store/moves', '/station/records', '/station/settings', '/station/tests', '/station/visits',
   '/store', '/store/report', '/store/settings', '/store/suppliers',
   '/training', '/training/cards', '/training/edit', '/training/exam', '/training/manual', '/training/map', '/training/media', '/training/quiz',
   '/training/settings', '/training/tools', '/training/trainees', '/training/tubes', '/training/test/FIRST',

@@ -7,8 +7,11 @@ import { consumablePresets } from "@/lib/purchasing/presets";
 import { NumberInput } from "@/components/local/NumberInput";
 import { qcLinks } from "@/lib/local/links";
 import { TestPicker, Tile, inp } from "./stockParts";
+import { KitsCard } from "./KitsCard";
+import { getSettings, type PurchasingSettings } from "@/lib/purchasing/store";
+import { money } from "@/lib/utils";
 
-const empty = { name: "", qty: "", minQty: "", expiry: "", testIds: [] as string[], perVisit: false };
+const empty = { name: "", qty: "", minQty: "", expiry: "", testIds: [] as string[], perVisit: false, price: "", barcode: "" };
 /** The name a test's own material gets when made from «الأصناف». */
 const materialName = (t: StationTest) => `كاشف ${t.name_ar}`;
 
@@ -26,15 +29,16 @@ export function ItemsPanel() {
   const [editId, setEditId] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [missingOnly, setMissingOnly] = useState(false);
+  const [opts, setOpts] = useState<PurchasingSettings>({ orgName: "" });
 
   useEffect(() => {
     const list = getStock();
-    setRows(list); setTests(getTests()); setQc(qcLinks());
+    setRows(list); setTests(getTests()); setQc(qcLinks()); setOpts(getSettings());
     // «المخزن» links here to change an item (?edit=<id>).
     const id = new URLSearchParams(window.location.search).get("edit");
     const s = id ? list.find((x) => x.id === id) : undefined;
     if (s) {
-      setF({ name: s.name, qty: String(s.qty), minQty: s.minQty != null ? String(s.minQty) : "", expiry: s.expiry ?? "", testIds: stockTestIds(s), perVisit: !!s.perVisit });
+      setF({ name: s.name, qty: String(s.qty), minQty: s.minQty != null ? String(s.minQty) : "", expiry: s.expiry ?? "", testIds: stockTestIds(s), perVisit: !!s.perVisit, price: s.price != null ? String(s.price) : "", barcode: s.barcode ?? "" });
       setEditId(s.id);
       setTimeout(() => document.getElementById("item-form")?.scrollIntoView({ block: "start" }), 50);
     }
@@ -43,13 +47,19 @@ export function ItemsPanel() {
   function persist(next: StockItem[]) { setRows(next); saveStock(next); }
   function reset() { setF({ ...empty }); setEditId(null); }
   function fill(s: StockItem) {
-    setF({ name: s.name, qty: String(s.qty), minQty: s.minQty != null ? String(s.minQty) : "", expiry: s.expiry ?? "", testIds: stockTestIds(s), perVisit: !!s.perVisit });
+    setF({ name: s.name, qty: String(s.qty), minQty: s.minQty != null ? String(s.minQty) : "", expiry: s.expiry ?? "", testIds: stockTestIds(s), perVisit: !!s.perVisit, price: s.price != null ? String(s.price) : "", barcode: s.barcode ?? "" });
     setEditId(s.id);
   }
   function edit(s: StockItem) { fill(s); document.getElementById("item-form")?.scrollIntoView({ block: "start", behavior: "smooth" }); }
   function submit() {
     if (!f.name.trim()) return;
+    const old = rows.find((r) => r.id === editId);
+    // Price and barcode: from the form when their option is on, else kept as they were.
+    const price = opts.prices ? (f.price.trim() ? Number(f.price) : undefined) : old?.price;
+    const barcode = opts.barcode ? f.barcode.trim() || undefined : old?.barcode;
     const rec: StockItem = {
+      ...(price != null ? { price } : {}),
+      ...(barcode ? { barcode } : {}),
       id: editId ?? uid(),
       name: f.name.trim(),
       qty: Number(f.qty) || 0,
@@ -160,6 +170,8 @@ export function ItemsPanel() {
               <option value="visit">وحدة لكل زيارة (أنبوب، علبة، سرنجة)</option>
             </select>
           </label>
+          {opts.prices && <label className="text-sm font-medium">سعر الوحدة (د.ع)<NumberInput value={f.price} onValue={(v) => setF({ ...f, price: v })} group aria-label="سعر الوحدة" className={`mt-1 ${inp}`} /></label>}
+          {opts.barcode && <label className="text-sm font-medium">الباركود<input value={f.barcode} onChange={(e) => setF({ ...f, barcode: e.target.value })} aria-label="باركود الصنف" placeholder="امسح باركود العلبة هنا" dir="ltr" className={`mt-1 ${inp}`} /></label>}
           <div className="text-sm font-medium sm:col-span-2 lg:col-span-3">
             التحاليل المرتبطة من محطة المختبر
             <div className="mt-1"><TestPicker tests={tests} value={f.testIds} onChange={(ids) => setF({ ...f, testIds: ids })} /></div>
@@ -204,13 +216,14 @@ export function ItemsPanel() {
                 <th className="px-4 py-2 font-medium">التحليل</th>
                 <th className="px-4 py-2 font-medium">مادته (الكمية)</th>
                 <th className="px-4 py-2 font-medium">أنبوب / علبة</th>
+                {opts.prices && <th className="px-4 py-2 font-medium">كلفة الفحص</th>}
                 <th className="px-4 py-2 font-medium"></th>
               </tr>
             </thead>
             <tbody>
-              {groups.length === 0 && <tr><td colSpan={4} className="px-4 py-6 text-center text-muted">{tests.length ? "لا تحاليل مطابقة." : "افتح محطة المختبر مرة لتظهر تحاليلها هنا."}</td></tr>}
+              {groups.length === 0 && <tr><td colSpan={opts.prices ? 5 : 4} className="px-4 py-6 text-center text-muted">{tests.length ? "لا تحاليل مطابقة." : "افتح محطة المختبر مرة لتظهر تحاليلها هنا."}</td></tr>}
               {groups.map(([cat, list]) => [
-                <tr key={`c-${cat}`}><td colSpan={4} className="bg-canvas px-4 py-1.5 text-xs font-bold text-muted">{cat}</td></tr>,
+                <tr key={`c-${cat}`}><td colSpan={opts.prices ? 5 : 4} className="bg-canvas px-4 py-1.5 text-xs font-bold text-muted">{cat}</td></tr>,
                 ...list.map((t) => (
                   <tr key={t.id} data-test={t.code ?? t.id} className="border-b border-line/60 last:border-0">
                     <td className="px-4 py-2">
@@ -221,6 +234,17 @@ export function ItemsPanel() {
                       <div className="flex flex-wrap gap-1">{(own.get(t.id) ?? []).map((s) => chip(s, "own"))}{!own.has(t.id) && <span className="text-xs text-muted">—</span>}</div>
                     </td>
                     <td className="px-4 py-2"><div className="flex flex-wrap gap-1">{(perVisit.get(t.id) ?? []).map((s) => chip(s, "visit"))}</div></td>
+                    {opts.prices && (() => {
+                      // One unit of each of its own materials, plus its tubes (used once per visit).
+                      const mats = [...(own.get(t.id) ?? []), ...(perVisit.get(t.id) ?? [])];
+                      const priced = mats.filter((m) => m.price != null);
+                      return (
+                        <td className="px-4 py-2 tabular-nums" data-testid="test-cost" title={priced.map((m) => `${m.name}: ${money(m.price!)}`).join("\n")}>
+                          {priced.length ? `${money(priced.reduce((n, m) => n + m.price!, 0))} د.ع` : <span className="text-xs text-muted">—</span>}
+                          {priced.length > 0 && priced.length < mats.length && <span className="block text-[10px] text-amber-700">بعض المواد بلا سعر</span>}
+                        </td>
+                      );
+                    })()}
                     <td className="px-4 py-2 text-end">
                       <button onClick={() => addFor(t)} aria-label={`مادة لـ ${t.name_ar}`} data-testid="add-material" title={`إضافة «${materialName(t)}» إلى المخزن`}
                         className="inline-flex items-center gap-1 rounded-lg border border-line px-2 py-1 text-xs hover:bg-canvas">
@@ -247,6 +271,9 @@ export function ItemsPanel() {
         </div>
         <ItemTable rows={consumables} emptyText="لا أنابيب أو مستلزمات بعد." actions={rowActions} tests={tests} qc={qc} />
       </div>
+
+      {/* Kits: packages made of the items above */}
+      <KitsCard stock={rows} barcode={opts.barcode === true} />
 
       {/* Anything else */}
       <div className={card} data-testid="items-other">

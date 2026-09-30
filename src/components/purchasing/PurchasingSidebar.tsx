@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ShoppingCart, Truck, Settings, Home, FileBarChart, Menu, X, Boxes, Tags } from "lucide-react";
+import { ShoppingCart, Truck, Settings, Home, FileBarChart, Menu, X, Boxes, Tags, ClipboardCheck, History } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSideCollapsed, SideCollapseButton, SideReopenButton } from "@/components/local/SideCollapse";
 import { getStock, daysToExpiry, pendingStock } from "@/lib/station/store";
@@ -13,6 +13,8 @@ const FIXED = [
   { href: "/store", label: "المشتريات", icon: ShoppingCart },
   { href: "/store/inventory", label: "المخزن", icon: Boxes },
   { href: "/store/items", label: "الأصناف", icon: Tags },
+  { href: "/store/count", label: "الجرد", icon: ClipboardCheck },
+  { href: "/store/moves", label: "سجل الحركة", icon: History },
   { href: "/store/suppliers", label: "الموردون", icon: Truck },
   { href: "/store/report", label: "التقارير (شهري/سنوي)", icon: FileBarChart },
   { href: "/store/settings", label: "الإعدادات والنسخ الاحتياطي", icon: Settings },
