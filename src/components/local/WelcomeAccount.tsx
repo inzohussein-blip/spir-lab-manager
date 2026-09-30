@@ -5,10 +5,11 @@ import { Building2, CalendarClock, ChevronDown, Clock, Cpu, RefreshCw, ShieldAle
 import { useLicense } from "@/components/local/ActivationGate";
 import { WARN_DAYS, cachedContact, deviceId, licenseCheckedAt, refreshLicense } from "@/lib/license/client";
 import { LICENSE_MODULES } from "@/lib/license/modules";
+import { fmtDateTime } from "@/lib/utils";
 
 const DAY = 86_400_000;
 const fmtDate = (ms: number) => new Date(ms).toLocaleDateString("en-CA");
-const fmtTime = (ms: number) => new Date(ms).toLocaleString("en-GB", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+const fmtTime = (ms: number) => fmtDateTime(ms);
 
 /** The Welcome page's account box (top left): this device's lab, its subscription end and, on
  *  opening, the stations it includes, the last check with the server and the device's id. */

@@ -3,9 +3,10 @@
 import { useMemo, useState } from "react";
 import { RotateCcw, Trash2, FileText, User, Search } from "lucide-react";
 import { getTrash, restoreTrash, purgeTrash, TRASH_DAYS, type TrashItem } from "@/lib/station/store";
+import { fmtDateTime } from "@/lib/utils";
 
 const DAY = 86_400_000;
-const fmt = (ms: number) => new Date(ms).toLocaleString("ar-IQ-u-nu-latn");
+const fmt = (ms: number) => fmtDateTime(ms);
 
 /** «سلة المحذوفات»: deleted visits and patients, restorable for 30 days. */
 export default function StationTrashPage() {

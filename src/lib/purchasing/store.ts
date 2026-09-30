@@ -113,13 +113,20 @@ function changeStock(moves: { id: string; qty: number }[]): void {
   for (const m of moves) by.set(m.id, (by.get(m.id) ?? 0) + m.qty);
   saveStock(getStock().map((s) => (by.has(s.id) ? { ...s, qty: Math.max(0, Number(s.qty) + by.get(s.id)!) } : s)));
 }
-/** Add bought quantities to the matching stock items; returns what was added. */
+/** Put bought quantities in the stock room: onto the item of the same name, or as a new item
+ *  (with no quantity yet, then the purchase's). Returns what was added. */
 export function addToStock(items: PurchaseItem[]): { id: string; qty: number }[] {
-  const added = items
-    .map((it) => ({ m: stockMatch(it.name), qty: Number(it.qty) || 0 }))
-    .filter((x): x is { m: NonNullable<typeof x.m>; qty: number } => !!x.m && x.qty > 0)
-    .map((x) => ({ id: x.m.id, qty: x.qty }));
-  if (added.length) changeStock(added);
+  const lines = items.map((it) => ({ name: it.name.trim(), qty: Number(it.qty) || 0 })).filter((x) => x.name && x.qty > 0);
+  if (!lines.length) return [];
+  const stock = getStock();
+  const fresh: typeof stock = [];
+  const added = lines.map((x) => {
+    let item = stock.find((s) => key(s.name) === key(x.name)) ?? fresh.find((s) => key(s.name) === key(x.name));
+    if (!item) { item = { id: uid(), name: x.name, qty: 0 }; fresh.push(item); }
+    return { id: item.id, qty: x.qty };
+  });
+  if (fresh.length) saveStock([...stock, ...fresh]);
+  changeStock(added);
   return added;
 }
 export function getPurchase(id: string): Purchase | null {

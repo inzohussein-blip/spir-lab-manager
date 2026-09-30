@@ -18,7 +18,8 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   ok(await p.locator('input[aria-label="الكمية"]').inputValue() === '5', 'Arabic-keyboard digit typed as 5');
   await p.click('button:has-text("إضافة")');
   ok(await settled(async () => ((await kv(p, 'station.stock.v1')) || []).some((s) => s.name === 'كاشف السكر' && s.qty === 5)), 'stock item saved (shared key with the lab station)');
-  ok(await p.locator('aside a[href="/store/inventory"]').count() === 1, 'procurement menu has the stock room');
+  ok(await p.locator('[data-testid="store-tabs"] a[href="/store/inventory"]').count() === 1 && await p.locator('aside a[href="/store"]:has-text("المشتريات والمخزن")').count() === 1,
+    'procurement and the stock room on one screen (two tabs, one menu entry)');
 
   // ── A purchase: typed amounts and the stock link ──
   await p.goto(B + '/store'); await p.waitForSelector('input[placeholder="الصنف"]', { timeout: 20000 });
@@ -37,6 +38,13 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   await p.reload(); await p.waitForSelector('input[placeholder="الصنف"]');
   await p.locator('tbody tr', { hasText: 'مورّد المخزن' }).locator('button').last().click();
   ok(await settled(async () => ((await kv(p, 'station.stock.v1')) || []).find((s) => s.name === 'كاشف السكر')?.qty === 5), 'deleting the purchase takes its quantity back (8 → 5)');
+  // A line not yet in the stock room becomes a new item there.
+  await p.fill('input[placeholder="الصنف"]', 'قفازات جديدة');
+  await qty.fill(''); await qty.pressSequentially('4');
+  await price.click(); await price.pressSequentially('1000'); await price.press('Tab');
+  ok(await p.locator('span:has-text("جديد")').count() >= 1, 'a new line is marked «جديد»');
+  await p.click('button:has-text("حفظ العملية")');
+  ok(await settled(async () => ((await kv(p, 'station.stock.v1')) || []).find((s) => s.name === 'قفازات جديدة')?.qty === 4), 'the new line is added to the stock room (4)');
 
   // ── Lab station: print button under the results + highlight ──
   await p.goto(B + '/station'); await p.waitForSelector('label:has-text("الاسم الثلاثي") input', { timeout: 20000 });

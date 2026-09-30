@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { companySyncOn } from "@/lib/sync/protocol";
+import { fmtDateTime } from "@/lib/utils";
 import type { SyncStatus } from "@/lib/sync/client";
 
 const ERRORS: Record<string, string> = {
@@ -13,7 +14,7 @@ const ERRORS: Record<string, string> = {
   bad_hub_key: "مفتاح خادم الشبكة المحلية غير صحيح.",
   needs_db: "مختبرك لم يربط قاعدة بياناته الخاصة بعد — تُربط من إعدادات لوحة الإدارة أو بمساعدة المزوّد. حتى ذلك الحين: المزامنة بملف أو عبر خادم الشبكة المحلية.",
 };
-const when = (t?: number) => (t ? new Date(t).toLocaleString("ar-IQ-u-nu-latn", { dateStyle: "short", timeStyle: "short" }) : "—");
+const when = (t?: number) => (t ? fmtDateTime(t) : "—");
 
 /** «المزامنة التلقائية»: this computer exchanges its station records with the lab's other
  *  computers every 30 seconds and after each change — through the lab's own place on the

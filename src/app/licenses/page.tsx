@@ -12,6 +12,7 @@ import { SYNC_ERRORS } from "@/components/local/SyncPanel";
 import { adminDbError } from "@/lib/db/labErrors";
 import { PROVIDERS, providerById, providerOf, type ProviderId } from "@/lib/db/providers";
 import { ConnInput, ProviderGuide, ProviderMark, ProviderPicker } from "@/components/DbProviders";
+import { fmtDateTime } from "@/lib/utils";
 
 /** «إدارة الرموز» — the owner's page: one code per lab, bound to one device, with a period and stations. */
 
@@ -66,7 +67,7 @@ const DAY = 86_400_000;
 const OWNER_PHONE = "07803993585";
 const PERIODS = [{ d: 30, l: "شهر" }, { d: 90, l: "3 أشهر" }, { d: 180, l: "6 أشهر" }, { d: 365, l: "سنة" }];
 const fmt = (ms: number | null) => (ms ? new Date(ms).toLocaleDateString("en-CA") : "—");
-const fmtTime = (ms: number | null) => (ms ? new Date(ms).toLocaleString("ar-IQ-u-nu-latn") : "—");
+const fmtTime = (ms: number | null) => (ms ? fmtDateTime(ms) : "—");
 const deviceOf = (r: Row) => r.device_name || r.device_label || (r.device_id ? "مربوط" : "");
 /** Where a code's full admin panel keeps its data (see lib/db/lab.ts). */
 type Place = "own" | "site" | "waiting" | "none";

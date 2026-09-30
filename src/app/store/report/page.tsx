@@ -5,7 +5,8 @@ import { FileBarChart, Printer } from "lucide-react";
 import { getPurchases, getSettings, type Purchase, type PurchasingSettings } from "@/lib/purchasing/store";
 import { money } from "@/lib/utils";
 
-const MONTHS = ["الكل", "يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
+/** Months as numbers only (0 = the whole year). */
+const MONTHS = ["الكل", ...Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, "0"))];
 
 export default function PurchasingReportPage() {
   const [purchases, setPurchases] = useState<Purchase[]>([]);

@@ -3,14 +3,13 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ShoppingCart, Truck, Settings, Home, FileBarChart, Menu, X, Boxes } from "lucide-react";
+import { ShoppingCart, Truck, Settings, Home, FileBarChart, Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSideCollapsed, SideCollapseButton, SideReopenButton } from "@/components/local/SideCollapse";
 import { getStock, daysToExpiry } from "@/lib/station/store";
 
 const FIXED = [
-  { href: "/store", label: "المشتريات", icon: ShoppingCart },
-  { href: "/store/inventory", label: "المخزن", icon: Boxes },
+  { href: "/store", label: "المشتريات والمخزن", icon: ShoppingCart },
   { href: "/store/report", label: "التقارير (شهري/سنوي)", icon: FileBarChart },
   { href: "/store/suppliers", label: "الموردون", icon: Truck },
   { href: "/store/settings", label: "الإعدادات والنسخ الاحتياطي", icon: Settings },
@@ -19,7 +18,7 @@ const FIXED = [
 export function PurchasingSidebar() {
   const pathname = usePathname();
   const isActive = (href: string) =>
-    href === "/store" ? pathname === "/store" : pathname.startsWith(href);
+    href === "/store" ? pathname === "/store" || pathname.startsWith("/store/inventory") : pathname.startsWith(href);
   // Phones: the menu slides in from a top bar instead of taking the screen width.
   const [open, setOpen] = useState(false);
   const [collapsed, setCollapsed] = useSideCollapsed();
@@ -69,7 +68,7 @@ export function PurchasingSidebar() {
           >
             <it.icon className="size-4.5 shrink-0" />
             {it.label}
-            {it.href === "/store/inventory" && stockAlerts > 0 && (
+            {it.href === "/store" && stockAlerts > 0 && (
               <span data-testid="stock-alerts" className="ms-auto rounded-full bg-amber-500 px-1.5 text-[11px] font-bold text-white tabular-nums">{stockAlerts}</span>
             )}
           </Link>

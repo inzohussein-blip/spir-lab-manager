@@ -16,6 +16,7 @@ import { FormDialog, fillNormals } from "@/components/station/ReportForms";
 import { isFormCode, decodeForm, encodeForm, formProgress, formOptionsOf, type FormCode } from "@/lib/station/templates";
 import { computeDerived } from "@/lib/station/derived";
 import { useToast } from "@/components/station/Toast";
+import { fmtDate } from "@/lib/utils";
 
 const inp =
   "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
@@ -550,7 +551,7 @@ function StationEntryPage() {
                   <div className="mb-2 flex max-h-28 flex-col gap-1.5 overflow-y-auto">
                     {patientNotes.map((n, i) => (
                       <div key={i} className="rounded-lg bg-canvas px-3 py-1.5 text-xs">
-                        <span className="text-[10px] text-muted">{new Date(n.ts).toLocaleDateString("ar-IQ-u-nu-latn")}: </span>
+                        <span className="text-[10px] text-muted">{fmtDate(n.ts)}: </span>
                         {n.text}
                       </div>
                     ))}

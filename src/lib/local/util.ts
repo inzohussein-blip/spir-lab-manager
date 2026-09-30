@@ -52,8 +52,8 @@ export function daysUntil(date: string): number {
   return Math.round((new Date(date + "T00:00:00").getTime() - t) / 86400000);
 }
 export const AR_DAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
-export const AR_MONTHS = ["كانون الثاني", "شباط", "آذار", "نيسان", "أيار", "حزيران", "تموز", "آب", "أيلول", "تشرين الأول", "تشرين الثاني", "كانون الأول"];
-export const monthLabel = (ym: string) => `${AR_MONTHS[Number(ym.slice(5, 7)) - 1]} ${ym.slice(0, 4)}`;
+/** A month as numbers only: "2026-09". */
+export const monthLabel = (ym: string) => ym.slice(0, 7);
 
 /** Download JSON as a file (ASCII filename, delayed URL revoke). */
 export function downloadJson(filename: string, data: unknown): void {

@@ -10,6 +10,7 @@ import {
 import { ReportSheet } from "@/components/station/ReportSheet";
 import { TubeLabels } from "@/components/station/TubeLabel";
 import { valueText, isFormCode } from "@/lib/station/templates";
+import { fmtDateTime } from "@/lib/utils";
 
 
 /** Rows drawn at first; more appear while scrolling (a lab's list grows to thousands of visits). */
@@ -253,7 +254,7 @@ export default function StationVisitsPage() {
                 <td className="px-4 py-3">
                   <input type="checkbox" checked={checked.has(v.id)} onChange={() => toggleCheck(v.id)} className="size-4 align-middle" />
                 </td>
-                <td className="px-4 py-3 text-muted whitespace-nowrap">{new Date(v.created_at).toLocaleString("ar-IQ-u-nu-latn")}</td>
+                <td className="px-4 py-3 text-muted whitespace-nowrap">{fmtDateTime(v.created_at)}</td>
                 <td className="px-4 py-3 font-mono text-xs text-muted">{v.accession ?? "—"}</td>
                 <td className="px-4 py-3 font-medium">{v.patient.name || "—"}</td>
                 <td className="px-4 py-3">{v.results.length}</td>

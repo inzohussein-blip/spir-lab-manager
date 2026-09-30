@@ -8,7 +8,7 @@ import {
   Archive, Menu, X, ChevronLeft, Trash2, type LucideIcon,
 } from "lucide-react";
 import { getPages, savePages, getVisits, requestPersistentStorage, uid, TRASH_DAYS, type StationPage } from "@/lib/station/store";
-import { cn } from "@/lib/utils";
+import { cn, fmtDate } from "@/lib/utils";
 import { useSideCollapsed, SideCollapseButton, SideReopenButton } from "@/components/local/SideCollapse";
 
 interface NavItem { href: string; label: string; hint: string; icon: LucideIcon }
@@ -127,7 +127,8 @@ export function StationSidebar() {
   // Computed in the browser: a page saved for offline use must not show the day it was saved.
   const [today, setToday] = useState("");
   useEffect(() => {
-    setToday(new Date().toLocaleDateString("ar-IQ-u-nu-latn", { weekday: "long", day: "numeric", month: "long" }));
+    const d = new Date();
+    setToday(`${d.toLocaleDateString("ar-IQ", { weekday: "long" })} ${fmtDate(d)}`);
   }, [pathname]);
 
   return (
