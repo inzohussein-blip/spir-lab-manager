@@ -17,6 +17,21 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   await p.goto(B + '/store'); await p.waitForSelector('aside', { timeout: 20000 });
   ok((await p.locator('aside').innerText()).includes('المخزن والمشتريات') && (await p.locator('h1').first().innerText()).includes('المشتريات'), 'the station carries the new name');
 
+  // ── Welcome page: appearance, about SPIR, privacy and disclaimer (at the bottom) ──
+  await p.goto(B + '/welcome'); await p.waitForSelector('[data-testid="welcome-footer"]', { timeout: 20000 });
+  await p.locator('[data-testid="site-theme"] button:has-text("غامق")').click();
+  ok(await p.evaluate(() => document.documentElement.getAttribute('data-theme') === 'dark' && localStorage.getItem('lab-theme') === 'dark'), 'welcome: dark mode chosen and applied');
+  await p.reload(); await p.waitForSelector('[data-testid="site-theme"]', { timeout: 20000 });
+  ok(await p.evaluate(() => document.documentElement.getAttribute('data-theme') === 'dark') && await p.locator('[data-testid="site-theme"] button[aria-checked="true"]').innerText() === 'غامق', 'and kept after reload');
+  await p.locator('[data-testid="site-theme"] button:has-text("فاتح")').click();
+  ok(await p.evaluate(() => document.documentElement.getAttribute('data-theme') === null && localStorage.getItem('lab-theme') === 'light'), 'light mode');
+  await p.locator('[data-testid="site-theme"] button:has-text("تلقائي")').click();
+  ok((await p.locator('[data-testid="about-spir"]').innerText()).includes('شركة برمجة'), 'about SPIR: a software company');
+  await p.locator('[data-testid="disclaimer"] summary').click();
+  ok((await p.locator('[data-testid="disclaimer"]').innerText()).includes('نحن لا نتحمل أي مسؤولية'), 'disclaimer: «نحن لا نتحمل أي مسؤولية»');
+  await p.locator('[data-testid="privacy"] summary').click();
+  ok((await p.locator('[data-testid="privacy"]').innerText()).includes('على جهاز المختبر'), 'privacy policy shown');
+
   // ── Lab station settings, regrouped ──
   await p.goto(B + '/station'); await p.waitForTimeout(1200); // the catalog exists once the station opened
   await p.goto(B + '/station/settings#lab'); await p.waitForSelector('[data-testid="settings-nav"]', { timeout: 20000 });
