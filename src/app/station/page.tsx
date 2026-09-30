@@ -2,10 +2,10 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search, Printer, MessageCircle, Save, Check, Tag, ClipboardList, Beaker, Layers, Pencil, UserRound, StickyNote, Plus, X, RotateCcw, ListChecks, ChevronDown, AlertTriangle, type LucideIcon } from "lucide-react";
+import { Search, Printer, MessageCircle, Save, Check, Tag, ClipboardList, Beaker, Layers, Pencil, UserRound, StickyNote, Plus, X, RotateCcw, ListChecks, ChevronDown, AlertTriangle, PackageMinus, type LucideIcon } from "lucide-react";
 import {
   getTests, addVisit, updateVisit, getVisit, getSettings, getPanels, nextAccession, uid, rangeLabel, flagFor,
-  getPatients, getPatient, upsertPatient, addPatientNote, stockForVisit, outOfStockByTest, getDoctors, addDoctor,
+  getPatients, getPatient, upsertPatient, addPatientNote, stockForVisit, issueVisitStock, visitStockToIssue, outOfStockByTest, getDoctors, addDoctor,
   previousResults, resultDelta, localYmd, splitAge, joinAge, type AgeUnitPick,
   type StationTest, type Gender, type StationVisit, type StationSettings, type StationPanel, type StationPatient, type NoteEntry, type StationDoctor,
 } from "@/lib/station/store";
@@ -219,6 +219,19 @@ function StationEntryPage() {
     return previousResults({ patientId, name, phone }, { before: createdAt ?? undefined, excludeId: editId });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [patientId, editId, createdAt, savedTick]);
+  // Manual deduction (Settings → «المخزن»): what «صرف المواد» would take for this visit now.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const manualStock = useMemo(() => stockOptions().mode === "manual", [savedTick]);
+  const toIssue = useMemo(
+    () => (manualStock ? visitStockToIssue(editId, Array.from(selected), editId ? (getVisit(editId)?.results.map((r) => r.testId) ?? []) : []) : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [manualStock, selected, editId, savedTick],
+  );
+  const usesStock = useMemo(
+    () => manualStock && visitStockToIssue(null, Array.from(selected)).length > 0,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [manualStock, selected, savedTick],
+  );
   // Settings → «المخزن»: the chosen tests whose linked materials are out of stock.
   const outOfStock = useMemo(
     () => (stockOptions().warnOut ? outOfStockByTest(Array.from(selected)) : {}),
@@ -322,7 +335,8 @@ function StationEntryPage() {
   }
 
   /** Returns false (and warns) when the browser storage refused the save. */
-  function saveVisit(acc?: string): boolean {
+  /** Saves the visit; its id, or false when it could not be saved. */
+  function saveVisit(acc?: string): string | false {
     if (!name.trim()) return false;
     // Link (or create) the patient record and persist any new note.
     const pid = upsertPatient({ id: patientId ?? undefined, name: name.trim(), gender, age, phone });
@@ -363,7 +377,7 @@ function StationEntryPage() {
     }
     setBaseline(snapshot);
     setSavedTick((n) => n + 1);
-    return true;
+    return v.id;
   }
 
   /** The checks before a sheet leaves the station (print or share): a name, a test, filled results
@@ -394,6 +408,20 @@ function StationEntryPage() {
     // The new sample number's barcode must be on the sheet before the print window opens
     // (the library normally loaded with the page; never wait more than 3 s for it).
     Promise.race([loadBarcode(), new Promise((r) => setTimeout(r, 3000))]).then(() => setTimeout(() => window.print(), 80));
+  }
+
+  /** «صرف المواد» (manual deduction): save the visit, then take its materials from the stock room. */
+  function onIssue() {
+    if (!requireName()) return;
+    const before = editId ? (getVisit(editId)?.results.map((r) => r.testId) ?? []) : [];
+    const id = saveVisit();
+    if (!id) return;
+    const short = issueVisitStock(id, Array.from(selected), before);
+    setSavedTick((n) => n + 1);
+    toast.show(`صُرفت المواد من المخزن: ${toIssue.map((x) => `${x.name} ×${x.use}`).join("، ")}`);
+    if (short.length && stockOptions().warnOut) {
+      toast.show(`تنبيه المخزن — مواد غير متوفرة: ${short.map((x) => `${x.name} (${x.qty})`).join("، ")}`, "warn");
+    }
   }
 
   /** «واتساب»: the sheet as a PDF, shared (or saved, with WhatsApp opened on the patient's number). */
@@ -830,6 +858,16 @@ function StationEntryPage() {
                   {missingResults.length} فحص بدون نتيجة — أكملها قبل الطباعة.
                 </p>
               )}
+              {chosen.length > 0 && manualStock && (toIssue.length > 0 ? (
+                <button onClick={onIssue} data-testid="entry-issue" title={toIssue.map((x) => `${x.name} ×${x.use} (المتوفر ${x.qty})`).join("\n")}
+                  className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-amber-400 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100">
+                  <PackageMinus className="size-4" /> صرف المواد من المخزن ({toIssue.reduce((n, x) => n + x.use, 0)})
+                </button>
+              ) : editId && usesStock && (
+                <div data-testid="entry-issued" className="mt-3 flex items-center justify-center gap-1.5 rounded-lg bg-teal-50 px-3 py-2 text-xs font-medium text-brand-dark">
+                  <Check className="size-3.5" /> صُرفت مواد هذه الزيارة من المخزن
+                </div>
+              ))}
               {chosen.length > 0 && (settings.entryPrintButton !== false || settings.entryWhatsApp !== false) && (
                 <div className="mt-3 flex gap-2">
                   {settings.entryPrintButton !== false && (

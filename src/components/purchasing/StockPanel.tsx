@@ -8,7 +8,7 @@ import {
   type StockItem, type StationTest, type PendingStock,
 } from "@/lib/station/store";
 import { NumberInput } from "@/components/local/NumberInput";
-import { qcLinks, stockFloor, stockOptions, type StockOptions } from "@/lib/local/links";
+import { qcLinks, stockFloor, stockOptions, pendingQcStock, issueQcStock, skipQcStock, type StockOptions, type PendingQc } from "@/lib/local/links";
 import { fmtDateTime } from "@/lib/utils";
 import { Tile } from "./stockParts";
 
@@ -24,12 +24,13 @@ export function StockPanel() {
   const [tests, setTests] = useState<StationTest[]>([]);
   const [qc, setQc] = useState<Map<string, string[]>>(new Map());
   const [pending, setPending] = useState<PendingStock[]>([]);
+  const [pendingQc, setPendingQc] = useState<PendingQc[]>([]);
   const [opts, setOpts] = useState<StockOptions>({});
   const [amount, setAmount] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState<Filter>("all");
   const [msg, setMsg] = useState("");
 
-  const reload = () => { setRows(getStock()); setPending(pendingStock()); };
+  const reload = () => { setRows(getStock()); setPending(pendingStock()); setPendingQc(pendingQcStock()); };
   useEffect(() => { reload(); setTests(getTests()); setQc(qcLinks()); setOpts(stockOptions()); }, []);
 
   function persist(next: StockItem[]) { setRows(next); saveStock(next); }
@@ -45,6 +46,9 @@ export function StockPanel() {
     setMsg(short.length && opts.warnOut ? `صُرفت — مواد غير متوفرة: ${short.map((x) => `${x.name} (${x.qty})`).join("، ")}` : `صُرفت مواد ${list.length} زيارة.`);
   }
   function skip(p: PendingStock) { skipVisitStock(p.visit.id, p.testIds); reload(); setMsg("تُركت الزيارة دون صرف."); }
+  function issueQc(list: PendingQc[]) { list.forEach(issueQcStock); reload(); setMsg(`صُرفت مادة ${list.length} إدخال سيطرة.`); }
+  function skipQc(p: PendingQc) { skipQcStock(p); reload(); setMsg("تُرك إدخال السيطرة دون صرف."); }
+  const waiting = pending.length + pendingQc.length;
 
   const isLow = (s: StockItem) => s.minQty != null && Number(s.qty) <= Number(s.minQty);
   const testName = (id?: string) => tests.find((t) => t.id === id)?.name_ar;
@@ -69,20 +73,42 @@ export function StockPanel() {
 
       <div className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-surface px-4 py-2.5 text-sm" data-testid="stock-mode-line">
         <ClipboardCheck className="size-4 text-amber-700" />
-        حسم المواد عند إدخال النتائج: <b>{manual ? "يدوي — من «نتائج بانتظار الصرف»" : "تلقائي — عند حفظ النتيجة"}</b>
+        حسم المواد عند إدخال النتائج: <b>{manual ? "يدوي — من «بانتظار الصرف» أو زر «صرف المواد» في شاشة الإدخال" : "تلقائي — عند حفظ النتيجة"}</b>
         <Link href="/store/settings#stock" className="ms-auto inline-flex items-center gap-1 text-xs text-amber-700 hover:underline"><Settings className="size-3.5" /> تغيير من الإعدادات</Link>
       </div>
 
-      {(manual || pending.length > 0) && (
+      {(manual || waiting > 0) && (
         <div className="rounded-2xl border border-amber-300 bg-surface shadow-[var(--shadow-card)]" data-testid="stock-pending">
           <div className="flex flex-wrap items-center gap-2 border-b border-line p-4">
-            <div className="text-sm font-semibold">نتائج بانتظار الصرف <span className="tabular-nums text-amber-700">({pending.length})</span></div>
-            <span className="text-xs text-muted">زيارات حُفظت نتائجها ولم تُصرف موادها بعد.</span>
-            {pending.length > 1 && (
-              <button onClick={() => issue(pending)} className="ms-auto rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700">صرف الكل</button>
+            <div className="text-sm font-semibold">بانتظار الصرف <span className="tabular-nums text-amber-700">({waiting})</span></div>
+            <span className="text-xs text-muted">نتائج حُفظت وإدخالات سيطرة لم تُصرف موادها بعد.</span>
+            {waiting > 1 && (
+              <button onClick={() => { issue(pending); issueQc(pendingQc); setMsg(`صُرفت مواد ${waiting} إدخالاً.`); }} className="ms-auto rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700">صرف الكل</button>
             )}
           </div>
-          {pending.length === 0 ? <p className="p-4 text-sm text-muted">لا نتائج بانتظار الصرف.</p> : (
+          {waiting === 0 && <p className="p-4 text-sm text-muted">لا شيء بانتظار الصرف.</p>}
+          {pendingQc.length > 0 && (
+            <ul className="divide-y divide-line border-b border-line" data-testid="stock-pending-qc">
+              {pendingQc.map((p) => (
+                <li key={p.key} className="flex flex-wrap items-center gap-3 px-4 py-2.5 text-sm" data-pending-qc={p.analyte}>
+                  <div className="min-w-40">
+                    <div className="font-medium">سيطرة: {p.analyte}{p.level && <span className="text-muted"> — {p.level}</span>}</div>
+                    <div className="text-[11px] text-muted" dir="ltr" style={{ textAlign: "right" }}>{p.date}</div>
+                  </div>
+                  <div className="flex flex-1 flex-wrap gap-1">
+                    <span className={`rounded-full px-2 py-0.5 text-xs ${p.qty < 1 ? "bg-red-50 text-red-700" : "bg-rose-50 text-rose-800"}`}>
+                      {p.stock} <b dir="ltr">×1</b> <span className="text-muted">(المتوفر <span dir="ltr">{p.qty}</span>)</span>
+                    </span>
+                  </div>
+                  <div className="flex gap-1">
+                    <button onClick={() => issueQc([p])} aria-label={`صرف سيطرة ${p.analyte}`} className="rounded-lg bg-amber-600 px-3 py-1 text-xs font-semibold text-white hover:bg-amber-700">صرف</button>
+                    <button onClick={() => skipQc(p)} aria-label={`تجاهل سيطرة ${p.analyte}`} className="rounded-lg border border-line px-3 py-1 text-xs hover:bg-canvas">تجاهل</button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          {pending.length > 0 && (
             <ul className="divide-y divide-line">
               {pending.map((p) => (
                 <li key={p.visit.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5 text-sm" data-pending={p.visit.patient.name}>
