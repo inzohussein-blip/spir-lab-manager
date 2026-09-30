@@ -408,7 +408,13 @@ function StationEntryPage() {
     toast.show("تم الحفظ — جارٍ فتح نافذة الطباعة");
     // The new sample number's barcode must be on the sheet before the print window opens
     // (the library normally loaded with the page; never wait more than 3 s for it).
-    Promise.race([loadBarcode(), new Promise((r) => setTimeout(r, 3000))]).then(() => setTimeout(() => window.print(), 80));
+    // From the top of the page (see ReportSheet: a scrolled page printed its bottom group off the paper).
+    Promise.race([loadBarcode(), new Promise((r) => setTimeout(r, 3000))]).then(() => setTimeout(() => {
+      const y = window.scrollY;
+      window.scrollTo(0, 0);
+      window.print();
+      window.scrollTo(0, y);
+    }, 80));
   }
 
   /** «صرف المواد» (manual deduction): save the visit, then take its materials from the stock room. */

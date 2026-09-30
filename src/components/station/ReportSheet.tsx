@@ -32,12 +32,14 @@ import "@fontsource/amiri/latin-700.css";
 
 const exact = { WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as CSSProperties;
 
-/** The printed page's margins: kept clear of the edge, where many printers cannot print (a footer
- *  8 mm from the edge was cut off); pre-printed paper keeps its own letterhead and footer space. */
-function pageMargin(paper: "A4" | "A5", pre?: { top: number; bottom: number } | null): string {
+/** The printed sheet's margins (mm). The page itself has none — so the browser has no room for its
+ *  own date / title / link / page-number lines — and these are made inside the sheet instead: the
+ *  top in the header repeated on each page, the bottom under the signature group fixed at each
+ *  page's bottom, the sides as padding. Pre-printed paper keeps its letterhead and footer space. */
+function sheetMargins(paper: "A4" | "A5", pre?: { top: number; bottom: number } | null): { top: number; side: number; bottom: number } {
   const side = paper === "A5" ? 8 : 12;
-  if (pre) return `${pre.top}mm ${side}mm ${pre.bottom}mm`;
-  return paper === "A5" ? "7mm 8mm 9mm" : "10mm 12mm 12mm";
+  if (pre) return { top: pre.top, side, bottom: pre.bottom };
+  return paper === "A5" ? { top: 7, side, bottom: 9 } : { top: 10, side, bottom: 12 };
 }
 
 export interface ReportRow {
@@ -84,13 +86,21 @@ export function ReportSheet({
 }) {
   // Ready before «طباعة» assigns a sample number, so its barcode is on the first print too.
   useEffect(() => { void loadBarcode(); }, []);
-  // While printing, the page's title is the sample number and patient: the browser prints it in its
-  // header line (when that is on) and offers it as the PDF's file name.
+  // While printing, the page's title is the sample number and patient: the browser offers it as the
+  // PDF's file name.
   useEffect(() => {
     if (!printable) return;
     let saved = "";
-    const before = () => { saved = document.title; const t = [accession, patient.name.trim()].filter(Boolean).join(" — "); if (t) document.title = t; };
-    const after = () => { if (saved) document.title = saved; };
+    let y = 0;
+    // Printed from the top of the page: printed from a page scrolled down (the print button under the
+    // results), the browser placed the parts fixed to each page's bottom — signature, QR code, footer
+    // bar — off the paper. The page goes back where it was after.
+    const before = () => {
+      saved = document.title; y = window.scrollY;
+      const t = [accession, patient.name.trim()].filter(Boolean).join(" — "); if (t) document.title = t;
+      if (y) window.scrollTo(0, 0);
+    };
+    const after = () => { if (saved) document.title = saved; if (y) window.scrollTo(0, y); };
     window.addEventListener("beforeprint", before);
     window.addEventListener("afterprint", after);
     return () => { window.removeEventListener("beforeprint", before); window.removeEventListener("afterprint", after); };
@@ -116,6 +126,7 @@ export function ReportSheet({
 
   // Extra options (pre-printed paper, logo placement and watermark, font) — see lib/station/reportExtras.
   const x = reportExtrasOf(settings);
+  const m = sheetMargins(paper, x.pre);
 
   // Few tests (Settings → «ملء الصفحة»): larger text and taller rows, so the results table reaches
   // further down the page. The section's other ways are all off unless chosen (lib/station/fillPage).
@@ -250,18 +261,19 @@ export function ReportSheet({
   return (
     <>
       {printable && <style>{`@media print {
-        @page { size: ${paper}; margin: ${pageMargin(paper, x.pre)}; }
-        #report-sheet { padding: 0 !important; max-width: none; }
+        @page { size: ${paper}; margin: 0; }
+        #report-sheet { padding: 0 ${m.side}mm !important; max-width: none; }
         #report-sheet thead { display: table-header-group; }
         #report-sheet tr, #report-sheet .report-keep { break-inside: avoid; }
         /* The page frame: its header (letterhead, sample barcode, patient) repeats on every page, and
            its footer row keeps the bottom group's height free; the body flows over the pages. */
         #report-sheet table.report-frame { font-size: inherit !important; }
         #report-sheet table.report-frame > * > tr > td { padding: 0 !important; border: 0 !important; }
+        #report-sheet table.report-frame > thead > tr > td { padding-top: ${m.top}mm !important; }
         #report-sheet table.report-frame > tbody > tr { break-inside: auto; }
         #report-sheet table.report-frame > tfoot { display: table-footer-group; }
-        #report-sheet .report-spacer { height: calc(${bottomPx}px + 4mm); }
-        #report-sheet .report-bottom { position: fixed; left: 0; right: 0; bottom: 0; margin: 0; padding-top: 2mm; background: #fff; }
+        #report-sheet .report-spacer { height: calc(${bottomPx}px + ${m.bottom + 4}mm); }
+        #report-sheet .report-bottom { position: fixed; left: ${m.side}mm; right: ${m.side}mm; bottom: ${m.bottom}mm; margin: 0; padding-top: 2mm; background: #fff; }
         #report-sheet .report-group { break-after: avoid; }
         #report-sheet .report-page { break-before: page; }
         #report-sheet .form-table td, #report-sheet .form-table th { padding-top: 2px !important; padding-bottom: 2px !important; }

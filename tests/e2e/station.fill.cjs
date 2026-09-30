@@ -102,6 +102,14 @@ const { B, ok, launch, done, kv, kvPut, resetLocal, pdfPages } = require('./lib.
   for (let i = 0; i < 30; i++) await p.locator('div.grid button:has(span.flex-1)').nth(i).click();
   const ins = p.locator('input[data-result-idx]'); for (let i = 0; i < await ins.count(); i++) await ins.nth(i).fill(String(10 + i));
   await p.evaluate(() => { window.print = () => {}; }); await p.click('[data-testid="entry-print"]'); await p.waitForTimeout(1500);
+  // Printed from a page scrolled down (the print button under the results): printed from the top.
+  const scr = await p.evaluate(async () => {
+    document.body.style.minHeight = '5000px'; window.scrollTo(0, 1500); const a = window.scrollY;
+    window.dispatchEvent(new Event('beforeprint')); const b = window.scrollY;
+    window.dispatchEvent(new Event('afterprint')); const c = window.scrollY; document.body.style.minHeight = '';
+    return [a, b, c];
+  });
+  ok(scr[0] > 0 && scr[1] === 0 && scr[2] === scr[0], `a scrolled page prints from its top, then goes back (${scr.join(' → ')})`);
   const titles = await p.evaluate(() => { const t0 = document.title; window.dispatchEvent(new Event('beforeprint')); const t1 = document.title; window.dispatchEvent(new Event('afterprint')); return [t0, t1, document.title]; });
   ok(/LAB-.* — مريض طويل/.test(titles[1]) && titles[2] === titles[0], `while printing the title is the sample number and patient (${titles[1]}), then back`);
   for (const paper of ['A4', 'A5']) {
@@ -118,12 +126,14 @@ const { B, ok, launch, done, kv, kvPut, resetLocal, pdfPages } = require('./lib.
         spacer: sh.querySelector('.report-spacer').getBoundingClientRect().height,
         head: head.getBoundingClientRect().height,
         margin: (css.match(/@page \{ size: A[45]; margin: ([^;]+);/) || [])[1],
+        bottomGap: parseFloat(getComputedStyle(sh.querySelector('.report-bottom')).bottom),
+        topGap: parseFloat(getComputedStyle(head.querySelector('td')).paddingTop),
       };
     });
     const quarter = (paper === 'A5' ? 194 : 275) * 96 / 25.4 / 4;
     ok(lay.headHas && lay.bottom === 'fixed' && lay.bottomHas, `${paper}: letterhead, sample barcode and patient repeat on each page; signature, QR and footer fixed at each page's bottom`);
     ok(lay.spacer > 40 && lay.spacer < quarter && lay.head < quarter, `${paper}: the space kept for them fits the browser's limit for repeating (${Math.round(lay.head)} / ${Math.round(lay.spacer)} px < ${Math.round(quarter)})`);
-    ok(lay.margin && !/^0/.test(lay.margin) && parseFloat(lay.margin.trim().split(/\s+/)[2]) >= 9, `${paper}: page margins keep the footer off the paper's edge (${lay.margin})`);
+    ok(lay.margin === '0' && lay.bottomGap >= 9 * 96 / 25.4 - 1 && lay.topGap >= 7 * 96 / 25.4 - 1, `${paper}: no page margins (no room for the browser's date / link lines), the sheet's own margins keep the footer off the edge (top ${Math.round(lay.topGap)}px, bottom ${Math.round(lay.bottomGap)}px)`);
     ok(pdfPages(await p.pdf({ preferCSSPageSize: true, printBackground: true })) >= 2, `${paper}: 30 tests print on several pages`);
     await p.emulateMedia({ media: 'screen' });
   }

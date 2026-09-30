@@ -307,7 +307,7 @@ export default function StationVisitsPage() {
                 <button key={x} onClick={() => setPaper(x)} className={`px-3 py-1.5 ${paper === x ? "bg-brand text-white" : "hover:bg-canvas"}`}>{x}</button>
               ))}
             </div>
-            <button onClick={() => window.print()} className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark">
+            <button onClick={() => { const y = window.scrollY; window.scrollTo(0, 0); window.print(); window.scrollTo(0, y); }} className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark">
               <Printer className="size-4" /> طباعة {paper}
             </button>
           </div>
