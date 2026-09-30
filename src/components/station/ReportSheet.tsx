@@ -84,6 +84,17 @@ export function ReportSheet({
 }) {
   // Ready before «طباعة» assigns a sample number, so its barcode is on the first print too.
   useEffect(() => { void loadBarcode(); }, []);
+  // While printing, the page's title is the sample number and patient: the browser prints it in its
+  // header line (when that is on) and offers it as the PDF's file name.
+  useEffect(() => {
+    if (!printable) return;
+    let saved = "";
+    const before = () => { saved = document.title; const t = [accession, patient.name.trim()].filter(Boolean).join(" — "); if (t) document.title = t; };
+    const after = () => { if (saved) document.title = saved; };
+    window.addEventListener("beforeprint", before);
+    window.addEventListener("afterprint", after);
+    return () => { window.removeEventListener("beforeprint", before); window.removeEventListener("afterprint", after); };
+  }, [printable, accession, patient.name]);
   const gender = patient.gender;
   const baseTs = tableStyleOf(settings.reportTable);
   // The lab's colours (Settings → «التقرير المطبوع»; purple + gold unless changed).

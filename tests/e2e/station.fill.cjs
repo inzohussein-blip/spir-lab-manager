@@ -102,6 +102,8 @@ const { B, ok, launch, done, kv, kvPut, resetLocal, pdfPages } = require('./lib.
   for (let i = 0; i < 30; i++) await p.locator('div.grid button:has(span.flex-1)').nth(i).click();
   const ins = p.locator('input[data-result-idx]'); for (let i = 0; i < await ins.count(); i++) await ins.nth(i).fill(String(10 + i));
   await p.evaluate(() => { window.print = () => {}; }); await p.click('[data-testid="entry-print"]'); await p.waitForTimeout(1500);
+  const titles = await p.evaluate(() => { const t0 = document.title; window.dispatchEvent(new Event('beforeprint')); const t1 = document.title; window.dispatchEvent(new Event('afterprint')); return [t0, t1, document.title]; });
+  ok(/LAB-.* — مريض طويل/.test(titles[1]) && titles[2] === titles[0], `while printing the title is the sample number and patient (${titles[1]}), then back`);
   for (const paper of ['A4', 'A5']) {
     await p.click(`button:text-is("${paper}")`); await p.waitForTimeout(500);
     await p.emulateMedia({ media: 'print' });
