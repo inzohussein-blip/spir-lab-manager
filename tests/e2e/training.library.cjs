@@ -60,6 +60,30 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   await p.click('[data-testid="library-restore"]');
   ok((await p.locator('[data-testid="library-card"] [role=status]').innerText()).includes('موجودة'), 'and says when nothing is missing');
 
+  // ── Trainees: a training-completion certificate and a recommendation letter ──
+  await p.goto(B + '/training/trainees'); await p.waitForSelector('input[placeholder="الاسم"]', { timeout: 20000 });
+  await p.click('button[aria-pressed]:has-text("موظف")');
+  await p.fill('input[placeholder="الاسم"]', 'موظف سابق للتجربة'); await p.click('button:has-text("إضافة")');
+  const cc = p.locator('[data-testid="completion-card"]'); await cc.waitFor({ timeout: 10000 });
+  await cc.locator('input[aria-label="البرنامج"]').fill('التحليلات المرضية العامة');
+  await cc.locator('select[aria-label="التقدير"]').selectOption('امتياز');
+  await p.evaluate(() => { window.print = () => {}; });
+  await cc.locator('[data-testid="completion-print-btn"]').click();
+  const tr0 = async () => ((await kv(p, 'training.trainees.v1')) || [])[0];
+  ok(await settled(async () => (await tr0())?.completion?.certNo?.startsWith('TRN-') && (await tr0()).role === 'employee'), 'the completion certificate saved with its number (an employee record)');
+  const cert = await p.locator('[data-testid="completion-print"]').innerText();
+  ok(cert.includes('شهادة انتهاء تدريب') && cert.includes('موظف سابق للتجربة') && cert.includes('امتياز'), 'printed: «شهادة انتهاء تدريب» with the name, program and grade');
+  const rc = p.locator('[data-testid="recommendation-card"]');
+  ok(await rc.locator('button[aria-pressed="true"]:has-text("موظف سابق")').count() === 1, 'the recommendation starts as for a former employee');
+  await rc.locator('input[aria-label="المسمى الوظيفي"]').fill('محلل مختبر');
+  await rc.locator('[data-testid="recommendation-suggest"]').click();
+  ok((await rc.locator('textarea[aria-label="نص التوصية"]').inputValue()).includes('بوظيفة محلل مختبر'), 'a suggested text from the details');
+  await rc.locator('input[aria-label="اسم الموصي"]').fill('د. المدير');
+  await rc.locator('[data-testid="recommendation-print-btn"]').click();
+  ok(await settled(async () => (await tr0())?.recommendation?.by === 'د. المدير'), 'the recommendation saved');
+  const letter = await p.locator('[data-testid="recommendation-print"]').innerText();
+  ok(letter.includes('كتاب توصية') && letter.includes('إلى من يهمه الأمر') && letter.includes('د. المدير') && letter.includes('محلل مختبر'), 'printed: the letter with its addressee, text and signature');
+
   // A quiz can use the whole library.
   await p.goto(B + '/training/quiz'); await p.waitForTimeout(1500);
   ok(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.slice(0, 3).join(' | ') : ''));

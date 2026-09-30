@@ -101,13 +101,40 @@ export const COMP_LEVELS: { level: CompLevel; label: string }[] = [
   { level: 3, label: "مستقل" },
 ];
 export interface QuizAttempt { at: number; score: number; total: number; category?: string }
+/** «شهادة انتهاء التدريب»: issued when the training period ends, whatever the competency record. */
+export interface TrainingCompletion {
+  end: string; // YYYY-MM-DD
+  program?: string;
+  hours?: string;
+  grade?: string;
+  supervisor?: string;
+  notes?: string;
+  /** Set on the first print, then kept. */
+  certNo?: string;
+}
+/** «كتاب توصية» for a trainee or a former employee. */
+export interface Recommendation {
+  kind: "trainee" | "employee";
+  position?: string;
+  from?: string;
+  to?: string;
+  addressee?: string;
+  text: string;
+  by?: string;
+  byTitle?: string;
+  date: string;
+}
 export interface Trainee {
   id: string;
   name: string;
+  /** A trainee (default) or an employee — e.g. a former employee who asks for a recommendation. */
+  role?: "trainee" | "employee";
   start?: string;
   notes?: string;
   comp: Record<string, { level: CompLevel; date: string; by?: string }>;
   quiz: QuizAttempt[];
+  completion?: TrainingCompletion;
+  recommendation?: Recommendation;
 }
 
 const K_TESTS = "training.tests.v1";
@@ -301,6 +328,10 @@ export function pushRecent(id: string): void { write(K_RECENT, [id, ...getRecent
 // ── Trainees (competency record) & quiz history ──────────────────────────────
 export function getTrainees(): Trainee[] { return read<Trainee[]>(K_TRAINEES, []); }
 export function saveTrainees(list: Trainee[]): void { write(K_TRAINEES, list); }
+/** Change one trainee's record (completion certificate, recommendation…). */
+export function updateTrainee(id: string, patch: Partial<Trainee>): void {
+  saveTrainees(getTrainees().map((t) => (t.id === id ? { ...t, ...patch } : t)));
+}
 /** Set (or clear with 0) a trainee's competency level for a test — dated today. */
 export function setCompetency(traineeId: string, testId: string, level: CompLevel | 0, by?: string): void {
   saveTrainees(getTrainees().map((tr) => {
