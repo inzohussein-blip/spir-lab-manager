@@ -15,7 +15,7 @@ export function PageHead({ icon, title, sub, children }: { icon: ReactNode; titl
   return (
     <div className="flex flex-wrap items-end justify-between gap-3">
       <div className="flex items-start gap-3">
-        <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-brand to-brand-dark text-white shadow-sm [&>svg]:size-5">{icon}</span>
+        <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-brand to-brand-dark text-white shadow-[0_6px_16px_-6px_color-mix(in_oklab,var(--color-brand)_70%,transparent)] [&>svg]:size-[22px]">{icon}</span>
         <div>
           <h1 className="text-2xl font-bold">{title}</h1>
           <p className="mt-0.5 text-sm text-muted">{sub}</p>

@@ -1,96 +1,42 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { ShoppingCart, Truck, Settings, Home, FileBarChart, Menu, X, Boxes, Tags, ClipboardCheck, History } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { useSideCollapsed, SideCollapseButton, SideReopenButton } from "@/components/local/SideCollapse";
+import { ShoppingCart, Truck, Settings, FileBarChart, Boxes, Tags, ClipboardCheck, History } from "lucide-react";
+import { AppSidebar, type SideBadges, type SideSection } from "@/components/local/AppSidebar";
 import { getStock, daysToExpiry, pendingStock } from "@/lib/station/store";
 import { pendingQcStock } from "@/lib/local/links";
 
-const FIXED = [
-  { href: "/store", label: "المشتريات", icon: ShoppingCart },
-  { href: "/store/inventory", label: "المخزن", icon: Boxes },
-  { href: "/store/items", label: "الأصناف", icon: Tags },
-  { href: "/store/count", label: "الجرد", icon: ClipboardCheck },
-  { href: "/store/moves", label: "سجل الحركة", icon: History },
-  { href: "/store/suppliers", label: "الموردون", icon: Truck },
-  { href: "/store/report", label: "التقارير (شهري/سنوي)", icon: FileBarChart },
-  { href: "/store/settings", label: "الإعدادات والنسخ الاحتياطي", icon: Settings },
+const SECTIONS: SideSection[] = [
+  { title: "العمل اليومي", items: [
+    { href: "/store", label: "المشتريات", hint: "عمليات الشراء والدفع", icon: ShoppingCart, exact: true },
+    { href: "/store/inventory", label: "المخزن", hint: "الموجود الآن والصرف", icon: Boxes },
+    { href: "/store/items", label: "الأصناف", hint: "الكواشف والمستلزمات والكتات", icon: Tags },
+  ] },
+  { title: "المتابعة", items: [
+    { href: "/store/count", label: "الجرد", hint: "المعدود مقابل المسجّل", icon: ClipboardCheck },
+    { href: "/store/moves", label: "سجل الحركة", hint: "كل تغيّر في الكميات", icon: History },
+    { href: "/store/suppliers", label: "الموردون", hint: "الأسماء والهواتف", icon: Truck },
+    { href: "/store/report", label: "التقارير (شهري/سنوي)", hint: "المصروف حسب الفترة", icon: FileBarChart },
+  ] },
+  { title: "الإدارة", items: [
+    { href: "/store/settings", label: "الإعدادات والنسخ الاحتياطي", hint: "الترويسة والخيارات والنسخ", icon: Settings },
+  ] },
 ];
 
+function badges(): SideBadges {
+  const pending = pendingStock().length + pendingQcStock().length;
+  const alerts = getStock().filter((s) => {
+    const d = daysToExpiry(s.expiry);
+    return (s.minQty != null && Number(s.qty) <= Number(s.minQty)) || (d != null && d <= 30);
+  }).length;
+  return {
+    "/store/inventory": [
+      { n: pending, tone: "info", testid: "stock-pending-count", title: "بانتظار الصرف" },
+      { n: alerts, tone: "warn", testid: "stock-alerts", title: "نفد أو ناقص أو قرب الانتهاء" },
+    ],
+  };
+}
+
 export function PurchasingSidebar() {
-  const pathname = usePathname();
-  const isActive = (href: string) =>
-    href === "/store" ? pathname === "/store" : pathname.startsWith(href);
-  // Phones: the menu slides in from a top bar instead of taking the screen width.
-  const [open, setOpen] = useState(false);
-  const [collapsed, setCollapsed] = useSideCollapsed();
-  const [stockAlerts, setStockAlerts] = useState(0);
-  const [pending, setPending] = useState(0);
-  useEffect(() => {
-    setOpen(false);
-    setPending(pendingStock().length + pendingQcStock().length);
-    setStockAlerts(getStock().filter((s) => {
-      const d = daysToExpiry(s.expiry);
-      return (s.minQty != null && Number(s.qty) <= Number(s.minQty)) || (d != null && d <= 30);
-    }).length);
-  }, [pathname]);
-
-  return (
-    <>
-    <div className="no-print sticky top-0 z-30 flex items-center gap-3 border-b border-line bg-surface/90 px-4 py-2.5 backdrop-blur md:hidden">
-      <button onClick={() => setOpen(true)} aria-label="فتح القائمة" className="grid size-10 place-items-center rounded-xl border border-line bg-surface hover:bg-canvas"><Menu className="size-5" /></button>
-      <span className="font-bold">المخزن والمشتريات</span>
-    </div>
-    {open && <div className="no-print fixed inset-0 z-40 bg-black/40 md:hidden" onClick={() => setOpen(false)} />}
-    {collapsed && <SideReopenButton onClick={() => setCollapsed(false)} />}
-    <aside className={cn(
-      "no-print fixed inset-y-0 start-0 z-50 flex h-screen w-60 shrink-0 flex-col overflow-y-auto border-e border-line bg-surface transition-transform md:sticky md:top-0 md:translate-x-0",
-      open ? "translate-x-0" : "translate-x-full md:translate-x-0",
-      collapsed && "md:hidden",
-    )}>
-      <button onClick={() => setOpen(false)} aria-label="إغلاق القائمة" className="absolute end-3 top-4 grid size-8 place-items-center rounded-lg hover:bg-canvas md:hidden"><X className="size-4" /></button>
-      <div className="flex items-center gap-2.5 px-5 py-4 pe-12 font-bold md:pe-5">
-        <span className="grid size-9 place-items-center rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 text-white shadow-sm">
-          <ShoppingCart className="size-5" />
-        </span>
-        <div className="leading-tight">
-          المخزن والمشتريات
-          <div className="text-xs font-normal text-muted">نسخة محلية — بدون إنترنت</div>
-        </div>
-        <span className="ms-auto"><SideCollapseButton onClick={() => setCollapsed(true)} /></span>
-      </div>
-
-      <nav className="flex flex-1 flex-col gap-0.5 px-3 py-2">
-        {FIXED.map((it) => (
-          <Link
-            key={it.href}
-            href={it.href}
-            className={cn(
-              "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
-              isActive(it.href) ? "bg-amber-100 font-semibold text-amber-800" : "text-ink hover:bg-canvas"
-            )}
-          >
-            <it.icon className="size-4.5 shrink-0" />
-            {it.label}
-            {it.href === "/store/inventory" && pending > 0 && (
-              <span data-testid="stock-pending-count" title="بانتظار الصرف" className="ms-auto rounded-full bg-sky-600 px-1.5 text-[11px] font-bold text-white tabular-nums">{pending}</span>
-            )}
-            {it.href === "/store/inventory" && stockAlerts > 0 && (
-              <span data-testid="stock-alerts" className={`${pending > 0 ? "" : "ms-auto "}rounded-full bg-amber-500 px-1.5 text-[11px] font-bold text-white tabular-nums`}>{stockAlerts}</span>
-            )}
-          </Link>
-        ))}
-      </nav>
-
-      <div className="border-t border-line p-3">
-        <Link href="/welcome" className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted hover:bg-canvas hover:text-ink">
-          <Home className="size-4" /> الصفحة الرئيسية
-        </Link>
-      </div>
-    </aside>
-    </>
-  );
+  return <AppSidebar appName="المخزن والمشتريات" appTag="نسخة محلية — بدون إنترنت" icon={ShoppingCart} sections={SECTIONS} getBadges={badges}
+    footerNote="المخزن مشترك مع محطة المختبر والجودة على هذا الجهاز: يُضاف إليه ما يُشترى ويُحسم منه ما يُستعمل." />;
 }

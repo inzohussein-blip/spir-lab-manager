@@ -1690,7 +1690,7 @@ function OwnerNav({ section, go, total, soon, soonDays, dbDown, showErrors, open
 function SectionTitle({ icon, title, desc }: { icon: React.ReactNode; title: string; desc: string }) {
   return (
     <div className="mb-5 flex items-start gap-3">
-      <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-brand to-brand-dark text-white shadow-[0_6px_16px_-6px_color-mix(in_oklab,var(--color-brand)_70%,transparent)] [&>svg]:size-6">{icon}</span>
+      <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-brand to-brand-dark text-white shadow-[0_6px_16px_-6px_color-mix(in_oklab,var(--color-brand)_70%,transparent)] [&>svg]:size-[22px]">{icon}</span>
       <div className="min-w-0">
         <h1 className="text-2xl font-bold">{title}</h1>
         <p className="mt-0.5 text-sm text-muted">{desc}</p>

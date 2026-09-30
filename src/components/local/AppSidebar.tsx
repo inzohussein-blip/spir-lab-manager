@@ -9,7 +9,10 @@ import { useSideCollapsed, SideCollapseButton, SideReopenButton } from "@/compon
 
 export interface SideItem { href: string; label: string; hint: string; icon: LucideIcon; exact?: boolean }
 export interface SideSection { title: string; items: SideItem[] }
-export type SideBadges = Record<string, { n: number; tone?: "brand" | "warn" | "danger" }>;
+export interface SideBadge { n: number; tone?: "brand" | "warn" | "danger" | "info"; testid?: string; title?: string }
+/** Numbers beside a menu item (one or several), by its href. */
+export type SideBadges = Record<string, SideBadge | SideBadge[]>;
+const BADGE_TONE = { brand: "bg-brand-light text-brand-dark", warn: "bg-amber-500 text-white", danger: "bg-red-600 text-white", info: "bg-sky-600 text-white" };
 
 /**
  * Sidebar shared by the standalone local stations (quality, roster…). Each
@@ -92,7 +95,7 @@ export function AppSidebar({
                 {sec.items.map((it) => {
                   const active = isActive(it);
                   const Icon = it.icon;
-                  const b = badges[it.href];
+                  const bs = ([] as SideBadge[]).concat(badges[it.href] ?? []).filter((x) => x.n > 0);
                   return (
                     <Link key={it.href} href={it.href} aria-current={active ? "page" : undefined}
                       className={cn("group relative flex items-center gap-3 rounded-xl px-2.5 py-2 text-sm",
@@ -106,9 +109,12 @@ export function AppSidebar({
                         <span className={cn("block truncate", active && "font-semibold")}>{it.label}</span>
                         <span className={cn("block truncate text-[11px]", active ? "text-brand-dark/70" : "text-muted")}>{it.hint}</span>
                       </span>
-                      {b && b.n > 0 ? (
-                        <span className={cn("min-w-5 rounded-full px-1.5 py-0.5 text-center text-[10px] font-bold leading-none tabular-nums",
-                          b.tone === "danger" ? "bg-red-600 text-white" : b.tone === "warn" ? "bg-amber-500 text-white" : "bg-brand-light text-brand-dark")}>{b.n}</span>
+                      {bs.length ? (
+                        <span className="flex shrink-0 gap-1">
+                          {bs.map((b, i) => (
+                            <span key={i} data-testid={b.testid} title={b.title} className={cn("min-w-5 rounded-full px-1.5 py-0.5 text-center text-[10px] font-bold leading-none tabular-nums", BADGE_TONE[b.tone ?? "brand"])}>{b.n}</span>
+                          ))}
+                        </span>
                       ) : (
                         <ChevronLeft className={cn("size-4 shrink-0", active ? "text-brand" : "text-muted opacity-0 group-hover:opacity-60")} />
                       )}
