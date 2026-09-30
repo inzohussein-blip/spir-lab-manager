@@ -144,7 +144,6 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   await p.goto(B + '/store/settings#stock'); await p.waitForSelector('[data-testid="stock-mode"]', { timeout: 20000 });
   await p.click('button[aria-label="الحسم يدوي"]');
   ok(await settled(async () => (await kv(p, 'station.stockOptions.v1'))?.mode === 'manual'), 'manual deduction chosen in «المخزن والمشتريات ← الإعدادات»');
-  await p.waitForTimeout(50);
   await ureaVisit('مريض اليوريا 2');
   ok((await ureaQty()) === 4, 'manual: saving the result leaves the stock as it is');
   await ureaVisit('مريض اليوريا 3');
@@ -157,6 +156,7 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   ok(await settled(async () => (await p.locator('[data-testid="stock-pending"] li').count()) === 0) && (await ureaQty()) === 3, 'skipped without taking stock; nothing waits');
   await p.goto(B + '/store/settings#stock'); await p.waitForSelector('[data-testid="stock-mode"]', { timeout: 20000 });
   await p.click('button[aria-label="الحسم تلقائي"]');
+  ok(await settled(async () => (await kv(p, 'station.stockOptions.v1'))?.mode === 'auto'), 'automatic deduction chosen again');
   await ureaVisit('مريض اليوريا 4');
   ok(await settled(async () => (await ureaQty()) === 2), 'back to automatic (3 → 2)');
 
