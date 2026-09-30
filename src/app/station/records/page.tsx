@@ -145,7 +145,7 @@ export default function RecordsPage() {
                             {new Date(v.created_at).toLocaleDateString("ar-IQ-u-nu-latn")}
                             {v.accession && <span className="ms-2 font-mono text-xs text-muted">{v.accession}</span>}
                           </div>
-                          <Link href={`/station/visits`} className="inline-flex items-center gap-1 text-xs text-brand-dark hover:underline"><Printer className="size-3.5" /> الزيارات</Link>
+                          <Link href={`/station/visits?open=${v.id}`} data-testid="open-visit" className="inline-flex items-center gap-1 text-xs text-brand-dark hover:underline"><Printer className="size-3.5" /> عرض / طباعة</Link>
                         </div>
                         <div className="flex flex-wrap gap-1.5">
                           {v.results.map((r, i) => (

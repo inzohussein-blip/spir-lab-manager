@@ -44,7 +44,16 @@ export default function StationVisitsPage() {
     return () => window.removeEventListener("afterprint", done);
   }, [labelFor]);
 
-  useEffect(() => { setVisits(getVisits()); setTests(getTests()); setSettings(getSettings()); }, []);
+  // Opened for one visit (?open=<id>, e.g. from «سجل المراجعين»): show it at once.
+  const [fromRecords, setFromRecords] = useState(false);
+  const sheetRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const all = getVisits();
+    setVisits(all); setTests(getTests()); setSettings(getSettings());
+    const id = new URLSearchParams(window.location.search).get("open");
+    const v = id ? all.find((x) => x.id === id) : undefined;
+    if (v) { setSel(v); setFromRecords(true); setTimeout(() => sheetRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 80); }
+  }, []);
 
   const testMap = useMemo(() => new Map(tests.map((t) => [t.id, t])), [tests]);
   const byId = (id: string) => testMap.get(id);
@@ -288,7 +297,10 @@ export default function StationVisitsPage() {
 
       {sel && (
         <>
-          <div className="no-print mt-4 flex items-center justify-center gap-2">
+          <div ref={sheetRef} className="no-print mt-4 flex scroll-mt-4 flex-wrap items-center justify-center gap-2" data-testid="visit-open">
+            {fromRecords && (
+              <button onClick={() => history.back()} className="rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas">رجوع إلى سجل المراجع</button>
+            )}
             <div className="flex overflow-hidden rounded-lg border border-line text-sm">
               {(["A4", "A5"] as const).map((x) => (
                 <button key={x} onClick={() => setPaper(x)} className={`px-3 py-1.5 ${paper === x ? "bg-brand text-white" : "hover:bg-canvas"}`}>{x}</button>

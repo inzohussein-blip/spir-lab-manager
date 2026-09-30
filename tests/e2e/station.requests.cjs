@@ -54,6 +54,12 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   await p.goto(B + '/station/visits'); await p.waitForTimeout(1200);
   await p.locator('tbody tr', { hasText: 'مريض التمييز' }).locator('button:has-text("عرض/طباعة")').click(); await p.waitForTimeout(600);
   ok(await p.locator('#report-sheet tr[data-hl="1"]').count() === 1, 'reprint keeps the highlight');
+  // From «سجل المراجعين»: a patient's visit opens straight away (not the list of visits).
+  await p.goto(B + '/station/records'); await p.waitForTimeout(800);
+  await p.locator('text=مريض التمييز').first().click(); await p.waitForTimeout(300);
+  await p.locator('[data-testid="open-visit"]').first().click();
+  await p.waitForSelector('[data-testid="visit-open"]', { timeout: 15000 });
+  ok(p.url().includes('open=') && (await p.locator('#report-sheet').first().innerText()).includes('مريض التمييز'), 'records → the visit opens directly');
   await p.goto(B + `/station?edit=${vid}`); await p.waitForTimeout(1500);
   ok(await p.locator('input[aria-label^="تمييز"]').first().isChecked(), 'editing the visit shows the tick');
 
