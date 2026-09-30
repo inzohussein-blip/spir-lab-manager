@@ -3,14 +3,19 @@
 import { SyncPanel } from "@/components/local/SyncPanel";
 import { kvFlush } from "@/lib/local/kv";
 import { ThemeCard } from "@/components/local/LocalTheme";
+import { LetterheadCard } from "@/components/local/LetterheadCard";
+import { SettingsLayout, notifySaved } from "@/components/SettingsLayout";
 import { THEME_KEYS } from "@/lib/local/theme";
-import { useRef, useState } from "react";
-import { Settings, Download, Upload } from "lucide-react";
-import { exportBackup, importBackup } from "@/lib/purchasing/store";
+import { useEffect, useRef, useState } from "react";
+import { Settings, Download, Upload, FileText, HardDrive } from "lucide-react";
+import { exportBackup, importBackup, getSettings, saveSettings, type PurchasingSettings } from "@/lib/purchasing/store";
 
 export default function StoreSettingsPage() {
   const [msg, setMsg] = useState("");
+  const [s, setS] = useState<PurchasingSettings | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { setS(getSettings()); }, []);
+  if (!s) return null;
 
   function doExport() {
     const blob = new Blob([JSON.stringify(exportBackup(), null, 2)], { type: "application/json" });
@@ -35,23 +40,50 @@ export default function StoreSettingsPage() {
     reader.readAsText(file);
     e.target.value = "";
   }
+  function saveLetterhead(patch: { title?: string; subtitle?: string; footer?: string; logo?: string }) {
+    const cur = getSettings();
+    const next: PurchasingSettings = {
+      ...cur,
+      ...(patch.title !== undefined ? { orgName: patch.title || "منظومة المشتريات" } : {}),
+      ...(patch.subtitle !== undefined ? { subtitle: patch.subtitle } : {}),
+      ...(patch.footer !== undefined ? { footer: patch.footer } : {}),
+      ...(patch.logo !== undefined ? { logo: patch.logo || undefined } : {}),
+    };
+    saveSettings(next); setS(next); notifySaved();
+  }
 
   return (
-    <div className="max-w-lg">
-      <h1 className="mb-5 flex items-center gap-2 text-2xl font-bold"><Settings className="size-6" /> الإعدادات والنسخ الاحتياطي</h1>
-
-      <ThemeCard storageKey={THEME_KEYS.store} />
-      <div className="rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
-        <div className="mb-1 text-sm font-semibold">النسخ الاحتياطي</div>
-        <p className="mb-3 text-xs text-muted">كل بيانات المشتريات محفوظة على هذا الحاسوب فقط. صدّر نسخة احتياطية بانتظام أو انقلها لجهاز آخر.</p>
-        <div className="flex flex-wrap gap-2">
-          <button onClick={doExport} className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas"><Download className="size-4" /> تصدير نسخة</button>
-          <button onClick={() => importRef.current?.click()} className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas"><Upload className="size-4" /> استيراد نسخة</button>
-          <input ref={importRef} type="file" accept="application/json,.json" onChange={onImport} className="hidden" />
-        </div>
-        {msg && <p className="mt-2 text-xs text-muted">{msg}</p>}
-      </div>
-      <SyncPanel />
-    </div>
+    <SettingsLayout
+      title="إعدادات المشتريات"
+      icon={<Settings className="size-6" />}
+      sections={[
+        {
+          id: "print", label: "المطبوعات", hint: "ترويسة التقرير الشهري والسنوي", icon: <FileText />,
+          content: (
+            <LetterheadCard heading="ترويسة تقارير المشتريات" nameLabel="اسم الجهة"
+              value={{ title: s.orgName ?? "", subtitle: s.subtitle ?? "", footer: s.footer ?? "", logo: s.logo ?? "" }} onSave={saveLetterhead} />
+          ),
+        },
+        {
+          id: "device", label: "الجهاز والبيانات", hint: "النسخ الاحتياطي والمظهر", icon: <HardDrive />,
+          content: (
+            <>
+              <div className="rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
+                <div className="mb-1 text-sm font-semibold">النسخ الاحتياطي</div>
+                <p className="mb-3 text-xs text-muted">كل بيانات المشتريات محفوظة على هذا الحاسوب فقط. صدّر نسخة احتياطية بانتظام أو انقلها لجهاز آخر.</p>
+                <div className="flex flex-wrap gap-2">
+                  <button onClick={doExport} className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas"><Download className="size-4" /> تصدير نسخة</button>
+                  <button onClick={() => importRef.current?.click()} className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas"><Upload className="size-4" /> استيراد نسخة</button>
+                  <input ref={importRef} type="file" accept="application/json,.json" onChange={onImport} className="hidden" />
+                </div>
+                {msg && <p className="mt-2 text-xs text-muted">{msg}</p>}
+              </div>
+              <ThemeCard storageKey={THEME_KEYS.store} />
+              <SyncPanel />
+            </>
+          ),
+        },
+      ]}
+    />
   );
 }

@@ -35,6 +35,10 @@ export interface Purchase {
 
 export interface PurchasingSettings {
   orgName: string;
+  subtitle?: string;
+  footer?: string;
+  /** Letterhead logo (image data URL); empty → the default logo. */
+  logo?: string;
 }
 
 const K_SUP = "purchasing.suppliers.v1";

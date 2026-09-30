@@ -116,7 +116,7 @@ export default function TempsPage() {
       {settings && (
         <div className="print-doc hidden bg-white text-[9.5px] leading-[1.2] text-black print:block">
           <PrintStyle landscape={units.length > 3} />
-          <Letterhead title={settings.title} subtitle={settings.subtitle} color="#be123c"
+          <Letterhead title={settings.title} subtitle={settings.subtitle} logo={settings.logo} color="#be123c"
             right={<><div className="font-bold" style={{ color: "#be123c" }}>سجل درجات الحرارة</div><div>{monthLabel(month)}</div></>} />
           <table className="mt-2 w-full border-collapse text-center">
             <thead>

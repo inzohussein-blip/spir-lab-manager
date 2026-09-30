@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ImageUp, Trash2 } from "lucide-react";
 import { updateLabLogo } from "@/app/actions/settings";
 import { shrinkImage } from "@/lib/shrinkImage";
+import { notifySaved } from "@/components/SettingsLayout";
 
 /** Settings → «شعار المختبر»: shown on the panel, the reports and the receipts. */
 export function LogoCard({ logo, isDefault }: { logo: string; isDefault: boolean }) {
@@ -18,7 +19,7 @@ export function LogoCard({ logo, isDefault }: { logo: string; isDefault: boolean
     const r = await updateLabLogo(dataUrl);
     setBusy(false);
     setMsg(r.ok ? { ok: true, text: dataUrl ? "✓ حُفظ الشعار" : "✓ أُعيد الشعار الافتراضي" } : { ok: false, text: r.error === "bad_image" ? "الصورة غير مناسبة — اختر PNG أو JPG أصغر." : "للمدير فقط." });
-    if (r.ok) router.refresh();
+    if (r.ok) { notifySaved(); router.refresh(); }
   }
 
   return (

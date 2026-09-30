@@ -36,7 +36,7 @@ export interface Device {
   tasks: DeviceTask[]; log: DeviceLog[];
 }
 
-export interface QcSettings { title: string; subtitle: string; footer?: string; preparedBy?: string }
+export interface QcSettings { title: string; subtitle: string; footer?: string; preparedBy?: string; /** Letterhead logo (image data URL); empty → the default logo. */ logo?: string }
 
 const K = {
   analytes: "qc.analytes.v1", results: "qc.results.v1", units: "qc.tempUnits.v1", temps: "qc.temps.v1",

@@ -214,7 +214,7 @@ const ROUTES = ['/', '/appointments', '/audit', '/calendar', '/insights', '/inve
   const name = 'مريض القاعدة الخاصة ' + TAG;
   await addPatient(p, name);
   ok((await db.query(`select count(*)::int as n from patients where full_name = $1`, [name]))[0].n === 1, 'a new patient is saved in the lab\'s database');
-  await p.goto(B + '/settings');
+  await p.goto(B + '/settings#database'); await p.waitForSelector('[data-testid="lab-db-card"]', { timeout: 15000 });
   const sc = p.locator('[data-testid="lab-db-card"]');
   ok((await sc.innerText()).includes('ضبطها صاحب الرموز') && (await sc.locator('input').count()) === 0, 'Settings: set by the owner → the lab cannot change it');
   await p.goto(B + '/verify/not-a-token?l=' + encodeURIComponent(c.row.id));
@@ -256,7 +256,7 @@ const ROUTES = ['/', '/appointments', '/audit', '/calendar', '/insights', '/inve
   await p.goto(B + '/'); await p.waitForTimeout(300);
   ok(!(await signInOn(p, 'labadmin', 'lab-pass-1')) && await signInOn(p, 'labadmin', 'new-pass-2'), 'only the new password opens the panel');
 
-  await p.goto(B + '/settings'); await p.waitForSelector('[data-testid="import-tests-card"]', { timeout: 15000 });
+  await p.goto(B + '/settings#tests'); await p.waitForSelector('[data-testid="import-tests-card"]', { timeout: 15000 });
   await p.click('button:has-text("استيراد قائمة الفحوصات الافتراضية")');
   const imported = (await waitFor(() => p.locator('[data-testid="import-tests-msg"]').innerText().catch(() => ''), 20000)) || '';
   const nTests = (await db.query(`select count(*)::int as n from test_catalog`))[0].n;
@@ -301,7 +301,7 @@ const ROUTES = ['/', '/appointments', '/audit', '/calendar', '/insights', '/inve
   ok((await db2.query(`select count(*)::int as n from patients`))[0].n === 1, 'working on the database it linked');
 
   // ── The lab's admin moves the panel from Settings (with its data) ──
-  await p.goto(B + '/settings'); await p.waitForSelector('[data-testid="lab-db-card"]', { timeout: 15000 });
+  await p.goto(B + '/settings#database'); await p.waitForSelector('[data-testid="lab-db-card"]', { timeout: 15000 });
   ok((await sc.innerText()).includes(new URL(db2.url).hostname), 'Settings: its database is shown');
   await sc.locator('[data-provider="postgres"]').click();
   await sc.locator('input[aria-label="رابط قاعدة المختبر"]').fill(db3.url);
@@ -313,7 +313,7 @@ const ROUTES = ['/', '/appointments', '/audit', '/calendar', '/insights', '/inve
   const p3 = await db3.query(`select count(*)::int as n from patients`);
   ok(u3.length === 1 && u3[0].username === 'admin' && p3[0].n === 1, 'its accounts and patients came along');
   ok(await signInOn(p, 'admin', 'lab-own-1'), 'the same admin signs in on the new database');
-  await p.goto(B + '/settings'); await p.waitForSelector('[data-testid="lab-db-card"]', { timeout: 15000 });
+  await p.goto(B + '/settings#database'); await p.waitForSelector('[data-testid="lab-db-card"]', { timeout: 15000 });
   await sc.locator('button:has-text("إرجاع لقسم المختبر")').click();
   ok(((await waitFor(() => sc.locator('[data-testid="lab-db-msg"]').innerText().catch(() => ''), 15000)) || '').includes('لا يمكن إرجاعها'), 'with the rule on, the lab cannot go back to the site\'s database');
   await o.goto(B + '/licenses'); await o.waitForSelector(`div[data-lab="${LAB}"]`, { timeout: 15000 });

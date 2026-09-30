@@ -79,7 +79,7 @@ const fs = require('node:fs');
   ok(await p.locator('text=سجل الزيارات والفحوصات (2)').count() === 1, 'patient history shows both visits');
   // custom form edit then backup round trip
   await kvPut(p, 'station.formTemplates.v1', { CS: { title: 'MY CULTURE', specimens: [], colony: [], organisms: [], antibiotics: [{ group: 'x', items: ['Abc'] }] } });
-  await p.goto(B + '/station/settings'); await p.waitForTimeout(600);
+  await p.goto(B + '/station/settings#device'); await p.waitForTimeout(600);
   const [bk] = await Promise.all([p.waitForEvent('download'), p.click('button:has-text("تصدير نسخة احتياطية")')]);
   const backup = JSON.parse(fs.readFileSync(await bk.path(), 'utf8'));
   ok(backup.visits.length === 2 && backup.patients.length === 1 && backup.stock.length === 1, 'backup has visits, patients, stock');

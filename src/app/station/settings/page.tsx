@@ -3,9 +3,10 @@
 import { SyncPanel } from "@/components/local/SyncPanel";
 import { kvFlush } from "@/lib/local/kv";
 import { useEffect, useRef, useState } from "react";
-import { Settings, Check, Image as ImageIcon, Download, Upload, Trash2, Stethoscope, Plus, Pencil, X, Smartphone, History, ListCollapse, ClipboardList, QrCode as QrCodeIcon, Hash, PenLine, RotateCcw, FileText } from "lucide-react";
+import { Settings, Image as ImageIcon, Download, Upload, Trash2, Stethoscope, Plus, Pencil, X, Smartphone, History, ListCollapse, ClipboardList, QrCode as QrCodeIcon, Hash, PenLine, RotateCcw, FileText } from "lucide-react";
 import { labQrCode, QR_TITLE_DEFAULT, QR_HINT_DEFAULT } from "@/lib/station/labQr";
-import { LabQrCard } from "@/components/station/ReportSheet";
+import { SettingsLayout, notifySaved } from "@/components/SettingsLayout";
+import { ReportPreview } from "@/components/station/ReportPreview";
 import {
   getSettings, saveSettings, normalizeUrl, exportBackup, importBackup, getDoctors, saveDoctors, markBackupNow, daysSinceBackup, getVisits, storageUsage, requestPersistentStorage, uid, type StorageUsage,
   getDeviceTag, setDeviceTag, resetBuiltinTests, restoreDefaultTests,
@@ -13,7 +14,6 @@ import {
 } from "@/lib/station/store";
 import { InstallButton } from "@/components/station/InstallButton";
 import { TableStyleCard } from "@/components/station/TableStyleCard";
-import { reportColors, tableStyleOf } from "@/lib/station/tableStyle";
 import { ORIGINAL_HEAD, PRE_BOTTOM_DEFAULT, PRE_TOP_DEFAULT, REPORT_FONTS, type ReportHead } from "@/lib/station/reportExtras";
 import { ThemeCard } from "@/components/local/LocalTheme";
 import { LABEL_SIZES, type LabelSize } from "@/components/station/TubeLabel";
@@ -27,7 +27,6 @@ const mb = (n: number) => (n >= 1024 ** 3 ? `${(n / 1024 ** 3).toFixed(1)} GB` :
 
 export default function StationSettingsPage() {
   const [s, setS] = useState<StationSettings>({ labName: "", labSubtitle: "" });
-  const [saved, setSaved] = useState(false);
   const [msg, setMsg] = useState("");
   const importRef = useRef<HTMLInputElement>(null);
 
@@ -41,7 +40,6 @@ export default function StationSettingsPage() {
   const [usage, setUsage] = useState<StorageUsage | null>(null);
   const [persisted, setPersisted] = useState<boolean | null>(null);
   const [tag, setTag] = useState("");
-  const [tagSaved, setTagSaved] = useState(false);
   const [defaultsMsg, setDefaultsMsg] = useState("");
   const overdue = hasData && (since === null || since >= 7);
 
@@ -52,7 +50,7 @@ export default function StationSettingsPage() {
     requestPersistentStorage().then(setPersisted);
   }, []);
 
-  function persistDoctors(next: StationDoctor[]) { setDoctors(next); saveDoctors(next); }
+  function persistDoctors(next: StationDoctor[]) { setDoctors(next); saveDoctors(next); notifySaved(); }
   function submitDoctor() {
     if (!dName.trim()) return;
     const rec: StationDoctor = { id: dEdit ?? uid(), name: dName.trim(), clinic: dClinic.trim() || undefined };
@@ -66,19 +64,11 @@ export default function StationSettingsPage() {
     if (dEdit === id) { setDName(""); setDClinic(""); setDEdit(null); }
   }
 
-  function save(next?: StationSettings) {
-    const v = next ?? s;
-    const clean = { ...v, labName: v.labName.trim() || "مختبر", labSubtitle: v.labSubtitle.trim() };
-    saveSettings(clean);
-    setS(clean);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
-  }
-
-  // Result options save immediately and independently of the letterhead form.
+  // Every setting saves as soon as it changes (text fields when you leave them), with «حُفظ ✓».
   function setOption(patch: Partial<StationSettings>) {
     saveSettings({ ...getSettings(), ...patch });
     setS((cur) => ({ ...cur, ...patch }));
+    notifySaved();
   }
 
   function onLogo(e: React.ChangeEvent<HTMLInputElement>) {
@@ -86,7 +76,7 @@ export default function StationSettingsPage() {
     if (!file) return;
     if (file.size > 400 * 1024) { setMsg("حجم الصورة كبير — اختر صورة أصغر من 400KB."); return; }
     const reader = new FileReader();
-    reader.onload = () => save({ ...s, logo: String(reader.result) });
+    reader.onload = () => setOption({ logo: String(reader.result) });
     reader.readAsDataURL(file);
   }
 
@@ -120,25 +110,35 @@ export default function StationSettingsPage() {
     e.target.value = "";
   }
 
+  // What is switched on in each section (shown beside its name).
+  const onCount = (xs: boolean[]) => { const n = xs.filter(Boolean).length; return n ? `${n} مفعّل` : null; };
+  const reportOn = onCount([s.labQr !== false, s.printPrevious === true, s.signatureOn === true, s.prePrinted === true, s.reportHeadOn === true, s.reportFontOn === true]);
+  const entryOn = onCount([s.showPrevious !== false, s.autoDerived === true, s.tubeLabel === true, s.collapseGroups === true, s.ageUnit === true, s.deliveryStatus === true]);
+
   return (
-    <div className="max-w-lg">
-      <h1 className="mb-5 flex items-center gap-2 text-2xl font-bold"><Settings className="size-6" /> إعدادات المحطة</h1>
-
-      {/* Appearance */}
-      <ThemeCard storageKey={THEME_KEYS.station} />
-
+    <SettingsLayout
+      title="إعدادات المحطة"
+      icon={<Settings className="size-6" />}
+      search
+      sections={[
+        {
+          id: "report", label: "التقرير المطبوع", hint: "الترويسة والألوان والجدول والاستمارات والتوقيع", icon: <FileText />, badge: reportOn,
+          aside: <ReportPreview settings={s} />,
+          content: (
+            <>
       {/* Report letterhead */}
       <div className="mb-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
-        <div className="mb-3 text-sm font-semibold">ترويسة التقرير المطبوع</div>
+        <div className="mb-1 text-sm font-semibold">ترويسة التقرير المطبوع</div>
+        <p className="mb-3 text-xs text-muted">يُحفظ كل حقل عند الخروج منه.</p>
         <div className="flex flex-col gap-3">
           <label className="text-sm font-medium">اسم المختبر
-            <input value={s.labName} onChange={(e) => setS({ ...s, labName: e.target.value })} className={`mt-1 ${inp}`} />
+            <input value={s.labName} onChange={(e) => setS({ ...s, labName: e.target.value })} onBlur={(e) => setOption({ labName: e.target.value.trim() || "مختبر" })} className={`mt-1 ${inp}`} />
           </label>
           <label className="text-sm font-medium">العنوان الفرعي
-            <input value={s.labSubtitle} onChange={(e) => setS({ ...s, labSubtitle: e.target.value })} className={`mt-1 ${inp}`} />
+            <input value={s.labSubtitle} onChange={(e) => setS({ ...s, labSubtitle: e.target.value })} onBlur={(e) => setOption({ labSubtitle: e.target.value.trim() })} className={`mt-1 ${inp}`} />
           </label>
           <label className="text-sm font-medium">سطر التذييل (العنوان / الهاتف)
-            <input value={s.footer ?? ""} onChange={(e) => setS({ ...s, footer: e.target.value })} placeholder="العنوان - الهاتف" className={`mt-1 ${inp}`} />
+            <input value={s.footer ?? ""} onChange={(e) => setS({ ...s, footer: e.target.value })} onBlur={(e) => setOption({ footer: e.target.value.trim() })} placeholder="العنوان - الهاتف" className={`mt-1 ${inp}`} />
           </label>
 
           <div className="text-sm font-medium">شعار المختبر</div>
@@ -156,101 +156,12 @@ export default function StationSettingsPage() {
               <input type="file" accept="image/*" onChange={onLogo} className="hidden" />
             </label>
             {s.logo && (
-              <button onClick={() => save({ ...s, logo: undefined })} className="inline-flex items-center gap-1 text-xs text-red-600 hover:underline">
+              <button onClick={() => setOption({ logo: undefined })} className="inline-flex items-center gap-1 text-xs text-red-600 hover:underline">
                 <Trash2 className="size-3.5" /> إزالة
               </button>
             )}
           </div>
 
-          <button onClick={() => save()} className="inline-flex w-fit items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark">
-            <Check className="size-4" /> حفظ
-          </button>
-          {saved && <p className="text-xs text-brand-dark">تم الحفظ.</p>}
-        </div>
-      </div>
-
-      {/* QR code(s) at the bottom of the report */}
-      <div className="mb-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
-        <div className="mb-3 flex items-center gap-2 text-sm font-semibold"><QrCodeIcon className="size-4" /> رمز QR أسفل التقرير</div>
-        <div className="flex flex-col gap-3">
-          <Toggle
-            checked={s.labQr !== false}
-            onChange={(v) => setOption({ labQr: v })}
-            label="طباعة رمز المختبر بجانب التوقيع"
-            desc="يقرؤه أي هاتف بالكاميرا مباشرة، دون تطبيق."
-          />
-          {s.labQr !== false && (() => {
-            const badUrl = !!s.labUrl?.trim() && !normalizeUrl(s.labUrl);
-            const code = labQrCode(s);
-            return (
-              <>
-                <p className="text-xs text-muted">
-                  رمز واحد يحمل معلومات المختبر كأسطر بسيطة بلا عناوين: اسم المختبر، رقم الهاتف، العنوان، ثم الرابط (موقع إلكتروني أو خرائط). عند مسحه تظهر كما هي، والرابط يُفتح بالضغط عليه.
-                </p>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="text-sm font-medium">أرقام الهاتف
-                    <input value={s.labPhone ?? ""} onChange={(e) => setS({ ...s, labPhone: e.target.value })} dir="ltr" inputMode="tel" placeholder="07XX XXX XXXX, 07XX XXX XXXX" className={`mt-1 text-left ${inp}`} />
-                    <span className="block text-xs font-normal text-muted">أكثر من رقم؟ افصل بينها بفاصلة.</span>
-                  </label>
-                  <label className="text-sm font-medium">العنوان
-                    <input value={s.labAddress ?? ""} onChange={(e) => setS({ ...s, labAddress: e.target.value })} placeholder="المدينة - الحي - أقرب نقطة دالة" className={`mt-1 ${inp}`} />
-                  </label>
-                </div>
-                <label className="text-sm font-medium">رابط موقع المختبر
-                  <input value={s.labUrl ?? ""} onChange={(e) => setS({ ...s, labUrl: e.target.value })} dir="ltr" inputMode="url"
-                    placeholder="https://maps.app.goo.gl/… أو رابط الموقع" className={`mt-1 text-left ${inp}`} />
-                  <span className={`block text-xs font-normal ${badUrl ? "text-red-600" : "text-muted"}`}>
-                    {badUrl ? "الرابط غير صحيح — اكتبه كاملاً بلا مسافات، مثل lab.com أو https://maps.app.goo.gl/…"
-                      : "من خرائط Google: افتح موقع المختبر ← مشاركة ← نسخ الرابط، ثم الصقه هنا."}
-                  </span>
-                </label>
-
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="text-sm font-medium">العبارة الرئيسية بجانب الرمز
-                    <input value={s.labQrTitle ?? ""} onChange={(e) => setS({ ...s, labQrTitle: e.target.value })} placeholder={QR_TITLE_DEFAULT} className={`mt-1 ${inp}`} />
-                  </label>
-                  <label className="text-sm font-medium">العبارة الصغيرة تحتها
-                    <input value={s.labQrHint ?? ""} onChange={(e) => setS({ ...s, labQrHint: e.target.value })} placeholder={QR_HINT_DEFAULT} className={`mt-1 ${inp}`} />
-                  </label>
-                </div>
-                <Toggle
-                  checked={s.labQrLogo !== false}
-                  onChange={(v) => setOption({ labQrLogo: v })}
-                  label="شعار المختبر وسط الرمز"
-                  desc="يبقى الرمز مقروءاً لأنه يُصنع بدرجة تصحيح أخطاء عالية."
-                />
-
-                <div className="rounded-xl border border-dashed border-line bg-white p-3">
-                  <div className="mb-2 text-xs font-medium text-muted">معاينة — جرّب مسحها بهاتفك من الشاشة</div>
-                  {code && <div className="flex" dir="ltr"><LabQrCard q={code} logo={s.labQrLogo !== false ? s.logo : undefined} colors={reportColors(tableStyleOf(s.reportTable))} /></div>}
-                </div>
-
-                <button onClick={() => save()} className="inline-flex w-fit items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark">
-                  <Check className="size-4" /> حفظ
-                </button>
-                {saved && <p className="text-xs text-brand-dark">تم الحفظ.</p>}
-              </>
-            );
-          })()}
-        </div>
-      </div>
-
-      {/* Previous-result options */}
-      <div className="mb-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
-        <div className="mb-3 flex items-center gap-2 text-sm font-semibold"><History className="size-4" /> النتيجة السابقة للمراجع</div>
-        <div className="flex flex-col gap-3">
-          <Toggle
-            checked={s.showPrevious !== false}
-            onChange={(v) => setOption({ showPrevious: v })}
-            label="إظهار النتيجة السابقة للفاحص"
-            desc="تظهر تحت حقل النتيجة في شاشة الإدخال فقط، ولا تُطبع."
-          />
-          <Toggle
-            checked={s.printPrevious === true}
-            onChange={(v) => setOption({ printPrevious: v })}
-            label="طباعة النتيجة السابقة مع الجديدة"
-            desc="يضيف عمود «النتيجة السابقة» إلى ورقة النتائج المطبوعة."
-          />
         </div>
       </div>
 
@@ -341,6 +252,150 @@ export default function StationSettingsPage() {
         </div>
       </div>
 
+      {/* Signature and stamp on the report — off by default */}
+      <div className="mt-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]" data-testid="signature-card">
+        <div className="mb-3 flex items-center gap-2 text-sm font-semibold"><PenLine className="size-4" /> التوقيع والختم على التقرير</div>
+        <Toggle
+          checked={s.signatureOn === true}
+          onChange={(v) => setOption({ signatureOn: v })}
+          label="إظهار التوقيع والختم أسفل التقرير"
+          desc="صورة توقيع المحلل واسمه، وختم المختبر، مكان سطر «التوقيع / الختم». الصور من صور المشروع فتظهر نفسها على كل الأجهزة."
+        />
+        {s.signatureOn === true && (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {STATIC_IMAGES.length === 0 && (
+              <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 sm:col-span-2">
+                لا صور في المشروع بعد — ضع صورة التوقيع وصورة الختم في المجلد <span dir="ltr" className="font-mono">public/lab-images</span> ثم انشر التحديث لتظهر هنا.
+              </p>
+            )}
+            <ImageChoice label="صورة التوقيع" value={s.signatureImage} onChange={(v) => setOption({ signatureImage: v })} />
+            <ImageChoice label="صورة الختم" value={s.stampImage} onChange={(v) => setOption({ stampImage: v })} />
+            <label className="text-sm font-medium">الاسم تحت التوقيع
+              <input value={s.signatureName ?? ""} onChange={(e) => setS({ ...s, signatureName: e.target.value })} onBlur={(e) => setOption({ signatureName: e.target.value.trim() })} placeholder="مثلاً: د. أحمد علي" className={`mt-1 ${inp}`} />
+            </label>
+            <label className="text-sm font-medium">الصفة (اختياري)
+              <input value={s.signatureTitle ?? ""} onChange={(e) => setS({ ...s, signatureTitle: e.target.value })} onBlur={(e) => setOption({ signatureTitle: e.target.value.trim() })} placeholder="مثلاً: أخصائي تحليلات مرضية" className={`mt-1 ${inp}`} />
+            </label>
+          </div>
+        )}
+      </div>
+
+      {/* QR code(s) at the bottom of the report */}
+      <div className="mb-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
+        <div className="mb-3 flex items-center gap-2 text-sm font-semibold"><QrCodeIcon className="size-4" /> رمز QR أسفل التقرير</div>
+        <div className="flex flex-col gap-3">
+          <Toggle
+            checked={s.labQr !== false}
+            onChange={(v) => setOption({ labQr: v })}
+            label="طباعة رمز المختبر بجانب التوقيع"
+            desc="يقرؤه أي هاتف بالكاميرا مباشرة، دون تطبيق."
+          />
+          {s.labQr !== false && (() => {
+            const badUrl = !!s.labUrl?.trim() && !normalizeUrl(s.labUrl);
+            const code = labQrCode(s);
+            return (
+              <>
+                <p className="text-xs text-muted">
+                  رمز واحد يحمل معلومات المختبر كأسطر بسيطة بلا عناوين: اسم المختبر، رقم الهاتف، العنوان، ثم الرابط (موقع إلكتروني أو خرائط). عند مسحه تظهر كما هي، والرابط يُفتح بالضغط عليه.
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="text-sm font-medium">أرقام الهاتف
+                    <input value={s.labPhone ?? ""} onChange={(e) => setS({ ...s, labPhone: e.target.value })} onBlur={(e) => setOption({ labPhone: e.target.value.trim() })} dir="ltr" inputMode="tel" placeholder="07XX XXX XXXX, 07XX XXX XXXX" className={`mt-1 text-left ${inp}`} />
+                    <span className="block text-xs font-normal text-muted">أكثر من رقم؟ افصل بينها بفاصلة.</span>
+                  </label>
+                  <label className="text-sm font-medium">العنوان
+                    <input value={s.labAddress ?? ""} onChange={(e) => setS({ ...s, labAddress: e.target.value })} onBlur={(e) => setOption({ labAddress: e.target.value.trim() })} placeholder="المدينة - الحي - أقرب نقطة دالة" className={`mt-1 ${inp}`} />
+                  </label>
+                </div>
+                <label className="text-sm font-medium">رابط موقع المختبر
+                  <input value={s.labUrl ?? ""} onChange={(e) => setS({ ...s, labUrl: e.target.value })} onBlur={(e) => setOption({ labUrl: e.target.value.trim() })} dir="ltr" inputMode="url"
+                    placeholder="https://maps.app.goo.gl/… أو رابط الموقع" className={`mt-1 text-left ${inp}`} />
+                  <span className={`block text-xs font-normal ${badUrl ? "text-red-600" : "text-muted"}`}>
+                    {badUrl ? "الرابط غير صحيح — اكتبه كاملاً بلا مسافات، مثل lab.com أو https://maps.app.goo.gl/…"
+                      : "من خرائط Google: افتح موقع المختبر ← مشاركة ← نسخ الرابط، ثم الصقه هنا."}
+                  </span>
+                </label>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="text-sm font-medium">العبارة الرئيسية بجانب الرمز
+                    <input value={s.labQrTitle ?? ""} onChange={(e) => setS({ ...s, labQrTitle: e.target.value })} onBlur={(e) => setOption({ labQrTitle: e.target.value.trim() })} placeholder={QR_TITLE_DEFAULT} className={`mt-1 ${inp}`} />
+                  </label>
+                  <label className="text-sm font-medium">العبارة الصغيرة تحتها
+                    <input value={s.labQrHint ?? ""} onChange={(e) => setS({ ...s, labQrHint: e.target.value })} onBlur={(e) => setOption({ labQrHint: e.target.value.trim() })} placeholder={QR_HINT_DEFAULT} className={`mt-1 ${inp}`} />
+                  </label>
+                </div>
+                <Toggle
+                  checked={s.labQrLogo !== false}
+                  onChange={(v) => setOption({ labQrLogo: v })}
+                  label="شعار المختبر وسط الرمز"
+                  desc="يبقى الرمز مقروءاً لأنه يُصنع بدرجة تصحيح أخطاء عالية."
+                />
+                {code && <p className="text-xs text-muted">يظهر الرمز في المعاينة بجانب الإعدادات — جرّب مسحه بهاتفك من الشاشة.</p>}
+              </>
+            );
+          })()}
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
+        <div className="mb-3 flex items-center gap-2 text-sm font-semibold"><History className="size-4" /> النتيجة السابقة على الورقة</div>
+        <Toggle
+          checked={s.printPrevious === true}
+          onChange={(v) => setOption({ printPrevious: v })}
+          label="طباعة النتيجة السابقة مع الجديدة"
+          desc="يضيف عمود «النتيجة السابقة» إلى ورقة النتائج المطبوعة."
+        />
+      </div>
+      {/* Report forms (urine, stool, semen, culture) */}
+      <div className="mb-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
+        <div className="mb-3 flex items-center gap-2 text-sm font-semibold"><ClipboardList className="size-4" /> استمارات التقارير (البول، الخروج، السائل المنوي، الزرع)</div>
+        <div className="flex flex-col gap-3">
+          <Toggle
+            checked={s.formBoldAbnormal !== false}
+            onChange={(v) => setOption({ formBoldAbnormal: v })}
+            label="تمييز النتيجة غير الطبيعية بخط عريض"
+            desc="في الاستمارة المطبوعة تُطبع النتيجة المخالفة للقيمة الطبيعية أو للمعدل المطبوع بجانبها بخط عريض، بلا ألوان."
+          />
+          <Toggle
+            checked={s.formHideEmpty === true}
+            onChange={(v) => setOption({ formHideEmpty: v })}
+            label="إخفاء الحقول الفارغة عند الطباعة"
+            desc="الحقل الذي لم يُملأ لا يُطبع صفه، وكذلك العنوان الفرعي أو القسم الذي لم يُملأ منه شيء."
+          />
+          <Toggle
+            checked={s.sfaDiagnosis !== false}
+            onChange={(v) => setOption({ sfaDiagnosis: v })}
+            label="الخلاصة التلقائية للسائل المنوي (Conclusion)"
+            desc="تُحسب من القيم حسب المعدلات المطبوعة: Normozoospermia، Oligo/Astheno/Teratozoospermia، Azoospermia، مع Hypospermia وNecrozoospermia. تُطبع أسفل التقرير ويمكن استبدالها."
+          />
+          <Toggle
+            checked={s.sfaAutoCalc !== false}
+            onChange={(v) => setOption({ sfaAutoCalc: v })}
+            label="الحساب التلقائي في السائل المنوي"
+            desc="عند إدخال PR وNP يُحسب Total Motility وImmotile، وعند إدخال Normal تُحسب Abnormal (والعكس)، ومن التركيز والحجم يُحسب Total Sperm Count."
+          />
+          <Toggle
+            checked={s.csTestedOnly === true}
+            onChange={(v) => setOption({ csTestedOnly: v })}
+            label="الزرع: طباعة المضادات المفحوصة فقط"
+            desc="عند الإيقاف (الافتراضي) تُطبع قائمة المضادات كاملة كما في الورقة، والمضاد غير المفحوص يبقى فارغاً."
+          />
+          <Toggle
+            checked={s.formExtraNormals === true}
+            onChange={(v) => setOption({ formExtraNormals: v })}
+            label="قيم طبيعية إضافية في محرر الاستمارات"
+            desc="في «إدارة الفحوصات ← الاستمارة» يظهر لكل حقل «قيم أخرى تُعتبر طبيعية» وخيار «حقل وصفي»، لتحديد ما لا يُطبع بخط عريض."
+          />
+        </div>
+      </div>
+
+            </>
+          ),
+        },
+        {
+          id: "entry", label: "شاشة الإدخال", hint: "ما يظهر للفاحص أثناء إدخال النتائج", icon: <ListCollapse />, badge: entryOn,
+          content: (
+            <>
       {/* Entry-screen options */}
       <div className="mb-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
         <div className="mb-3 flex items-center gap-2 text-sm font-semibold"><ListCollapse className="size-4" /> شاشة الإدخال</div>
@@ -411,49 +466,22 @@ export default function StationSettingsPage() {
         />
       </div>
 
-      {/* Report forms (urine, stool, semen, culture) */}
-      <div className="mb-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
-        <div className="mb-3 flex items-center gap-2 text-sm font-semibold"><ClipboardList className="size-4" /> استمارات التقارير (البول، الخروج، السائل المنوي، الزرع)</div>
-        <div className="flex flex-col gap-3">
-          <Toggle
-            checked={s.formBoldAbnormal !== false}
-            onChange={(v) => setOption({ formBoldAbnormal: v })}
-            label="تمييز النتيجة غير الطبيعية بخط عريض"
-            desc="في الاستمارة المطبوعة تُطبع النتيجة المخالفة للقيمة الطبيعية أو للمعدل المطبوع بجانبها بخط عريض، بلا ألوان."
-          />
-          <Toggle
-            checked={s.formHideEmpty === true}
-            onChange={(v) => setOption({ formHideEmpty: v })}
-            label="إخفاء الحقول الفارغة عند الطباعة"
-            desc="الحقل الذي لم يُملأ لا يُطبع صفه، وكذلك العنوان الفرعي أو القسم الذي لم يُملأ منه شيء."
-          />
-          <Toggle
-            checked={s.sfaDiagnosis !== false}
-            onChange={(v) => setOption({ sfaDiagnosis: v })}
-            label="الخلاصة التلقائية للسائل المنوي (Conclusion)"
-            desc="تُحسب من القيم حسب المعدلات المطبوعة: Normozoospermia، Oligo/Astheno/Teratozoospermia، Azoospermia، مع Hypospermia وNecrozoospermia. تُطبع أسفل التقرير ويمكن استبدالها."
-          />
-          <Toggle
-            checked={s.sfaAutoCalc !== false}
-            onChange={(v) => setOption({ sfaAutoCalc: v })}
-            label="الحساب التلقائي في السائل المنوي"
-            desc="عند إدخال PR وNP يُحسب Total Motility وImmotile، وعند إدخال Normal تُحسب Abnormal (والعكس)، ومن التركيز والحجم يُحسب Total Sperm Count."
-          />
-          <Toggle
-            checked={s.csTestedOnly === true}
-            onChange={(v) => setOption({ csTestedOnly: v })}
-            label="الزرع: طباعة المضادات المفحوصة فقط"
-            desc="عند الإيقاف (الافتراضي) تُطبع قائمة المضادات كاملة كما في الورقة، والمضاد غير المفحوص يبقى فارغاً."
-          />
-          <Toggle
-            checked={s.formExtraNormals === true}
-            onChange={(v) => setOption({ formExtraNormals: v })}
-            label="قيم طبيعية إضافية في محرر الاستمارات"
-            desc="في «إدارة الفحوصات ← الاستمارة» يظهر لكل حقل «قيم أخرى تُعتبر طبيعية» وخيار «حقل وصفي»، لتحديد ما لا يُطبع بخط عريض."
-          />
-        </div>
+      <div className="rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
+        <div className="mb-3 flex items-center gap-2 text-sm font-semibold"><History className="size-4" /> النتيجة السابقة للمراجع</div>
+        <Toggle
+          checked={s.showPrevious !== false}
+          onChange={(v) => setOption({ showPrevious: v })}
+          label="إظهار النتيجة السابقة للفاحص"
+          desc="تظهر تحت حقل النتيجة في شاشة الإدخال فقط، ولا تُطبع."
+        />
       </div>
-
+            </>
+          ),
+        },
+        {
+          id: "tests", label: "الفحوصات والأطباء", hint: "الأطباء المحيلون وقائمة الفحوصات", icon: <Stethoscope />, badge: doctors.length ? `${doctors.length} طبيب` : null,
+          content: (
+            <>
       {/* Referring doctors */}
       <div className="mb-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
         <div className="mb-1 flex items-center gap-2 text-sm font-semibold"><Stethoscope className="size-4" /> الأطباء المُحيلون</div>
@@ -483,6 +511,34 @@ export default function StationSettingsPage() {
         )}
       </div>
 
+      {/* Restore the default tests */}
+      <div className="mt-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]" data-testid="defaults-card">
+        <div className="mb-1 flex items-center gap-2 text-sm font-semibold"><RotateCcw className="size-4" /> استعادة الافتراض لقائمة الفحوصات</div>
+        <p className="mb-3 text-xs text-muted">الزيارات المحفوظة لا تتأثر. الفحوصات المدمجة تحتفظ بمعرّفاتها فتبقى النتائج السابقة مرتبطة بها.</p>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={() => {
+            if (!window.confirm("إرجاع أسماء ووحدات ومعدلات الفحوصات المدمجة إلى قيمها الافتراضية، وإعادة المحذوف منها؟ فحوصاتك المضافة تبقى كما هي.")) return;
+            setDefaultsMsg(`أُعيدت ${resetBuiltinTests()} فحصاً مدمجاً إلى القيم الافتراضية.`);
+          }} className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas">
+            <RotateCcw className="size-4" /> استعادة القيم الافتراضية للفحوصات
+          </button>
+          <button onClick={() => {
+            if (!window.confirm("استبدال قائمة الفحوصات كلها بالقائمة الافتراضية؟ تُحذف الفحوصات التي أضفتها بنفسك وتُعاد كل الفحوصات المدمجة إلى قيمها الافتراضية.")) return;
+            setDefaultsMsg(`أُعيدت القائمة الافتراضية (${restoreDefaultTests()} فحصاً).`);
+          }} className="inline-flex items-center gap-1.5 rounded-lg border border-red-300 px-3 py-2 text-sm text-red-700 hover:bg-red-50">
+            استعادة قائمة الفحوصات الافتراضية بالكامل
+          </button>
+        </div>
+        {defaultsMsg && <p className="mt-2 text-xs text-brand-dark" role="status">{defaultsMsg}</p>}
+      </div>
+
+            </>
+          ),
+        },
+        {
+          id: "device", label: "الجهاز والبيانات", hint: "النسخ الاحتياطي والتخزين والمظهر والتثبيت", icon: <Smartphone />, badge: overdue ? "نسخة متأخرة" : null,
+          content: (
+            <>
       {/* Backup */}
       <div className={`rounded-2xl border bg-surface p-5 shadow-[var(--shadow-card)] ${overdue ? "border-amber-300" : "border-line"}`}>
         <div className="mb-1 text-sm font-semibold">النسخ الاحتياطي</div>
@@ -539,55 +595,7 @@ export default function StationSettingsPage() {
         {msg && <p className="mt-1 text-xs text-muted">{msg}</p>}
       </div>
 
-      {/* Signature and stamp on the report — off by default */}
-      <div className="mt-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]" data-testid="signature-card">
-        <div className="mb-3 flex items-center gap-2 text-sm font-semibold"><PenLine className="size-4" /> التوقيع والختم على التقرير</div>
-        <Toggle
-          checked={s.signatureOn === true}
-          onChange={(v) => setOption({ signatureOn: v })}
-          label="إظهار التوقيع والختم أسفل التقرير"
-          desc="صورة توقيع المحلل واسمه، وختم المختبر، مكان سطر «التوقيع / الختم». الصور من صور المشروع فتظهر نفسها على كل الأجهزة."
-        />
-        {s.signatureOn === true && (
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            {STATIC_IMAGES.length === 0 && (
-              <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 sm:col-span-2">
-                لا صور في المشروع بعد — ضع صورة التوقيع وصورة الختم في المجلد <span dir="ltr" className="font-mono">public/lab-images</span> ثم انشر التحديث لتظهر هنا.
-              </p>
-            )}
-            <ImageChoice label="صورة التوقيع" value={s.signatureImage} onChange={(v) => setOption({ signatureImage: v })} />
-            <ImageChoice label="صورة الختم" value={s.stampImage} onChange={(v) => setOption({ stampImage: v })} />
-            <label className="text-sm font-medium">الاسم تحت التوقيع
-              <input value={s.signatureName ?? ""} onChange={(e) => setS({ ...s, signatureName: e.target.value })} onBlur={(e) => setOption({ signatureName: e.target.value.trim() })} placeholder="مثلاً: د. أحمد علي" className={`mt-1 ${inp}`} />
-            </label>
-            <label className="text-sm font-medium">الصفة (اختياري)
-              <input value={s.signatureTitle ?? ""} onChange={(e) => setS({ ...s, signatureTitle: e.target.value })} onBlur={(e) => setOption({ signatureTitle: e.target.value.trim() })} placeholder="مثلاً: أخصائي تحليلات مرضية" className={`mt-1 ${inp}`} />
-            </label>
-          </div>
-        )}
-      </div>
-
-      {/* Restore the default tests */}
-      <div className="mt-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]" data-testid="defaults-card">
-        <div className="mb-1 flex items-center gap-2 text-sm font-semibold"><RotateCcw className="size-4" /> استعادة الافتراض لقائمة الفحوصات</div>
-        <p className="mb-3 text-xs text-muted">الزيارات المحفوظة لا تتأثر. الفحوصات المدمجة تحتفظ بمعرّفاتها فتبقى النتائج السابقة مرتبطة بها.</p>
-        <div className="flex flex-wrap gap-2">
-          <button onClick={() => {
-            if (!window.confirm("إرجاع أسماء ووحدات ومعدلات الفحوصات المدمجة إلى قيمها الافتراضية، وإعادة المحذوف منها؟ فحوصاتك المضافة تبقى كما هي.")) return;
-            setDefaultsMsg(`أُعيدت ${resetBuiltinTests()} فحصاً مدمجاً إلى القيم الافتراضية.`);
-          }} className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas">
-            <RotateCcw className="size-4" /> استعادة القيم الافتراضية للفحوصات
-          </button>
-          <button onClick={() => {
-            if (!window.confirm("استبدال قائمة الفحوصات كلها بالقائمة الافتراضية؟ تُحذف الفحوصات التي أضفتها بنفسك وتُعاد كل الفحوصات المدمجة إلى قيمها الافتراضية.")) return;
-            setDefaultsMsg(`أُعيدت القائمة الافتراضية (${restoreDefaultTests()} فحصاً).`);
-          }} className="inline-flex items-center gap-1.5 rounded-lg border border-red-300 px-3 py-2 text-sm text-red-700 hover:bg-red-50">
-            استعادة قائمة الفحوصات الافتراضية بالكامل
-          </button>
-        </div>
-        {defaultsMsg && <p className="mt-2 text-xs text-brand-dark" role="status">{defaultsMsg}</p>}
-      </div>
-
+      <ThemeCard storageKey={THEME_KEYS.station} />
       {/* This device's letter in its sample numbers (kept on this device only) */}
       <div className="mt-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]" data-testid="device-tag">
         <div className="mb-1 flex items-center gap-2 text-sm font-semibold"><Hash className="size-4" /> حرف هذا الجهاز في رقم العينة</div>
@@ -595,16 +603,13 @@ export default function StationSettingsPage() {
           اختياري، لمختبر فيه أكثر من جهاز: لكل جهاز حرفه فلا يتكرر رقم العينة حتى لو عملت الأجهزة بدون إنترنت في الوقت نفسه. يبقى على هذا الجهاز فقط.
         </p>
         <div className="flex flex-wrap items-center gap-2">
-          <input value={tag} onChange={(e) => { setTag(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 2)); setTagSaved(false); }}
+          <input value={tag} onChange={(e) => { const v = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 2); setTag(v); setDeviceTag(v); notifySaved(); }}
             dir="ltr" aria-label="حرف الجهاز" placeholder="A" className="w-20 rounded-lg border border-line bg-surface px-3 py-2 text-center font-mono text-sm uppercase outline-none focus:border-brand" />
-          <button onClick={() => { setDeviceTag(tag); setTagSaved(true); }} className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white hover:bg-brand-dark"><Check className="size-4" /> حفظ</button>
           <span className="text-xs text-muted">مثال: <span dir="ltr" className="font-mono">LAB-{new Date().toLocaleDateString("en-CA").replace(/-/g, "")}-{tag}001</span></span>
-          {tagSaved && <span className="text-xs text-brand-dark">تم الحفظ.</span>}
         </div>
       </div>
 
       <SyncPanel />
-
       {/* Install as app (PWA) — Lab Station only */}
       <div className="mt-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
         <div className="mb-1 flex items-center gap-2 text-sm font-semibold"><Smartphone className="size-4" /> تثبيت كتطبيق</div>
@@ -612,7 +617,11 @@ export default function StationSettingsPage() {
         <InstallButton />
         <div className="mt-2"><OfflineStatusLine /></div>
       </div>
-    </div>
+            </>
+          ),
+        },
+      ]}
+    />
   );
 }
 

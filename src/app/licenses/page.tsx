@@ -1254,7 +1254,8 @@ function PrefsCard({ prefs, onSaved }: { prefs: Prefs; onSaved: () => void }) {
     if (d.ok) onSaved();
   }
   return (
-    <Panel tone="sky" icon={<Settings className="size-5" />} title="القيم الافتراضية" desc="يبدأ بها نموذج «رمز جديد» — تستطيع تغييرها لكل رمز عند إنشائه." testid="prefs-card">
+    <Panel tone="sky" icon={<Settings className="size-5" />} title="الإعدادات العامة" desc="ثلاث مجموعات: قيم الرموز الجديدة، ثم ميزات اختيارية، ثم المتقدم. تُحفظ معاً بزر «حفظ الإعدادات»." testid="prefs-card">
+      <div className="mb-2 flex items-center gap-2 text-sm font-semibold">قيم الرموز الجديدة <span className="text-xs font-normal text-muted">— يبدأ بها نموذج «رمز جديد»، وتستطيع تغييرها لكل رمز</span></div>
       <div className="grid gap-3 sm:grid-cols-3">
         <label className="text-sm font-medium">مدة الرمز الجديد
           <div className="mt-1 flex gap-2">
@@ -1285,8 +1286,10 @@ function PrefsCard({ prefs, onSaved }: { prefs: Prefs; onSaved: () => void }) {
         </span>
       </label>
 
-      <div className="mt-4 rounded-lg border border-line p-3" data-testid="extra-features">
-        <div className="text-sm font-semibold">خصائص إضافية <span className="text-xs font-normal text-muted">— موقوفة افتراضياً</span></div>
+      <div className="mt-5 rounded-lg border border-line p-3" data-testid="extra-features">
+        <div className="flex items-center gap-2 text-sm font-semibold">ميزات اختيارية <span className="text-xs font-normal text-muted">— موقوفة افتراضياً</span>
+          {(() => { const n = [p.multiDevice, p.selfSignup, p.errorLog].filter(Boolean).length; return n ? <span className="ms-auto rounded-full bg-brand-light px-2 py-0.5 text-[11px] font-semibold text-brand-dark" data-testid="extra-count">{n} مفعّلة</span> : null; })()}
+        </div>
         <div className="mt-2 grid gap-2">
           {([
             ["multiDevice", "حساب واحد بعدة أجهزة", "يُدخل المختبر الرمز نفسه على أكثر من جهاز حتى العدد الذي تحدّده لكل رمز (في «رمز جديد» وفي تفاصيل الرمز)."],
@@ -1302,7 +1305,7 @@ function PrefsCard({ prefs, onSaved }: { prefs: Prefs; onSaved: () => void }) {
       </div>
 
       <details className="mt-3 rounded-lg border border-dashed border-line p-3" data-testid="secret-features">
-        <summary className="flex cursor-pointer items-center gap-1.5 text-sm font-semibold"><Lock className="size-3.5" /> خاصية سرية</summary>
+        <summary className="flex cursor-pointer items-center gap-1.5 text-sm font-semibold"><Lock className="size-3.5" /> متقدم (خاصية سرية)</summary>
         <label className="mt-2 flex items-start gap-2 text-sm">
           <input type="checkbox" checked={p.dataExport} onChange={(e) => setP({ ...p, dataExport: e.target.checked })} aria-label="تصدير بيانات المختبر" className="mt-1" />
           <span>

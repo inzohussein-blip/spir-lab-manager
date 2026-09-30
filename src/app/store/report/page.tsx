@@ -73,9 +73,14 @@ export default function PurchasingReportPage() {
       {/* Printable report */}
       <div id="report-sheet" className="mx-auto max-w-[210mm] bg-white p-8 text-black shadow-sm print:p-0 print:shadow-none">
         <div className="flex items-center justify-between border-b-2 border-amber-600 pb-3">
-          <div>
-            <h2 className="text-xl font-bold text-amber-700">{settings.orgName || "منظومة المشتريات"}</h2>
-            <p className="text-sm text-gray-600">{title}</p>
+          <div className="flex items-center gap-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={settings.logo || "/lab-logo.png"} alt="" className="size-14 object-contain" data-testid="store-report-logo" />
+            <div>
+              <h2 className="text-xl font-bold text-amber-700">{settings.orgName || "منظومة المشتريات"}</h2>
+              {settings.subtitle && <p className="text-xs text-gray-600">{settings.subtitle}</p>}
+              <p className="text-sm text-gray-600">{title}</p>
+            </div>
           </div>
           <div className="text-left text-xs text-gray-600">تاريخ الإصدار: {issued}</div>
         </div>
@@ -119,6 +124,10 @@ export default function PurchasingReportPage() {
             <tr className="border-t-2 border-amber-600 font-bold"><td className="py-2" colSpan={4}>الإجمالي</td><td className="py-2 text-left tabular-nums">{money(total)} د.ع</td></tr>
           </tfoot>
         </table>
+
+        {settings.footer && (
+          <div className="mt-6 rounded-md bg-amber-600 px-3 py-1.5 text-center text-[10px] text-white" style={{ WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" }}>{settings.footer}</div>
+        )}
       </div>
     </div>
   );

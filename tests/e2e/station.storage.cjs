@@ -12,7 +12,7 @@ const { B, ok, launch, done, kv, kvPut, resetLocal, pdfPages } = require('./lib.
     'station.settings.v1': JSON.stringify({ labName: 'مختبر الترحيل', labSubtitle: '' }),
     'station.theme.v1': 'dark',
   });
-  await p.goto(B + '/station/settings'); await p.waitForSelector('[data-testid="storage-usage"]', { timeout: 15000 });
+  await p.goto(B + '/station/settings#device'); await p.waitForSelector('[data-testid="storage-usage"]', { timeout: 15000 });
   ok(await p.locator('input[value="مختبر الترحيل"]').count() === 1, 'older data shows after the move');
   const left = await p.evaluate(() => ({ s: localStorage.getItem('station.settings.v1'), t: localStorage.getItem('station.theme.v1') }));
   ok(left.s === null, 'moved data is removed from localStorage');

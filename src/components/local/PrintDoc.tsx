@@ -18,12 +18,12 @@ export function PrintStyle({ landscape = false }: { landscape?: boolean }) {
   );
 }
 
-export function Letterhead({ title, subtitle, right, color }: { title: string; subtitle?: string; right?: ReactNode; color: string }) {
+export function Letterhead({ title, subtitle, right, color, logo }: { title: string; subtitle?: string; right?: ReactNode; color: string; logo?: string }) {
   return (
     <div className="flex items-center justify-between gap-4 border-b-2 pb-3" style={{ borderColor: color }}>
       <div className="flex items-center gap-3">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/lab-logo.png" alt="" className="size-14 object-contain" />
+        <img src={logo || "/lab-logo.png"} alt="" className="size-14 object-contain" />
         <div>
           <div className="text-lg font-extrabold" style={{ color }}>{title}</div>
           {subtitle && <div className="text-xs text-gray-600">{subtitle}</div>}

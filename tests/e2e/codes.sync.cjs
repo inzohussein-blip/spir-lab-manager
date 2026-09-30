@@ -69,7 +69,7 @@ const LAB = 'مختبر المزامنة ' + Date.now().toString(36);
     await p.click('button:has-text("طباعة")'); await p.waitForTimeout(1200);
   };
   const names = async (p) => ((await kv(p, 'station.visits.v1')) || []).map((v) => v.patient.name);
-  const settings = async (p) => { await p.goto(B + '/station/settings'); await p.waitForSelector('[data-testid="sync-panel"]', { timeout: 20000 }); };
+  const settings = async (p) => { await p.goto(B + '/station/settings#device'); await p.waitForSelector('[data-testid="sync-panel"]', { timeout: 20000 }); };
   const state = (p) => p.locator('[data-testid="sync-state"]').innerText();
   const synced = (p) => waitFor(async () => { const t = await state(p); return /آخر مزامنة: \d/.test(t) && !/بانتظار الإرسال/.test(t); }, 25000);
   const syncNow = async (p) => { await settings(p); await p.click('button:has-text("مزامنة الآن")'); await synced(p); };

@@ -1,10 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
 import { Palette, RotateCcw, Check } from "lucide-react";
-import { getTests, type StationSettings, type StationTest } from "@/lib/station/store";
+import type { StationSettings } from "@/lib/station/store";
 import { tableStyleOf, reportColors, ORIGINAL_TABLE, REPORT_PALETTES, type TableStyle } from "@/lib/station/tableStyle";
-import { ResultsTable, type ReportRow } from "./ReportSheet";
 
 const inp = "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
 
@@ -24,22 +22,6 @@ export function TableStyleCard({ settings, onChange }: { settings: StationSettin
   const palette = REPORT_PALETTES.find((p) => p.primary === ts.primary && p.accent === ts.accent);
   const tooLight = lightness(c.header) > 0.62;
 
-  // Preview rows taken from the catalog (English names, real reference ranges).
-  const [tests, setTests] = useState<StationTest[]>([]);
-  useEffect(() => setTests(getTests()), []);
-  const groups = useMemo(() => {
-    const byCode = (c: string) => tests.find((t) => t.code === c);
-    const row = (code: string, value: string): ReportRow | null => {
-      const t = byCode(code);
-      return t ? { key: t.id, name: t.name_ar, value, unit: t.unit, test: t } : null;
-    };
-    const g = (cat: string, rows: (ReportRow | null)[]) => ({ cat, rows: rows.filter(Boolean) as ReportRow[] });
-    return [
-      g("Hematology", [row("HB", "11.2"), row("WBC", "7.4"), row("PLT", "250")]),
-      g("Renal Function Tests", [row("UREA", "52"), row("CREA", "0.9")]),
-    ].filter((x) => x.rows.length);
-  }, [tests]);
-
   const sel = (label: string, value: string, options: [string, string][], on: (v: string) => void) => (
     <label className="text-xs text-muted">{label}
       <select value={value} onChange={(e) => on(e.target.value)} className={`mt-1 ${inp}`}>
@@ -51,7 +33,7 @@ export function TableStyleCard({ settings, onChange }: { settings: StationSettin
   return (
     <div className="mb-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
       <div className="mb-1 flex items-center gap-2 text-sm font-semibold"><Palette className="size-4" /> التقرير المطبوع: الألوان والجدول</div>
-      <p className="mb-4 text-xs text-muted">ألوان المختبر تظهر في رأس التقرير والجدول والاستمارات (الإدرار، الخروج، السائل المنوي، الزرع) وتذييل الصفحة. تظهر التعديلات فوراً في المعاينة أدناه وفي ورقة النتائج (A4 وA5).</p>
+      <p className="mb-4 text-xs text-muted">ألوان المختبر تظهر في رأس التقرير والجدول والاستمارات (الإدرار، الخروج، السائل المنوي، الزرع) وتذييل الصفحة. تظهر التعديلات فوراً في المعاينة بجانب الإعدادات وفي ورقة النتائج (A4 وA5).</p>
 
       <div className="mb-4" data-testid="report-colors">
         <div className="mb-2 text-xs text-muted">ألوان جاهزة</div>
@@ -111,24 +93,6 @@ export function TableStyleCard({ settings, onChange }: { settings: StationSettin
         {isOriginal && <span className="text-xs text-muted">التقرير على شكله الأصلي (ألوانه وجدوله).</span>}
       </div>
 
-      <div className="mt-4 rounded-xl border border-line bg-white p-4 text-black" data-testid="report-preview">
-        <div className="mb-2 text-[11px] text-gray-500">معاينة</div>
-        {/* The letterhead as printed (see ReportSheet) */}
-        <div className="flex items-center gap-3 pb-2">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          {settings.logo && <img src={settings.logo} alt="" className="size-12 object-contain" />}
-          <div>
-            <div className="text-lg font-extrabold leading-tight" style={{ color: c.title }} data-testid="preview-lab-name">{settings.labName || "اسم المختبر"}</div>
-            <div className="text-xs font-medium" style={{ color: c.subtitle }}>{settings.labSubtitle || "العبارة تحت الاسم"}</div>
-          </div>
-        </div>
-        <div className="h-1 w-full rounded" style={{ background: `linear-gradient(90deg, ${c.border} 0%, ${c.title} 50%, ${c.border} 100%)` }} />
-        <div className="mt-2 flex gap-6 rounded-lg border-2 px-3 py-1.5 text-xs" style={{ borderColor: c.border }}>
-          <span><b style={{ color: c.title }}>المريض:</b> مثال</span><span><b style={{ color: c.title }}>العمر:</b> 40</span>
-        </div>
-        <ResultsTable ts={{ ...ts, gap: "near" }} groups={groups} gender="male" age="40" />
-        <div className="mt-3 rounded-md px-3 py-1.5 text-center text-[11px] font-medium text-white" style={{ background: c.bar }}>{settings.footer || "تذييل التقرير"}</div>
-      </div>
     </div>
   );
 }

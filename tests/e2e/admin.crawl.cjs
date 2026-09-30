@@ -50,6 +50,8 @@ const routes = ['/', '/appointments', '/audit', '/calendar', '/insights', '/inve
   const sheetReady = () => p.waitForFunction(() => document.querySelectorAll('#report-sheet').length === 1 && !document.querySelector('[hidden] #report-sheet'), null, { timeout: 15000 });
   const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEUlEQVR4nGOI0mr6D8IMMAYARDgIFbiRq5wAAAAASUVORK5CYII=', 'base64');
   await p.goto(B + '/settings'); await p.waitForSelector('[data-testid="identity-form"]', { timeout: 15000 });
+  ok(await p.locator('[data-testid="settings-nav"] [data-section]').count() === 4 && await p.locator('[data-sec="database"]').isHidden() && (await p.locator('[data-testid="badge-tests"]').innerText()).includes('فحص'),
+    'Settings: four sections, one shown at a time, the tests count beside «الفحوصات»');
   await p.fill('[data-testid="identity-form"] input[name="name"]', LAB);
   await p.click('[data-testid="identity-form"] button:has-text("حفظ")'); await p.waitForTimeout(1500);
   await p.setInputFiles('input[aria-label="ملف الشعار"]', { name: 'logo.png', mimeType: 'image/png', buffer: PNG });
@@ -64,7 +66,7 @@ const routes = ['/', '/appointments', '/audit', '/calendar', '/insights', '/inve
     // for the patient made above.
     await p.goto(B + '/orders/new?patient=' + patientId); await p.waitForTimeout(1200);
     if (await p.locator('text=لا فحوصات مطابقة').count()) {
-      await p.goto(B + '/settings'); await p.waitForSelector('[data-testid="import-tests-card"]', { timeout: 15000 });
+      await p.goto(B + '/settings#tests'); await p.waitForSelector('[data-testid="import-tests-card"]', { timeout: 15000 });
       await p.click('button:has-text("استيراد قائمة الفحوصات الافتراضية")');
       await p.waitForSelector('[data-testid="import-tests-msg"]', { timeout: 30000 });
       await p.goto(B + '/orders/new?patient=' + patientId); await p.waitForTimeout(1200);

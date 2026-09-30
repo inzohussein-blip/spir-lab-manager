@@ -176,7 +176,7 @@ export default function DevicesPage() {
       {pd && settings && (
         <div className="print-doc hidden bg-white text-[11.5px] text-black print:block">
           <PrintStyle />
-          <Letterhead title={settings.title} subtitle={settings.subtitle} color="#be123c" right={<><div className="font-bold" style={{ color: "#be123c" }}>سجل جهاز</div><div dir="ltr">{todayYmd()}</div></>} />
+          <Letterhead title={settings.title} subtitle={settings.subtitle} logo={settings.logo} color="#be123c" right={<><div className="font-bold" style={{ color: "#be123c" }}>سجل جهاز</div><div dir="ltr">{todayYmd()}</div></>} />
           <div className="keep mt-3 grid grid-cols-3 gap-2 rounded-lg border border-gray-300 p-3">
             <div className="col-span-3 text-base font-bold">{pd.name}</div>
             {[["الموديل", pd.model], ["الرقم التسلسلي", pd.serial], ["الموقع", pd.location], ["التركيب", pd.installed], ["شركة الصيانة", pd.vendor], ["الهاتف", pd.vendorPhone], ["آخر معايرة", pd.lastCalib], ["المعايرة القادمة", calibDue(pd)?.due]].map(([k, v]) => <div key={k}><b>{k}:</b> {v || "—"}</div>)}
