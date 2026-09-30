@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ShoppingCart, Truck, Settings, Home, FileBarChart, Menu, X, Boxes } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useSideCollapsed, SideCollapseButton, SideReopenButton } from "@/components/local/SideCollapse";
 import { getStock, daysToExpiry } from "@/lib/station/store";
 
 const FIXED = [
@@ -21,6 +22,7 @@ export function PurchasingSidebar() {
     href === "/store" ? pathname === "/store" : pathname.startsWith(href);
   // Phones: the menu slides in from a top bar instead of taking the screen width.
   const [open, setOpen] = useState(false);
+  const [collapsed, setCollapsed] = useSideCollapsed();
   const [stockAlerts, setStockAlerts] = useState(0);
   useEffect(() => {
     setOpen(false);
@@ -37,9 +39,11 @@ export function PurchasingSidebar() {
       <span className="font-bold">منظومة المشتريات</span>
     </div>
     {open && <div className="no-print fixed inset-0 z-40 bg-black/40 md:hidden" onClick={() => setOpen(false)} />}
+    {collapsed && <SideReopenButton onClick={() => setCollapsed(false)} />}
     <aside className={cn(
       "no-print fixed inset-y-0 start-0 z-50 flex h-screen w-60 shrink-0 flex-col overflow-y-auto border-e border-line bg-surface transition-transform md:sticky md:top-0 md:translate-x-0",
       open ? "translate-x-0" : "translate-x-full md:translate-x-0",
+      collapsed && "md:hidden",
     )}>
       <button onClick={() => setOpen(false)} aria-label="إغلاق القائمة" className="absolute end-3 top-4 grid size-8 place-items-center rounded-lg hover:bg-canvas md:hidden"><X className="size-4" /></button>
       <div className="flex items-center gap-2.5 px-5 py-4 pe-12 font-bold md:pe-5">
@@ -50,6 +54,7 @@ export function PurchasingSidebar() {
           منظومة المشتريات
           <div className="text-xs font-normal text-muted">نسخة محلية — بدون إنترنت</div>
         </div>
+        <span className="ms-auto"><SideCollapseButton onClick={() => setCollapsed(true)} /></span>
       </div>
 
       <nav className="flex flex-1 flex-col gap-0.5 px-3 py-2">

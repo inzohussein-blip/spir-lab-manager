@@ -48,6 +48,15 @@ const { B, ok, launch, done, kv, resetLocal } = require('./lib.cjs');
   ok(await p.locator('datalist#supplier-names option[value="مورّد الأجهزة"]').count() === 1, 'quality: procurement\'s suppliers offered for a device');
   ok(await settled(async () => ((await kv(p, 'qc.devices.v1')) || []).some((d) => d.vendor === 'مورّد الأجهزة' && d.vendorPhone)), 'the supplier\'s phone comes along');
 
+  // The side menu folds with the small mark at its top, stays folded in every station, and opens again.
+  await p.goto(B + '/station'); await p.waitForSelector('[data-testid="side-collapse"]', { timeout: 20000 });
+  await p.click('[data-testid="side-collapse"]');
+  ok(await p.locator('aside').isHidden() && await p.locator('[data-testid="side-reopen"]').isVisible(), 'side menu folded');
+  await p.goto(B + '/qc'); await p.waitForSelector('[data-testid="side-reopen"]', { timeout: 20000 });
+  ok(await p.locator('aside').isHidden(), 'and stays folded in the other stations');
+  await p.click('[data-testid="side-reopen"]');
+  ok(await p.locator('aside').isVisible() && await p.locator('[data-testid="side-reopen"]').count() === 0, 'opened again');
+
   ok(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.slice(0, 3).join(' | ') : ''));
   await b.close();
   done();

@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { getPages, savePages, getVisits, requestPersistentStorage, uid, TRASH_DAYS, type StationPage } from "@/lib/station/store";
 import { cn } from "@/lib/utils";
+import { useSideCollapsed, SideCollapseButton, SideReopenButton } from "@/components/local/SideCollapse";
 
 interface NavItem { href: string; label: string; hint: string; icon: LucideIcon }
 
@@ -82,6 +83,7 @@ export function StationSidebar() {
   const [pages, setPages] = useState<StationPage[]>([]);
   const [todayCount, setTodayCount] = useState(0);
   const [open, setOpen] = useState(false); // mobile drawer
+  const [collapsed, setCollapsed] = useSideCollapsed();
 
   useEffect(() => {
     setPages(getPages());
@@ -157,11 +159,13 @@ export function StationSidebar() {
         )}
       />
 
+      {collapsed && <SideReopenButton onClick={() => setCollapsed(false)} />}
       <aside
         className={cn(
           "no-print fixed inset-y-0 start-0 z-50 flex h-screen w-72 shrink-0 flex-col border-e border-line bg-surface shadow-[var(--shadow-pop)] transition-transform duration-200",
           "md:sticky md:top-0 md:z-auto md:translate-x-0 md:shadow-none",
-          open ? "translate-x-0" : "translate-x-full"
+          open ? "translate-x-0" : "translate-x-full",
+          collapsed && "md:hidden"
         )}
       >
         {/* Brand header */}
@@ -180,6 +184,7 @@ export function StationSidebar() {
                 تعمل بدون إنترنت
               </div>
             </div>
+            <SideCollapseButton onClick={() => setCollapsed(true)} />
             <button
               onClick={() => setOpen(false)}
               aria-label="إغلاق القائمة"
