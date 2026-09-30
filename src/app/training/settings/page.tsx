@@ -6,9 +6,10 @@ import { PinCard } from "@/components/local/PinGate";
 import { THEME_KEYS } from "@/lib/local/theme";
 import { LockGate } from "@/components/training/LockGate";
 import { useEffect, useRef, useState } from "react";
-import { Settings, ShieldCheck, Download, Upload, HardDrive, FileText, Loader2, Lock } from "lucide-react";
+import { Settings, ShieldCheck, Download, Upload, HardDrive, FileText, Loader2, Lock, Library } from "lucide-react";
 import { setLock, useEditLock } from "@/lib/training/lock";
-import { getSettings, saveSettings, exportBackup, importBackup, textUsage, type TrainingSettings } from "@/lib/training/store";
+import { getSettings, saveSettings, exportBackup, importBackup, textUsage, getTests, addMissingLibrary, type TrainingSettings } from "@/lib/training/store";
+import { LIBRARY_CODES } from "@/lib/training/library";
 import { ImagePicker } from "@/components/training/ImagePicker";
 import { SettingsLayout, notifySaved } from "@/components/SettingsLayout";
 
@@ -135,6 +136,34 @@ function BackupCard() {
   );
 }
 
+/** «مكتبة الفحوصات»: every test of the lab station's list comes with the station; deleted ones can be
+ *  brought back (edited ones are never replaced). */
+function LibraryCard() {
+  const [count, setCount] = useState<number | null>(null);
+  const [msg, setMsg] = useState("");
+  useEffect(() => { setCount(getTests().length); }, []);
+  function restore() {
+    const n = addMissingLibrary();
+    setCount(getTests().length);
+    setMsg(n ? `أُضيف ${n} فحص من المكتبة.` : "كل فحوصات المكتبة موجودة.");
+    if (n) notifySaved();
+  }
+  return (
+    <div className="rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]" data-testid="library-card">
+      <div className="mb-1 flex items-center gap-2 text-sm font-semibold"><Library className="size-4" /> مكتبة الفحوصات</div>
+      <p className="mb-3 text-xs text-muted">
+        تأتي المحطة بكل فحوصات محطة المختبر ({LIBRARY_CODES().length} فحصاً، مع صورة الدم الكاملة) مشروحة: الغرض والطريقة والعينة والتحضير والخطوات
+        والملاحظات والقيم الطبيعية وأسباب الارتفاع والانخفاض. في المحطة الآن: <b className="tabular-nums">{count ?? "…"}</b> فحص.
+      </p>
+      <button onClick={restore} data-testid="library-restore" className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas">
+        <Library className="size-4" /> إضافة فحوصات المكتبة الناقصة
+      </button>
+      <p className="mt-1 text-[11px] text-muted">يُضيف ما حُذف فقط، ولا يغيّر فحصاً موجوداً أو عدّلته.</p>
+      {msg && <p className="mt-2 text-xs text-brand-dark" role="status">{msg}</p>}
+    </div>
+  );
+}
+
 export default function TrainingSettingsPage() {
   // Appearance is a personal choice, so it stays available in read-only mode;
   // everything else on this page needs the edit PIN.
@@ -151,7 +180,7 @@ export default function TrainingSettingsPage() {
           id: "device", label: "الجهاز والبيانات", hint: "النسخ الاحتياطي والقفل والمزامنة", icon: <HardDrive />,
           content: (
             <>
-              <LockGate><div className="flex flex-col gap-4"><BackupCard /><LockCard /><SyncPanel /></div></LockGate>
+              <LockGate><div className="flex flex-col gap-4"><LibraryCard /><BackupCard /><LockCard /><SyncPanel /></div></LockGate>
             </>
           ),
         },

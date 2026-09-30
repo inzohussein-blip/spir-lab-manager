@@ -11,6 +11,7 @@
 import { kvGet, kvSet, kvBytes } from "@/lib/local/kv";
 import { clearOldDefault } from "@/lib/local/util";
 import { exportImages, importImages, exportImagesByIds, importImageIfMissing, type MediaExport } from "./media";
+import { libraryTests, LIB_TUBES, LIB_TOOLS } from "./library";
 
 export interface TStep { id: string; text: string; imageId?: string; warn?: boolean }
 export interface TGalleryItem { id: string; imageId: string; caption: string }
@@ -118,6 +119,8 @@ const K_FAVS = "training.favs.v1";
 const K_RECENT = "training.recent.v1";
 const K_TRAINEES = "training.trainees.v1";
 const K_QUIZ = "training.quiz.v1";
+/** Set once the full library (every test of the lab station's list) has been added. */
+const K_LIBRARY = "training.library.v1";
 
 export const today = () => new Date().toLocaleDateString("en-CA");
 /** YYYY-MM-DD `months` from now. */
@@ -149,15 +152,47 @@ export function uid(): string {
     : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-/** First run: load the starter library (tubes, tools, example tests). */
+/** A library test as a first version (document control), due for review in a year. */
+const firstVersion = (t: TrainingTest, next: string): TrainingTest =>
+  ({ ...t, version: 1, history: [{ version: 1, at: Date.now(), note: "إصدار أول" }], nextReview: next });
+
+/** First run: load the library (tubes, tools, every test of the lab station's list). Earlier
+ *  installs had five example tests: the rest of the library is added to them once (see
+ *  addMissingLibrary), without touching what is there. */
 function ensureSeed(): void {
-  if (read<boolean>(K_SEEDED, false)) return;
+  if (!read<boolean>(K_SEEDED, false)) {
+    const s = seedData();
+    write(K_TUBES, s.tubes);
+    write(K_TOOLS, s.tools);
+    const next = addMonths(12);
+    write(K_TESTS, [...s.tests, ...libraryTests()].map((t) => firstVersion(t, next)));
+    write(K_SEEDED, true);
+    write(K_LIBRARY, true);
+    return;
+  }
+  if (!read<boolean>(K_LIBRARY, false)) {
+    write(K_LIBRARY, true);
+    addMissingLibrary(false);
+  }
+}
+
+/** Add the library's tests (and their tubes and tools) that are not in the station — by id, so an
+ *  edited test is never replaced. `withFirst`: also the first five examples, if deleted
+ *  (Settings → «إضافة فحوصات المكتبة الناقصة»). Returns how many tests were added. */
+export function addMissingLibrary(withFirst = true): number {
+  const tests = read<TrainingTest[]>(K_TESTS, []);
+  const have = new Set(tests.map((t) => t.id));
   const s = seedData();
-  write(K_TUBES, s.tubes);
-  write(K_TOOLS, s.tools);
+  const tubes = read<Tube[]>(K_TUBES, []), tools = read<Tool[]>(K_TOOLS, []);
+  const tubeIds = new Set(tubes.map((t) => t.id)), toolIds = new Set(tools.map((t) => t.id));
+  const newTubes = s.tubes.filter((t) => !tubeIds.has(t.id));
+  const newTools = s.tools.filter((t) => !toolIds.has(t.id));
+  if (newTubes.length) write(K_TUBES, [...tubes, ...newTubes]);
+  if (newTools.length) write(K_TOOLS, [...tools, ...newTools]);
   const next = addMonths(12);
-  write(K_TESTS, s.tests.map((t) => ({ ...t, version: 1, history: [{ version: 1, at: Date.now(), note: "إصدار أول" }], nextReview: next })));
-  write(K_SEEDED, true);
+  const add = [...(withFirst ? s.tests : []), ...libraryTests()].filter((t) => !have.has(t.id)).map((t) => firstVersion(t, next));
+  if (add.length) write(K_TESTS, [...tests, ...add]);
+  return add.length;
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────
@@ -527,7 +562,7 @@ function seedData(): { tubes: Tube[]; tools: Tool[]; tests: TrainingTest[] } {
 
   const tests: TrainingTest[] = [
     {
-      ...base, id: "x-fbs", name_ar: "سكر الدم الصائم", name_en: "Fasting Blood Sugar", abbr: "FBS", category: "الكيمياء السريرية",
+      ...base, id: "x-fbs", name_ar: "سكر الدم الصائم", name_en: "Fasting Blood Sugar", abbr: "FBS", category: "السكري",
       purpose: "تشخيص داء السكري ومتابعته، والكشف عن انخفاض السكر.",
       summary: "طريقة إنزيمية لونية (GOD-POD): يتأكسد الغلوكوز بإنزيم الغلوكوز أوكسيديز ويتكوّن لون تتناسب شدته مع تركيز السكر.",
       sampleType: "مصل أو بلازما", volume: "2–3 مل دم", patientPrep: "صيام 8–12 ساعة (الماء مسموح).",
@@ -591,7 +626,7 @@ function seedData(): { tubes: Tube[]; tools: Tool[]; tests: TrainingTest[] } {
       ],
     },
     {
-      ...base, id: "x-gue", name_ar: "فحص الإدرار العام", name_en: "General Urine Examination", abbr: "GUE", category: "الإدرار",
+      ...base, id: "x-gue", name_ar: "فحص الإدرار العام", name_en: "General Urine Examination", abbr: "GUE", category: "أدرار",
       purpose: "الكشف عن التهابات المجاري البولية وأمراض الكلى والسكري.",
       summary: "فحص فيزيائي (اللون ، الصفاء) + كيميائي بالشريط + مجهري للراسب.",
       sampleType: "إدرار", volume: "10–20 مل", patientPrep: "العينة الوسطى (Midstream) من أول إدرار صباحي، بعد تنظيف المنطقة.",
@@ -674,5 +709,5 @@ function seedData(): { tubes: Tube[]; tools: Tool[]; tests: TrainingTest[] } {
       links: [{ id: "x-alt", note: "يُطلبان معاً ضمن وظائف الكبد." }],
     },
   ];
-  return { tubes, tools, tests };
+  return { tubes: [...tubes, ...LIB_TUBES], tools: [...tools, ...LIB_TOOLS], tests };
 }
