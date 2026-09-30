@@ -37,13 +37,19 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   // ── Bought in «المشتريات»: its contents go to the stock room ──
   await p.goto(B + '/store'); await p.waitForSelector('[data-testid="purchase-new"]', { timeout: 20000 });
   await p.click('[data-testid="purchase-new"]');
-  await p.fill('input[placeholder="الصنف"]', 'كت السكر');
+  await p.fill('[data-line="0"] input[data-line-name]', 'كت السكر');
+  await p.click('button:has-text("حفظ العملية")');
+  ok((await p.locator('[data-testid="purchase-form"] [role=alert]').innerText()).includes('اسم كت'), 'a kit typed as «صنف» is refused: items and kits are separate');
+  await p.click('[data-line="0"] button[data-line-kind="kit"]');
+  ok(await p.locator('[data-line="0"] input[placeholder="الكت"]').count() === 1, '«كت» chosen: the line takes a kit (its own list)');
   await p.locator('input[aria-label="الكمية"]').first().fill('2');
   ok(await p.locator('[data-testid="line-kit"]').count() === 1 && (await p.locator('[data-testid="kit-contents"]').innerText()).includes('كاشف السكر × 8'), 'the line is marked as a kit, with what it adds (2 kits → 8 reagents)');
-  await p.locator('input[aria-label="سعر الوحدة"]').first().fill('50000');
+  await p.locator('input[aria-label="السعر الإجمالي"]').first().fill('100000');
+  ok((await p.locator('[data-testid="line-unit"]').innerText()).includes('50,000'), 'the total on top, the price of one kit under it (100,000 ÷ 2 = 50,000)');
   await p.click('button:has-text("حفظ العملية")');
   ok(await settled(async () => (await qty('glu')) === 8 && (await qty('cal')) === 2), 'buying 2 kits: 8 reagents and 2 calibrators in stock');
-  ok(((await kv(p, 'purchasing.purchases.v1')) || [])[0]?.items[0]?.kitId, 'the purchase remembers the kit');
+  const kp = ((await kv(p, 'purchasing.purchases.v1')) || [])[0];
+  ok(kp?.items[0]?.kitId && kp.total === 100000 && kp.items[0].unitPrice === 50000, 'the purchase remembers the kit, its total and the price of one');
 
   // ── An unpaid purchase becomes paid in one click (and back) ──
   const firstPur = async () => ((await kv(p, 'purchasing.purchases.v1')) || [])[0];
@@ -93,7 +99,7 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   await p.fill('input[aria-label="المورّد"]', 'مورّد الكواشف');
   await p.fill('input[placeholder="الصنف"]', 'كاشف السكر');
   await p.locator('input[aria-label="الكمية"]').first().fill('1');
-  await p.locator('input[aria-label="سعر الوحدة"]').first().fill('10000');
+  await p.locator('input[aria-label="السعر الإجمالي"]').first().fill('10000');
   await p.fill('input[aria-label="المدفوع الآن"]', '4000');
   await p.click('button:has-text("حفظ العملية")');
   const due = p.locator('[data-testid="purchase-due"]').first();

@@ -20,7 +20,10 @@ export interface Supplier {
 export interface PurchaseItem {
   name: string;
   qty: number;
+  /** Price of one (item or kit): the line total ÷ the quantity. */
   unitPrice: number;
+  /** The line's total as typed («السعر الإجمالي»); older lines have only qty × unitPrice. */
+  total?: number;
   /** A kit bought (its contents go to the stock room, see Kit). */
   kitId?: string;
 }
@@ -204,14 +207,16 @@ function changeStock(moves: { id: string; qty: number }[], reason: "purchase" | 
  *  (with no quantity yet, then the purchase's); a kit's parts, each times the kits bought. The
  *  item's unit price follows the purchase (a kit's, when it holds one item). Returns what was added. */
 export function addToStock(items: PurchaseItem[], ref?: string): { id: string; qty: number }[] {
-  const lines = items.map((it) => ({ name: it.name.trim(), qty: Number(it.qty) || 0, price: Number(it.unitPrice) || 0 })).filter((x) => x.name && x.qty > 0);
+  const lines = items.map((it) => ({ name: it.name.trim(), qty: Number(it.qty) || 0, price: Number(it.unitPrice) || 0, kitId: it.kitId }))
+    .filter((x) => x.name && x.qty > 0);
   if (!lines.length) return [];
   const stock = getStock();
   const kits = getKits();
   const fresh: typeof stock = [];
   const prices = new Map<string, number>();
   const added = lines.flatMap((x) => {
-    const kit = kits.find((k) => key(k.name) === key(x.name));
+    // Only a line bought as a kit is opened into its contents.
+    const kit = x.kitId ? kits.find((k) => k.id === x.kitId) ?? kits.find((k) => key(k.name) === key(x.name)) : undefined;
     if (kit) {
       const parts = kit.parts.filter((p) => stock.some((s) => s.id === p.stockId) && p.qty > 0);
       if (parts.length === 1 && x.price > 0) prices.set(parts[0].stockId, Math.round((x.price / parts[0].qty) * 100) / 100);
@@ -241,8 +246,12 @@ export function saveSettings(s: PurchasingSettings): void {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+/** A line's total: as typed, or qty × unit price for older lines. */
+export function lineTotal(it: PurchaseItem): number {
+  return it.total != null ? Number(it.total) || 0 : Number(it.qty || 0) * Number(it.unitPrice || 0);
+}
 export function purchaseTotal(items: PurchaseItem[]): number {
-  return items.reduce((s, it) => s + Number(it.qty || 0) * Number(it.unitPrice || 0), 0);
+  return items.reduce((s, it) => s + lineTotal(it), 0);
 }
 
 // ── Backup ───────────────────────────────────────────────────────────────────
