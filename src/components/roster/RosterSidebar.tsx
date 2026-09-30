@@ -30,5 +30,5 @@ function badges(): SideBadges {
 
 export function RosterSidebar() {
   return <AppSidebar appName="محطة الكادر والدوام" appTag="المناوبات · الحضور · الإجازات" icon={Users} sections={SECTIONS} getBadges={badges}
-    footerNote="محطة مستقلة — بياناتها محفوظة على هذا الجهاز فقط ولا ترتبط بأي محطة أخرى." />;
+    footerNote="بياناتها على هذا الجهاز، وأسماء الكادر متاحة في محطة الجودة." />;
 }

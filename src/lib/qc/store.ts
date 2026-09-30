@@ -3,14 +3,17 @@
 /**
  * Standalone Quality & Devices station — daily QC with Westgard rules,
  * temperature logs, and equipment maintenance / calibration. Everything lives
- * in the browser store (lib/local/kv) under "qc.*". Nothing here is shared with any other station.
+ * in the browser store (lib/local/kv) under "qc.*". Linked with the other stations on this computer
+ * (lib/local/links): control materials come from the stock room, names from the lab's tests,
+ * staff and suppliers.
  */
 
 import { readLS, writeLS, newId, todayYmd, addDays, addMonthsYmd, daysUntil, clearOldDefault } from "@/lib/local/util";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 export interface QcLevel { id: string; label: string; lot?: string; mean: number; sd: number; expiry?: string }
-export interface Analyte { id: string; name: string; unit?: string; device?: string; levels: QcLevel[]; active: boolean }
+/** `stockId`: the control material's item in the stock room (one unit is used per control run). */
+export interface Analyte { id: string; name: string; unit?: string; device?: string; levels: QcLevel[]; active: boolean; stockId?: string }
 /** `mean`/`sd`: the level's targets when the value was entered, so changing a lot's
  *  targets later does not re-judge older results. */
 export interface QcResult { id: string; analyteId: string; levelId: string; date: string; at: number; value: number; note?: string; by?: string; mean?: number; sd?: number }

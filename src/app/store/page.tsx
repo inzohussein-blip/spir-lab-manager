@@ -117,7 +117,7 @@ export default function PurchasesPage() {
     <div>
       <div className="mb-5">
         <h1 className="flex items-center gap-2 text-2xl font-bold"><ShoppingCart className="size-6" /> المشتريات</h1>
-        <p className="mt-1 text-sm text-muted">منظومة مشتريات محلية مستقلة — سجّل عمليات الشراء وتابع المصروف. تعمل بدون إنترنت.</p>
+        <p className="mt-1 text-sm text-muted">سجّل عمليات الشراء وتابع المصروف — أصناف المخزن المشتراة تُضاف إليه. تعمل بدون إنترنت.</p>
       </div>
 
       <div className="mb-4 grid gap-4 sm:grid-cols-3">

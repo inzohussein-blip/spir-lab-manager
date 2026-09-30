@@ -7,6 +7,7 @@ import {
   type StockItem, type StationTest,
 } from "@/lib/station/store";
 import { NumberInput } from "@/components/local/NumberInput";
+import { qcLinks } from "@/lib/local/links";
 
 const inp = "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
 const empty = { name: "", qty: "", minQty: "", expiry: "", linkedTestId: "" };
@@ -26,8 +27,9 @@ export default function InventoryPage() {
   const [tests, setTests] = useState<StationTest[]>([]);
   const [f, setF] = useState({ ...empty });
   const [editId, setEditId] = useState<string | null>(null);
+  const [qc, setQc] = useState<Map<string, string[]>>(new Map());
 
-  useEffect(() => { setRows(getStock()); setTests(getTests()); }, []);
+  useEffect(() => { setRows(getStock()); setTests(getTests()); setQc(qcLinks()); }, []);
 
   function persist(next: StockItem[]) { setRows(next); saveStock(next); }
   function reset() { setF({ ...empty }); setEditId(null); }
@@ -114,7 +116,7 @@ export default function InventoryPage() {
             <tr>
               <th className="px-4 py-3 font-medium">الصنف</th>
               <th className="px-4 py-3 font-medium">الكمية</th>
-              <th className="px-4 py-3 font-medium">مرتبط بفحص</th>
+              <th className="px-4 py-3 font-medium">مرتبط بـ</th>
               <th className="px-4 py-3 font-medium">الانتهاء</th>
               <th className="px-4 py-3 font-medium">الحالة</th>
               <th className="px-4 py-3 font-medium">تعبئة</th>
@@ -132,7 +134,10 @@ export default function InventoryPage() {
                 <tr key={s.id} className="border-b border-line last:border-0 hover:bg-canvas">
                   <td className="px-4 py-3 font-medium">{s.name}</td>
                   <td className={`px-4 py-3 tabular-nums ${low ? "font-bold text-red-600" : ""}`}>{s.qty}</td>
-                  <td className="px-4 py-3 text-muted">{testName(s.linkedTestId) ?? "—"}</td>
+                  <td className="px-4 py-3 text-muted">
+                    {testName(s.linkedTestId) ?? (qc.has(s.id) ? null : "—")}
+                    {qc.has(s.id) && <span data-testid="qc-link" className="ms-1 rounded-full bg-rose-50 px-2 py-0.5 text-xs text-rose-700">سيطرة: {qc.get(s.id)!.join("، ")}</span>}
+                  </td>
                   <td className={`px-4 py-3 ${expired ? "text-red-600" : soon ? "text-amber-700" : "text-muted"}`}>{s.expiry ?? "—"}</td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1">

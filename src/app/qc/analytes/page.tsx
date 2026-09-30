@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { SlidersHorizontal, Plus, Trash2, Info, Save } from "lucide-react";
 import { getAnalytes, saveAnalytes, deleteAnalyte, type Analyte } from "@/lib/qc/store";
 import { newId, daysUntil } from "@/lib/local/util";
+import { labTestNames, stockItems, type StockRef } from "@/lib/local/links";
 
 const inp = "w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-brand";
 
@@ -11,8 +12,10 @@ export default function AnalytesPage() {
   const [list, setList] = useState<Analyte[]>([]);
   const [dirty, setDirty] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [stock, setStock] = useState<StockRef[]>([]);
+  const [tests, setTests] = useState<string[]>([]);
 
-  useEffect(() => { setList(getAnalytes()); }, []);
+  useEffect(() => { setList(getAnalytes()); setStock(stockItems()); setTests(labTestNames()); }, []);
 
   function update(next: Analyte[]) { setList(next); setDirty(true); setSaved(false); }
   const upd = (id: string, patch: Partial<Analyte>) => update(list.map((a) => (a.id === id ? { ...a, ...patch } : a)));
@@ -44,13 +47,21 @@ export default function AnalytesPage() {
         القيم الموجودة في البداية <b>أمثلة فقط</b> — استبدلها بقيم نشرة الكنترول المستعمل عندكم قبل الاعتماد على التنبيهات. عند تغيير الـ Lot حدّث المتوسط وSD.
       </div>
 
+      <datalist id="lab-tests">{tests.map((t) => <option key={t} value={t} />)}</datalist>
+      <p className="mb-3 text-xs text-muted">مرتبطة بالمحطات الأخرى: أسماء الفحوصات من محطة المختبر، ومادة الكنترول من المخزن (في المشتريات) — تُحسم وحدة منها عند كل إدخال سيطرة جديد.</p>
       <div className="flex flex-col gap-4">
         {list.map((a) => (
           <div key={a.id} className={`rounded-2xl border bg-surface p-4 shadow-[var(--shadow-card)] ${a.active ? "border-line" : "border-dashed border-line opacity-70"}`}>
-            <div className="grid gap-2 sm:grid-cols-[2fr_1fr_1fr_auto_auto] sm:items-end">
-              <label className="text-xs text-muted">اسم الفحص<input value={a.name} onChange={(e) => upd(a.id, { name: e.target.value })} className={`mt-1 ${inp} font-semibold`} /></label>
+            <div className="grid gap-2 sm:grid-cols-[2fr_1fr_1fr_1.5fr_auto_auto] sm:items-end">
+              <label className="text-xs text-muted">اسم الفحص<input value={a.name} onChange={(e) => upd(a.id, { name: e.target.value })} list="lab-tests" className={`mt-1 ${inp} font-semibold`} /></label>
               <label className="text-xs text-muted">الوحدة<input dir="ltr" value={a.unit ?? ""} onChange={(e) => upd(a.id, { unit: e.target.value })} className={`mt-1 ${inp}`} /></label>
               <label className="text-xs text-muted">الجهاز<input value={a.device ?? ""} onChange={(e) => upd(a.id, { device: e.target.value })} className={`mt-1 ${inp}`} /></label>
+              <label className="text-xs text-muted">مادة الكنترول في المخزن
+                <select value={a.stockId ?? ""} onChange={(e) => upd(a.id, { stockId: e.target.value || undefined })} aria-label={`مادة الكنترول في المخزن ${a.name}`} className={`mt-1 ${inp}`}>
+                  <option value="">— بدون ربط —</option>
+                  {stock.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.qty})</option>)}
+                </select>
+              </label>
               <label className="inline-flex items-center gap-1.5 pb-2 text-xs"><input type="checkbox" checked={a.active} onChange={(e) => upd(a.id, { active: e.target.checked })} className="accent-[var(--color-brand)]" /> مفعّل</label>
               <button onClick={() => remove(a)} title="حذف" className="grid size-9 place-items-center rounded-lg border border-line text-red-600 hover:bg-red-50"><Trash2 className="size-4" /></button>
             </div>
