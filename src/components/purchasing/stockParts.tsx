@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Search } from "lucide-react";
+import { Search, ScanBarcode } from "lucide-react";
 import type { StationTest } from "@/lib/station/store";
 
 /** Shared by «المخزن» and «الأصناف» of the stock and purchases station. */
@@ -56,3 +56,30 @@ export function Tile({ label, value, tone }: { label: string; value: number; ton
   );
 }
 
+
+/**
+ * «امسح الباركود» (Settings → «الباركود»): a barcode reader types the code and presses Enter; the
+ * code is handed on and the box cleared for the next scan. Typing a code by hand works the same.
+ */
+export function ScanBox({ onScan, hint, testid = "scan-box" }: { onScan: (code: string) => string | void; hint?: string; testid?: string }) {
+  const [v, setV] = useState("");
+  const [msg, setMsg] = useState("");
+  return (
+    <div className="flex flex-wrap items-center gap-2" data-testid={testid}>
+      <label className="flex min-w-56 flex-1 items-center gap-2 rounded-lg border-2 border-dashed border-amber-300 bg-surface px-3">
+        <ScanBarcode className="size-4 text-amber-700" />
+        <input value={v} onChange={(e) => setV(e.target.value)} aria-label="امسح الباركود"
+          onKeyDown={(e) => {
+            if (e.key !== "Enter") return;
+            e.preventDefault();
+            const code = v.trim();
+            if (!code) return;
+            setMsg(onScan(code) || "");
+            setV("");
+          }}
+          placeholder={hint ?? "امسح الباركود هنا…"} className="w-full bg-transparent py-2 text-sm outline-none" dir="ltr" />
+      </label>
+      {msg && <span className="text-xs text-amber-800" role="status">{msg}</span>}
+    </div>
+  );
+}

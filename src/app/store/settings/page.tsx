@@ -5,11 +5,11 @@ import { kvFlush } from "@/lib/local/kv";
 import { ThemeCard } from "@/components/local/LocalTheme";
 import { PinCard } from "@/components/local/PinGate";
 import { LetterheadCard } from "@/components/local/LetterheadCard";
-import { StockOptionsCard } from "@/components/local/SettingsParts";
+import { StockOptionsCard, SettingCard, Toggle } from "@/components/local/SettingsParts";
 import { SettingsLayout, notifySaved } from "@/components/SettingsLayout";
 import { THEME_KEYS } from "@/lib/local/theme";
 import { useEffect, useRef, useState } from "react";
-import { Settings, Download, Upload, FileText, HardDrive, ShieldCheck, Boxes } from "lucide-react";
+import { Settings, Download, Upload, FileText, HardDrive, ShieldCheck, Boxes, SlidersHorizontal, Wallet, Tag, ScanBarcode } from "lucide-react";
 import { exportBackup, importBackup, getSettings, saveSettings, type PurchasingSettings } from "@/lib/purchasing/store";
 
 export default function StoreSettingsPage() {
@@ -54,6 +54,12 @@ export default function StoreSettingsPage() {
     saveSettings(next); setS(next); notifySaved();
   }
 
+  function setOption(patch: Partial<PurchasingSettings>) {
+    const next = { ...getSettings(), ...patch };
+    saveSettings(next); setS(next); notifySaved();
+  }
+  const extrasOn = [s.debts, s.prices, s.barcode].filter(Boolean).length;
+
   return (
     <SettingsLayout
       title="إعدادات المخزن والمشتريات"
@@ -69,6 +75,31 @@ export default function StoreSettingsPage() {
         {
           id: "stock", label: "المخزن", hint: "عند نفاد المادة", icon: <Boxes />,
           content: <StockOptionsCard from="purchasing" />,
+        },
+        {
+          id: "extras", label: "خيارات إضافية", hint: "ديون الموردين، الأسعار، الباركود", icon: <SlidersHorizontal />, badge: extrasOn ? `${extrasOn} مفعّل` : null,
+          content: (
+            <SettingCard title="خيارات إضافية" icon={<SlidersHorizontal />} desc="كلها موقوفة في البداية؛ تظهر في صفحات المحطة حين تشغّلها." testid="store-extras">
+              <Toggle
+                checked={s.debts === true}
+                onChange={(v) => setOption({ debts: v })}
+                label="ديون الموردين"
+                desc={<><Wallet className="me-1 inline size-3.5" />دفعات جزئية على كل عملية شراء («المدفوع الآن» ثم «دفعة»)، والمتبقي لكل مورّد، وكشف حساب المورّد للطباعة في «الموردون».</>}
+              />
+              <Toggle
+                checked={s.prices === true}
+                onChange={(v) => setOption({ prices: v })}
+                label="الأسعار وقيمة المخزن"
+                desc={<><Tag className="me-1 inline size-3.5" />سعر الوحدة لكل صنف (من آخر شراء، أو يُكتب في «الأصناف»)، وقيمة المخزن، وكلفة المواد لكل فحص.</>}
+              />
+              <Toggle
+                checked={s.barcode === true}
+                onChange={(v) => setOption({ barcode: v })}
+                label="الباركود"
+                desc={<><ScanBarcode className="me-1 inline size-3.5" />باركود لكل صنف وكت، ومسحه بقارئ الباركود في المشتريات والمخزن والجرد بدل البحث بالاسم.</>}
+              />
+            </SettingCard>
+          ),
         },
         {
           id: "device", label: "الجهاز والبيانات", hint: "النسخ الاحتياطي والمزامنة", icon: <HardDrive />,

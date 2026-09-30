@@ -17,7 +17,7 @@ const BASES = ["/welcome", "/station", "/store", "/training", "/qc", "/roster", 
 const ROUTES = [
   "/welcome",
   "/station", "/station/inventory", "/station/records", "/station/settings", "/station/tests", "/station/visits", "/station/trash", "/station/page/_",
-  "/store", "/store/inventory", "/store/items", "/store/report", "/store/settings", "/store/suppliers",
+  "/store", "/store/inventory", "/store/items", "/store/count", "/store/moves", "/store/report", "/store/settings", "/store/suppliers",
   "/training", "/training/cards", "/training/edit", "/training/exam", "/training/manual", "/training/map", "/training/media",
   "/training/quiz", "/training/settings", "/training/tools", "/training/trainees", "/training/tubes", "/training/test/_",
   "/qc", "/qc/analytes", "/qc/chart", "/qc/devices", "/qc/entry", "/qc/settings", "/qc/temps",

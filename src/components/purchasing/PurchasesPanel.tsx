@@ -2,15 +2,17 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  Plus, Trash2, Search, X, Boxes,
+  Plus, Trash2, Search, X, Boxes, Package, Wallet,
 } from "lucide-react";
 import {
   getPurchases, savePurchases, addPurchase, deletePurchases, getSuppliers, purchaseTotal, uid, stockMatch, addToStock,
-  type Purchase, type PurchaseItem, type Supplier,
+  getKits, getSettings, paidOf, dueOf, addPayment,
+  type Purchase, type PurchaseItem, type Supplier, type Kit, type PurchasingSettings,
 } from "@/lib/purchasing/store";
 import { getStock, type StockItem } from "@/lib/station/store";
 import { NumberInput } from "@/components/local/NumberInput";
 import { money } from "@/lib/utils";
+import { ScanBox } from "./stockParts";
 
 const inp = "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
 const today = () => new Date().toLocaleDateString("en-CA"); // local date, not UTC
@@ -40,10 +42,30 @@ export function PurchasesPanel() {
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState<PurchaseItem[]>([{ name: "", qty: 1, unitPrice: 0 }]);
   const [stock, setStock] = useState<StockItem[]>([]);
+  const [kits, setKits] = useState<Kit[]>([]);
+  const [opts, setOpts] = useState<PurchasingSettings>({ orgName: "" });
   const [toStock, setToStock] = useState(true);
+  const [paidNow, setPaidNow] = useState(0);
+  const [payFor, setPayFor] = useState<string | null>(null);
+  const [payAmount, setPayAmount] = useState(0);
 
-  useEffect(() => { setPurchases(getPurchases()); setSuppliers(getSuppliers()); setStock(getStock()); }, []);
-  const linked = (name: string) => !!name.trim() && stock.some((s) => s.name.trim().toLowerCase() === name.trim().toLowerCase());
+  useEffect(() => { setPurchases(getPurchases()); setSuppliers(getSuppliers()); setStock(getStock()); setKits(getKits()); setOpts(getSettings()); }, []);
+  const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+  const linked = (name: string) => !!name.trim() && stock.some((s) => same(s.name, name));
+  const kitOf = (name: string) => (name.trim() ? kits.find((k) => same(k.name, name)) : undefined);
+  const kitText = (k: Kit) => k.parts.map((p) => `${stock.find((s) => s.id === p.stockId)?.name ?? "؟"} × ${p.qty}`).join("، ");
+  /** Settings → «الباركود»: a scanned item or kit becomes a line (or one more of it). */
+  function onScan(code: string): string {
+    const hit = kits.find((k) => k.barcode === code)?.name ?? stock.find((s) => s.barcode === code)?.name;
+    if (!hit) return `باركود غير معروف: ${code}`;
+    setItems((arr) => {
+      const i = arr.findIndex((it) => same(it.name, hit));
+      if (i >= 0) return arr.map((it, idx) => (idx === i ? { ...it, qty: (Number(it.qty) || 0) + 1 } : it));
+      const blank = arr.findIndex((it) => !it.name.trim());
+      return blank >= 0 ? arr.map((it, idx) => (idx === blank ? { ...it, name: hit, qty: 1 } : it)) : [...arr, { name: hit, qty: 1, unitPrice: 0 }];
+    });
+    return `أُضيف: ${hit}`;
+  }
   const anyNamed = items.some((it) => it.name.trim());
 
   const total = purchaseTotal(items);
@@ -55,7 +77,7 @@ export function PurchasesPanel() {
   function removeRow(i: number) { setItems((a) => (a.length > 1 ? a.filter((_, idx) => idx !== i) : a)); }
 
   function resetForm() {
-    setDate(today()); setSupplierId(""); setSupplierName(""); setPaid(false); setNotes(""); setToStock(true);
+    setDate(today()); setSupplierId(""); setSupplierName(""); setPaid(false); setPaidNow(0); setNotes(""); setToStock(true);
     setItems([{ name: "", qty: 1, unitPrice: 0 }]);
   }
 
@@ -63,17 +85,24 @@ export function PurchasesPanel() {
     const clean = items.filter((it) => it.name.trim() !== "");
     if (clean.length === 0) { alert("أضف بنداً واحداً على الأقل."); return; }
     const sup = suppliers.find((s) => s.id === supplierId);
-    const lines = clean.map((it) => ({ name: stockMatch(it.name)?.name ?? it.name.trim(), qty: Number(it.qty) || 0, unitPrice: Number(it.unitPrice) || 0 }));
+    const lines = clean.map((it): PurchaseItem => {
+      const kit = kitOf(it.name);
+      return { name: kit?.name ?? stockMatch(it.name)?.name ?? it.name.trim(), qty: Number(it.qty) || 0, unitPrice: Number(it.unitPrice) || 0, ...(kit ? { kitId: kit.id } : {}) };
+    });
+    const sum = purchaseTotal(clean);
+    // Settings → «ديون الموردين»: what is paid now; the rest stays owed to the supplier.
+    const payNow = opts.debts ? Math.min(Number(paidNow) || 0, sum) : 0;
     const p: Purchase = {
       id: uid(), created_at: nowMs(), date,
       supplierId: supplierId || undefined,
       supplierName: sup?.name || supplierName.trim() || undefined,
       items: lines,
-      total: purchaseTotal(clean), paid, notes: notes.trim() || undefined,
+      total: sum, paid: opts.debts ? payNow >= sum : paid, notes: notes.trim() || undefined,
+      ...(opts.debts && payNow > 0 ? { payments: [{ id: uid(), date, amount: payNow }] } : {}),
     };
     if (!addPurchase(p)) { alert("تعذّر الحفظ: مساحة التخزين في المتصفح ممتلئة — خذ نسخة احتياطية من الإعدادات."); return; }
     if (toStock) {
-      const added = addToStock(lines);
+      const added = addToStock(lines, [p.supplierName, date].filter(Boolean).join(" · "));
       if (added.length) setPurchasesStock(p.id, added);
     }
     setPurchases(getPurchases());
@@ -112,7 +141,14 @@ export function PurchasesPanel() {
   }
 
   const grandTotal = purchases.reduce((s, p) => s + Number(p.total || 0), 0);
-  const unpaidTotal = purchases.filter((p) => !p.paid).reduce((s, p) => s + Number(p.total || 0), 0);
+  const unpaidTotal = opts.debts ? purchases.reduce((s, p) => s + dueOf(p), 0) : purchases.filter((p) => !p.paid).reduce((s, p) => s + Number(p.total || 0), 0);
+  /** «تسجيل»: the amount typed, or (left empty) everything still owed on the purchase. */
+  function pay(p: Purchase) {
+    const amount = payAmount > 0 ? Math.min(payAmount, dueOf(p)) : dueOf(p);
+    if (!(amount > 0)) return;
+    addPayment(p.id, amount);
+    setPurchases(getPurchases()); setPayFor(null); setPayAmount(0);
+  }
 
   return (
     <div>
@@ -121,7 +157,7 @@ export function PurchasesPanel() {
       <div className="mb-4 grid gap-4 sm:grid-cols-3">
         <StatCard label="عدد العمليات" value={String(purchases.length)} />
         <StatCard label="إجمالي المصروف" value={`${money(grandTotal)} د.ع`} />
-        <StatCard label="غير مدفوع" value={`${money(unpaidTotal)} د.ع`} tone={unpaidTotal > 0 ? "danger" : undefined} />
+        <StatCard label={opts.debts ? "المتبقي للموردين" : "غير مدفوع"} value={`${money(unpaidTotal)} د.ع`} tone={unpaidTotal > 0 ? "danger" : undefined} />
       </div>
 
       {/* Add purchase */}
@@ -138,20 +174,29 @@ export function PurchasesPanel() {
           {!supplierId && (
             <label className="text-sm font-medium">أو اسم مورّد مباشر<input value={supplierName} onChange={(e) => setSupplierName(e.target.value)} className={`mt-1 ${inp}`} /></label>
           )}
-          <label className="flex items-center gap-2 self-end pb-2 text-sm font-medium">
-            <input type="checkbox" checked={paid} onChange={(e) => setPaid(e.target.checked)} className="size-4" /> مدفوعة
-          </label>
+          {opts.debts ? (
+            <label className="text-sm font-medium">المدفوع الآن
+              <NumberInput value={paidNow} onValue={(v) => setPaidNow(Number(v) || 0)} group zeroEmpty placeholder="0" aria-label="المدفوع الآن" className={`mt-1 ${inp}`} />
+            </label>
+          ) : (
+            <label className="flex items-center gap-2 self-end pb-2 text-sm font-medium">
+              <input type="checkbox" checked={paid} onChange={(e) => setPaid(e.target.checked)} className="size-4" /> مدفوعة
+            </label>
+          )}
         </div>
 
         {/* Line items */}
         <div className="mt-4">
-          <div className="mb-2 text-xs font-semibold text-muted">البنود</div>
+          <div className="mb-2 text-xs font-semibold text-muted">البنود <span className="font-normal">— صنف من المخزن، أو كت (تُضاف محتوياته)، أو صنف جديد</span></div>
+          {opts.barcode && <div className="mb-2"><ScanBox onScan={onScan} hint="امسح باركود الصنف أو الكت ليُضاف بنداً…" /></div>}
           <div className="flex flex-col gap-2">
             {items.map((it, i) => (
               <div key={i} className="grid grid-cols-[minmax(0,1fr)_64px_88px_auto] items-center gap-2 sm:grid-cols-[1fr_80px_110px_110px_auto]">
                 <div className="relative">
                   <input value={it.name} onChange={(e) => setItem(i, { name: e.target.value })} placeholder="الصنف" list="stock-names" aria-label="الصنف" className={`${inp} ${toStock && it.name.trim() ? "pe-16" : ""}`} />
-                  {toStock && it.name.trim() && (linked(it.name) ? (
+                  {toStock && it.name.trim() && (kitOf(it.name) ? (
+                    <span title={`كت — يُضاف إلى المخزن: ${kitText(kitOf(it.name)!)}`} data-testid="line-kit" className="pointer-events-none absolute end-2 top-1/2 inline-flex -translate-y-1/2 items-center gap-1 rounded-full bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700"><Package className="size-3" /> كت</span>
+                  ) : linked(it.name) ? (
                     <span title="صنف في المخزن — تُضاف الكمية إليه" className="pointer-events-none absolute end-2 top-1/2 inline-flex -translate-y-1/2 items-center gap-1 rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700"><Boxes className="size-3" /> مخزن</span>
                   ) : (
                     <span title="صنف جديد — يُضاف إلى المخزن عند الحفظ" className="pointer-events-none absolute end-2 top-1/2 inline-flex -translate-y-1/2 items-center gap-1 rounded-full bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700"><Plus className="size-3" /> جديد</span>
@@ -161,10 +206,18 @@ export function PurchasesPanel() {
                 <NumberInput value={it.unitPrice} onValue={(v) => setItem(i, { unitPrice: Number(v) || 0 })} group zeroEmpty placeholder="سعر الوحدة" aria-label="سعر الوحدة" className={inp} />
                 <div className="hidden text-sm tabular-nums text-muted sm:block">{money(Number(it.qty || 0) * Number(it.unitPrice || 0))} د.ع</div>
                 <button onClick={() => removeRow(i)} className="grid size-8 place-items-center rounded-lg border border-line text-red-600 hover:bg-red-50" title="حذف البند"><X className="size-4" /></button>
+                {kitOf(it.name) && (
+                  <div className="col-span-full -mt-1 text-[11px] text-violet-700" data-testid="kit-contents">
+                    يُضاف إلى المخزن: {kitOf(it.name)!.parts.map((p) => `${stock.find((s) => s.id === p.stockId)?.name ?? "؟"} × ${p.qty * (Number(it.qty) || 0)}`).join("، ")}
+                  </div>
+                )}
               </div>
             ))}
           </div>
-          <datalist id="stock-names">{stock.map((s) => <option key={s.id} value={s.name} />)}</datalist>
+          <datalist id="stock-names">
+            {kits.map((k) => <option key={k.id} value={k.name}>كت: {kitText(k)}</option>)}
+            {stock.map((s) => <option key={s.id} value={s.name} />)}
+          </datalist>
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
             <button onClick={addRow} className="inline-flex items-center gap-1 text-xs text-amber-700 hover:underline"><Plus className="size-3.5" /> إضافة بند</button>
             {anyNamed && (
@@ -224,10 +277,26 @@ export function PurchasesPanel() {
                 <td className="px-4 py-3"><input type="checkbox" checked={checked.has(p.id)} onChange={() => toggle(p.id)} className="size-4 align-middle" /></td>
                 <td className="px-4 py-3 text-muted whitespace-nowrap">{p.date}</td>
                 <td className="px-4 py-3 font-medium">{p.supplierName ?? "—"}</td>
-                <td className="px-4 py-3 text-muted">{p.items.map((it) => it.name).join("، ")}</td>
+                <td className="px-4 py-3 text-muted">{p.items.map((it) => (it.kitId ? `${it.name} (كت ×${it.qty})` : it.name)).join("، ")}</td>
                 <td className="px-4 py-3 tabular-nums font-medium">{money(p.total)} د.ع</td>
                 <td className="px-4 py-3">
-                  {p.paid
+                  {opts.debts ? (
+                    <div className="flex flex-col items-start gap-1" data-testid="purchase-due">
+                      {dueOf(p) <= 0
+                        ? <span className="rounded-full bg-teal-50 px-2 py-0.5 text-xs font-medium text-brand-dark">مدفوعة</span>
+                        : <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-600">متبقٍ {money(dueOf(p))}</span>}
+                      {paidOf(p) > 0 && dueOf(p) > 0 && <span className="text-[11px] text-muted">مدفوع {money(paidOf(p))}</span>}
+                      {dueOf(p) > 0 && (payFor === p.id ? (
+                        <span className="flex items-center gap-1">
+                          <NumberInput value={payAmount} onValue={(v) => setPayAmount(Number(v) || 0)} group zeroEmpty placeholder={money(dueOf(p))} aria-label="مبلغ الدفعة" className="w-24 rounded-md border border-line bg-surface px-2 py-1 text-xs" />
+                          <button onClick={() => pay(p)} className="rounded-md bg-amber-600 px-2 py-1 text-xs font-semibold text-white">تسجيل</button>
+                          <button onClick={() => setPayFor(null)} aria-label="إلغاء" className="text-muted"><X className="size-3.5" /></button>
+                        </span>
+                      ) : (
+                        <button onClick={() => { setPayFor(p.id); setPayAmount(0); }} className="inline-flex items-center gap-1 text-xs text-amber-700 hover:underline"><Wallet className="size-3.5" /> دفعة</button>
+                      ))}
+                    </div>
+                  ) : p.paid
                     ? <span className="rounded-full bg-teal-50 px-2 py-0.5 text-xs font-medium text-brand-dark">مدفوعة</span>
                     : <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-600">غير مدفوعة</span>}
                 </td>

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Pencil, AlertTriangle, CalendarClock, Minus, Plus, ClipboardCheck, Settings } from "lucide-react";
+import { Pencil, AlertTriangle, CalendarClock, Minus, Plus, ClipboardCheck, Settings, History } from "lucide-react";
 import {
   getStock, saveStock, getTests, daysToExpiry, stockTestIds, pendingStock, issueVisitStock, skipVisitStock,
   type StockItem, type StationTest, type PendingStock,
@@ -10,7 +10,9 @@ import {
 import { NumberInput } from "@/components/local/NumberInput";
 import { qcLinks, stockFloor, stockOptions, pendingQcStock, issueQcStock, skipQcStock, type StockOptions, type PendingQc } from "@/lib/local/links";
 import { fmtDateTime } from "@/lib/utils";
-import { Tile } from "./stockParts";
+import { Tile, ScanBox } from "./stockParts";
+import { getSettings, type PurchasingSettings } from "@/lib/purchasing/store";
+import { money } from "@/lib/utils";
 
 type Filter = "all" | "low" | "in";
 
@@ -29,17 +31,31 @@ export function StockPanel() {
   const [amount, setAmount] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState<Filter>("all");
   const [msg, setMsg] = useState("");
+  const [store, setStore] = useState<PurchasingSettings>({ orgName: "" });
+  const [hit, setHit] = useState<string | null>(null);
 
   const reload = () => { setRows(getStock()); setPending(pendingStock()); setPendingQc(pendingQcStock()); };
-  useEffect(() => { reload(); setTests(getTests()); setQc(qcLinks()); setOpts(stockOptions()); }, []);
+  useEffect(() => { reload(); setTests(getTests()); setQc(qcLinks()); setOpts(stockOptions()); setStore(getSettings()); }, []);
 
-  function persist(next: StockItem[]) { setRows(next); saveStock(next); }
-  /** «إضافة» / «صرف» by hand (1 when no number is typed). */
+  /** «إضافة» / «صرف» by hand (1 when no number is typed); recorded in «سجل الحركة». */
   function move(s: StockItem, sign: 1 | -1) {
     const n = Math.abs(Number(amount[s.id]) || 1);
-    persist(rows.map((r) => (r.id === s.id ? { ...r, qty: stockFloor(Number(r.qty) + sign * n) } : r)));
+    const next = rows.map((r) => (r.id === s.id ? { ...r, qty: stockFloor(Number(r.qty) + sign * n) } : r));
+    setRows(next); saveStock(next, sign > 0 ? "add" : "issue");
     setAmount((a) => ({ ...a, [s.id]: "" }));
   }
+  /** Settings → «الباركود»: a scanned item is shown and its quantity box is ready to type in. */
+  function onScan(code: string): string {
+    const s = rows.find((r) => r.barcode === code);
+    if (!s) return `باركود غير معروف: ${code}`;
+    setFilter("all"); setHit(s.id);
+    setTimeout(() => {
+      const box = document.querySelector<HTMLInputElement>(`input[data-amount="${s.id}"]`);
+      box?.scrollIntoView({ block: "center" }); box?.focus();
+    }, 30);
+    return s.name;
+  }
+  const value = rows.reduce((t, s) => t + (s.price != null ? Math.max(0, Number(s.qty) || 0) * s.price : 0), 0);
   function issue(list: PendingStock[]) {
     const short = list.flatMap((p) => issueVisitStock(p.visit.id, p.testIds));
     reload();
@@ -135,10 +151,18 @@ export function StockPanel() {
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      {store.barcode && <ScanBox onScan={onScan} hint="امسح باركود صنف لتضيف إليه أو تصرف منه…" />}
+
+      <div className={`grid gap-4 ${store.prices ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}>
         <Tile label="عدد الأصناف" value={rows.length} />
         <Tile label="تحت الحد الأدنى" value={lowCount} tone={lowCount ? "danger" : undefined} />
         <Tile label="قرب/منتهي الصلاحية" value={soonCount} tone={soonCount ? "warn" : undefined} />
+        {store.prices && (
+          <div className="rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]" data-testid="stock-value">
+            <div className="text-sm text-muted">قيمة المخزن</div>
+            <div className="mt-1 text-2xl font-bold tabular-nums text-amber-700">{money(value)} <span className="text-sm">د.ع</span></div>
+          </div>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-1" role="tablist" aria-label="عرض">
@@ -155,6 +179,8 @@ export function StockPanel() {
               <th className="px-4 py-3 font-medium">الصنف</th>
               <th className="px-4 py-3 font-medium">الكمية</th>
               <th className="px-4 py-3 font-medium">مرتبط بـ</th>
+              {store.prices && <th className="px-4 py-3 font-medium">سعر الوحدة</th>}
+              {store.prices && <th className="px-4 py-3 font-medium">القيمة</th>}
               <th className="px-4 py-3 font-medium">الانتهاء</th>
               <th className="px-4 py-3 font-medium">الحالة</th>
               <th className="px-4 py-3 font-medium">إضافة / صرف</th>
@@ -162,7 +188,7 @@ export function StockPanel() {
           </thead>
           <tbody>
             {shown.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-muted">
+              <tr><td colSpan={store.prices ? 8 : 6} className="px-4 py-8 text-center text-muted">
                 {rows.length ? "لا أصناف في هذا العرض." : <>المخزن فارغ — أضف الأصناف من <Link href="/store/items" className="text-amber-700 underline">«الأصناف»</Link>.</>}
               </td></tr>
             )}
@@ -172,7 +198,7 @@ export function StockPanel() {
               const soon = d != null && d >= 0 && d <= 30;
               const low = isLow(s);
               return (
-                <tr key={s.id} className="border-b border-line last:border-0 hover:bg-canvas">
+                <tr key={s.id} data-stock={s.name} className={`border-b border-line last:border-0 hover:bg-canvas ${hit === s.id ? "bg-amber-50 ring-2 ring-inset ring-amber-400" : ""}`}>
                   <td className="px-4 py-3 font-medium">
                     <Link href={`/store/items?edit=${s.id}`} className="inline-flex items-center gap-1.5 hover:underline" title="تعديل الصنف في «الأصناف»">
                       {s.name} <Pencil className="size-3 text-muted" />
@@ -196,6 +222,8 @@ export function StockPanel() {
                     })()}
                     {qc.has(s.id) && <span data-testid="qc-link" className="ms-1 rounded-full bg-rose-50 px-2 py-0.5 text-xs text-rose-700">سيطرة: {qc.get(s.id)!.join("، ")}</span>}
                   </td>
+                  {store.prices && <td className="px-4 py-3 tabular-nums text-muted" data-testid="stock-price">{s.price != null ? money(s.price) : "—"}</td>}
+                  {store.prices && <td className="px-4 py-3 tabular-nums">{s.price != null ? money(Math.max(0, Number(s.qty) || 0) * s.price) : "—"}</td>}
                   <td className={`px-4 py-3 ${expired ? "text-red-600" : soon ? "text-amber-700" : "text-muted"}`}>{s.expiry ?? "—"}</td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1">
@@ -207,10 +235,11 @@ export function StockPanel() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1">
-                      <NumberInput value={amount[s.id] ?? ""} onValue={(v) => setAmount((a) => ({ ...a, [s.id]: v }))} placeholder="1" aria-label={`كمية ${s.name}`}
+                      <NumberInput value={amount[s.id] ?? ""} onValue={(v) => setAmount((a) => ({ ...a, [s.id]: v }))} placeholder="1" aria-label={`كمية ${s.name}`} data-amount={s.id}
                         className="w-16 rounded-lg border border-line bg-surface px-2 py-1 text-center text-sm outline-none focus:border-brand" />
                       <button onClick={() => move(s, 1)} aria-label={`إضافة إلى ${s.name}`} title="إضافة إلى المخزن" className="grid size-7 place-items-center rounded-lg border border-line hover:bg-canvas"><Plus className="size-4" /></button>
                       <button onClick={() => move(s, -1)} aria-label={`صرف من ${s.name}`} title="صرف من المخزن" className="grid size-7 place-items-center rounded-lg border border-line hover:bg-canvas"><Minus className="size-4" /></button>
+                      <Link href={`/store/moves?item=${s.id}`} aria-label={`سجل حركة ${s.name}`} title="سجل الحركة" className="grid size-7 place-items-center rounded-lg border border-line text-muted hover:bg-canvas hover:text-ink"><History className="size-4" /></Link>
                     </div>
                   </td>
                 </tr>

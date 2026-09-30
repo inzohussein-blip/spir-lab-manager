@@ -21,7 +21,21 @@ export interface PurchaseItem {
   name: string;
   qty: number;
   unitPrice: number;
+  /** A kit bought (its contents go to the stock room, see Kit). */
+  kitId?: string;
 }
+
+/** A kit: one purchasable package holding several stock items, e.g. «كت السكر» = 4 × «كاشف
+ *  السكر» + 1 × «محلول المعايرة». Buying n kits adds n × each part to the stock room. */
+export interface Kit {
+  id: string;
+  name: string;
+  parts: { stockId: string; qty: number }[];
+  barcode?: string;
+}
+
+/** A payment towards a purchase (Settings → «ديون الموردين»). */
+export interface Payment { id: string; date: string; amount: number; note?: string }
 
 export interface Purchase {
   id: string;
@@ -35,6 +49,8 @@ export interface Purchase {
   notes?: string;
   /** Quantities this purchase added to the stock room (taken back if it is deleted). */
   stockAdded?: { id: string; qty: number }[];
+  /** Payments made so far (Settings → «ديون الموردين»); `paid` is set once they cover the total. */
+  payments?: Payment[];
 }
 
 export interface PurchasingSettings {
@@ -43,11 +59,18 @@ export interface PurchasingSettings {
   footer?: string;
   /** Letterhead logo (image data URL); empty → the default logo. */
   logo?: string;
+  /** Optional features, each off by default: payments and balances per supplier, unit prices
+   *  (stock value, cost per test), and barcodes on items and kits. */
+  debts?: boolean;
+  prices?: boolean;
+  barcode?: boolean;
 }
 
 const K_SUP = "purchasing.suppliers.v1";
 const K_PUR = "purchasing.purchases.v1";
 const K_SET = "purchasing.settings.v1";
+/** Kits live with the stock room (shared with the lab station's data, synced alike). */
+const K_KITS = "station.kits.v1";
 
 function read<T>(key: string, fallback: T): T {
   try {
@@ -72,12 +95,65 @@ export function uid(): string {
     : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+const key = (s: string) => s.trim().toLowerCase();
+
 // ── Suppliers ────────────────────────────────────────────────────────────────
 export function getSuppliers(): Supplier[] {
   return read<Supplier[]>(K_SUP, []);
 }
 export function saveSuppliers(s: Supplier[]): void {
   write(K_SUP, s);
+}
+
+// ── Kits ─────────────────────────────────────────────────────────────────────
+export function getKits(): Kit[] {
+  return read<Kit[]>(K_KITS, []);
+}
+export function saveKits(k: Kit[]): void {
+  write(K_KITS, k);
+}
+/** The kit a bought line names (same name), if any. */
+export function kitMatch(name: string): Kit | null {
+  const k = key(name);
+  return k ? getKits().find((x) => key(x.name) === k) ?? null : null;
+}
+
+// ── Stocktakes ─────────────────────────────────────────────────────────────────
+/** A stocktake («الجرد»): the counted quantity of each item against what was recorded. */
+export interface StockCount { id: string; at: number; lines: { stockId: string; name: string; before: number; counted: number }[] }
+const K_COUNTS = "station.stockCounts.v1";
+export function getCounts(): StockCount[] {
+  return read<StockCount[]>(K_COUNTS, []);
+}
+/** Set the counted items to what was found on the shelf, keep the stocktake (the last 50), and
+ *  record the differences in «سجل الحركة». Returns the saved stocktake. */
+export function applyCount(counted: Record<string, number>): StockCount | null {
+  const stock = getStock();
+  const lines = stock.filter((s) => counted[s.id] != null && Number.isFinite(counted[s.id]))
+    .map((s) => ({ stockId: s.id, name: s.name, before: Number(s.qty) || 0, counted: counted[s.id] }));
+  if (!lines.length) return null;
+  const rec: StockCount = { id: uid(), at: Date.now(), lines };
+  saveStock(stock.map((s) => (counted[s.id] != null && Number.isFinite(counted[s.id]) ? { ...s, qty: counted[s.id] } : s)), "count", `جرد ${new Date(rec.at).toLocaleDateString("en-CA")}`);
+  write(K_COUNTS, [rec, ...getCounts()].slice(0, 50));
+  return rec;
+}
+
+// ── Payments (supplier debts) ────────────────────────────────────────────────
+/** Paid so far: the payments, or the whole total for a purchase marked paid without them. */
+export const paidOf = (p: Purchase): number =>
+  p.payments?.length ? p.payments.reduce((t, x) => t + (Number(x.amount) || 0), 0) : p.paid ? Number(p.total) || 0 : 0;
+export const dueOf = (p: Purchase): number => Math.max(0, (Number(p.total) || 0) - paidOf(p));
+/** Record a payment; the purchase counts as paid once they cover its total. */
+export function addPayment(purchaseId: string, amount: number, note?: string): void {
+  const all = getPurchases();
+  write(K_PUR, all.map((p) => {
+    if (p.id !== purchaseId || !(amount > 0)) return p;
+    // A purchase marked paid before payments were kept starts from its whole total.
+    const base = p.payments?.length ? p.payments : p.paid ? [{ id: uid(), date: p.date, amount: Number(p.total) || 0 }] : [];
+    const payments = [...base, { id: uid(), date: new Date().toLocaleDateString("en-CA"), amount, ...(note ? { note } : {}) }];
+    const next = { ...p, payments };
+    return { ...next, paid: dueOf(next) <= 0 };
+  }));
 }
 
 // ── Purchases ────────────────────────────────────────────────────────────────
@@ -98,36 +174,47 @@ export function deletePurchases(ids: string[]): void {
   const all = getPurchases();
   const back = all.filter((p) => set.has(p.id)).flatMap((p) => p.stockAdded ?? []);
   write(K_PUR, all.filter((p) => !set.has(p.id)));
-  if (back.length) changeStock(back.map((b) => ({ id: b.id, qty: -b.qty })));
+  if (back.length) changeStock(back.map((b) => ({ id: b.id, qty: -b.qty })), "purchase-del");
 }
 
 // ── Stock room link ──────────────────────────────────────────────────────────
-const key = (s: string) => s.trim().toLowerCase();
 /** The stock item a bought line refers to (same name), if any. */
 export function stockMatch(name: string): { id: string; name: string; qty: number } | null {
   const k = key(name);
   if (!k) return null;
   return getStock().find((s) => key(s.name) === k) ?? null;
 }
-function changeStock(moves: { id: string; qty: number }[]): void {
+function changeStock(moves: { id: string; qty: number }[], reason: "purchase" | "purchase-del", ref?: string, prices?: Map<string, number>): void {
   const by = new Map<string, number>();
   for (const m of moves) by.set(m.id, (by.get(m.id) ?? 0) + m.qty);
-  saveStock(getStock().map((s) => (by.has(s.id) ? { ...s, qty: stockFloor(Number(s.qty) + by.get(s.id)!) } : s)));
+  saveStock(getStock().map((s) => (by.has(s.id)
+    ? { ...s, qty: stockFloor(Number(s.qty) + by.get(s.id)!), ...(prices?.has(s.id) ? { price: prices.get(s.id) } : {}) }
+    : s)), reason, ref);
 }
 /** Put bought quantities in the stock room: onto the item of the same name, or as a new item
- *  (with no quantity yet, then the purchase's). Returns what was added. */
-export function addToStock(items: PurchaseItem[]): { id: string; qty: number }[] {
-  const lines = items.map((it) => ({ name: it.name.trim(), qty: Number(it.qty) || 0 })).filter((x) => x.name && x.qty > 0);
+ *  (with no quantity yet, then the purchase's); a kit's parts, each times the kits bought. The
+ *  item's unit price follows the purchase (a kit's, when it holds one item). Returns what was added. */
+export function addToStock(items: PurchaseItem[], ref?: string): { id: string; qty: number }[] {
+  const lines = items.map((it) => ({ name: it.name.trim(), qty: Number(it.qty) || 0, price: Number(it.unitPrice) || 0 })).filter((x) => x.name && x.qty > 0);
   if (!lines.length) return [];
   const stock = getStock();
+  const kits = getKits();
   const fresh: typeof stock = [];
-  const added = lines.map((x) => {
+  const prices = new Map<string, number>();
+  const added = lines.flatMap((x) => {
+    const kit = kits.find((k) => key(k.name) === key(x.name));
+    if (kit) {
+      const parts = kit.parts.filter((p) => stock.some((s) => s.id === p.stockId) && p.qty > 0);
+      if (parts.length === 1 && x.price > 0) prices.set(parts[0].stockId, Math.round((x.price / parts[0].qty) * 100) / 100);
+      return parts.map((p) => ({ id: p.stockId, qty: p.qty * x.qty }));
+    }
     let item = stock.find((s) => key(s.name) === key(x.name)) ?? fresh.find((s) => key(s.name) === key(x.name));
     if (!item) { item = { id: uid(), name: x.name, qty: 0 }; fresh.push(item); }
-    return { id: item.id, qty: x.qty };
+    if (x.price > 0) prices.set(item.id, x.price);
+    return [{ id: item.id, qty: x.qty }];
   });
   if (fresh.length) saveStock([...stock, ...fresh]);
-  changeStock(added);
+  changeStock(added, "purchase", ref, prices);
   return added;
 }
 export function getPurchase(id: string): Purchase | null {
@@ -159,6 +246,8 @@ export interface PurchasingBackup {
   settings: PurchasingSettings;
   /** The stock room (shared with the lab station on this device). */
   stock?: ReturnType<typeof getStock>;
+  kits?: Kit[];
+  counts?: StockCount[];
 }
 export function exportBackup(): PurchasingBackup {
   return {
@@ -169,6 +258,8 @@ export function exportBackup(): PurchasingBackup {
     purchases: getPurchases(),
     settings: getSettings(),
     stock: getStock(),
+    kits: getKits(),
+    counts: getCounts(),
   };
 }
 export function importBackup(data: unknown): boolean {
@@ -178,7 +269,9 @@ export function importBackup(data: unknown): boolean {
     if (b.suppliers) write(K_SUP, b.suppliers);
     if (b.purchases) write(K_PUR, b.purchases);
     if (b.settings) write(K_SET, b.settings);
-    if (Array.isArray(b.stock)) saveStock(b.stock);
+    if (Array.isArray(b.stock)) saveStock(b.stock, "edit", "استعادة نسخة احتياطية");
+    if (Array.isArray(b.kits)) write(K_KITS, b.kits);
+    if (Array.isArray(b.counts)) write(K_COUNTS, b.counts);
     return true;
   } catch {
     return false;
