@@ -94,6 +94,39 @@ const { B, ok, launch, done, kv, kvPut, resetLocal, pdfPages } = require('./lib.
   await set({ reportFill: false }); await p.goto(B + `/station?edit=${id2}`); await p.waitForTimeout(1500);
   ok(!(await p.locator('#report-sheet').innerText()).includes('Previous') && await p.locator('#report-sheet').getAttribute('data-fill') === null, '«ملء الصفحة» off: its ways do nothing');
 
+  // ── A long report on several pages: each page has the header (letterhead, sample barcode, patient)
+  // and, at its bottom, the signature, QR code and footer bar — kept clear of the paper's edge ──
+  await set({ footer: 'سطر التذييل للتجربة', signatureOn: true });
+  await p.goto(B + '/station'); await p.waitForSelector('label:has-text("الاسم الثلاثي") input', { timeout: 20000 });
+  await p.locator('label:has-text("الاسم الثلاثي") input').fill('مريض طويل');
+  for (let i = 0; i < 30; i++) await p.locator('div.grid button:has(span.flex-1)').nth(i).click();
+  const ins = p.locator('input[data-result-idx]'); for (let i = 0; i < await ins.count(); i++) await ins.nth(i).fill(String(10 + i));
+  await p.evaluate(() => { window.print = () => {}; }); await p.click('[data-testid="entry-print"]'); await p.waitForTimeout(1500);
+  for (const paper of ['A4', 'A5']) {
+    await p.click(`button:text-is("${paper}")`); await p.waitForTimeout(500);
+    await p.emulateMedia({ media: 'print' });
+    const lay = await p.evaluate(() => {
+      const sh = document.querySelector('#report-sheet');
+      const head = sh.querySelector('table.report-frame > thead');
+      const css = [...document.querySelectorAll('style')].map((x) => x.textContent).join(' ');
+      return {
+        headHas: !!head.querySelector('[data-testid="report-patient"]') && !!head.querySelector('.report-pbc') && !!head.querySelector('h2'),
+        bottom: getComputedStyle(sh.querySelector('.report-bottom')).position,
+        bottomHas: !!sh.querySelector('.report-bottom .report-sign') && !!sh.querySelector('.report-bottom .report-footer'),
+        spacer: sh.querySelector('.report-spacer').getBoundingClientRect().height,
+        head: head.getBoundingClientRect().height,
+        margin: (css.match(/@page \{ size: A[45]; margin: ([^;]+);/) || [])[1],
+      };
+    });
+    const quarter = (paper === 'A5' ? 194 : 275) * 96 / 25.4 / 4;
+    ok(lay.headHas && lay.bottom === 'fixed' && lay.bottomHas, `${paper}: letterhead, sample barcode and patient repeat on each page; signature, QR and footer fixed at each page's bottom`);
+    ok(lay.spacer > 40 && lay.spacer < quarter && lay.head < quarter, `${paper}: the space kept for them fits the browser's limit for repeating (${Math.round(lay.head)} / ${Math.round(lay.spacer)} px < ${Math.round(quarter)})`);
+    ok(lay.margin && !/^0/.test(lay.margin) && parseFloat(lay.margin.trim().split(/\s+/)[2]) >= 9, `${paper}: page margins keep the footer off the paper's edge (${lay.margin})`);
+    ok(pdfPages(await p.pdf({ preferCSSPageSize: true, printBackground: true })) >= 2, `${paper}: 30 tests print on several pages`);
+    await p.emulateMedia({ media: 'screen' });
+  }
+  await p.click('button:text-is("A4")');
+
   ok(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.slice(0, 3).join(' | ') : ''));
   await b.close();
   done();

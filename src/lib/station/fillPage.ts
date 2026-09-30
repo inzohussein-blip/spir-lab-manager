@@ -39,10 +39,10 @@ export function fillSteps(n: number, paper: "A4" | "A5", byPaper: boolean, level
  *  faster and on past the cap (to its own limit), so a few rows still reach down the page. */
 const fromK = (k: number, cap: number): Fill => ({ font: round2(Math.min(k, cap)), pad: round2(Math.min(7, 1 + (k - 1) * 4.4)) });
 
-/** Printable height of the page (mm): the paper less the sheet's print margins. */
+/** Printable height of the page (mm): the paper less the page margins (see ReportSheet's pageMargin). */
 export function pageMm(paper: "A4" | "A5", pre?: { top: number; bottom: number }): number {
   if (pre) return (paper === "A5" ? 210 : 297) - pre.top - pre.bottom;
-  return paper === "A5" ? 210 - 8 - 18 : 297 - 12 - 22;
+  return paper === "A5" ? 210 - 7 - 9 : 297 - 10 - 12;
 }
 const MM = 96 / 25.4;
 

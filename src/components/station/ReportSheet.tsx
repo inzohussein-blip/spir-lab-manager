@@ -32,6 +32,14 @@ import "@fontsource/amiri/latin-700.css";
 
 const exact = { WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as CSSProperties;
 
+/** The printed page's margins: kept clear of the edge, where many printers cannot print (a footer
+ *  8 mm from the edge was cut off); pre-printed paper keeps its own letterhead and footer space. */
+function pageMargin(paper: "A4" | "A5", pre?: { top: number; bottom: number } | null): string {
+  const side = paper === "A5" ? 8 : 12;
+  if (pre) return `${pre.top}mm ${side}mm ${pre.bottom}mm`;
+  return paper === "A5" ? "7mm 8mm 9mm" : "10mm 12mm 12mm";
+}
+
 export interface ReportRow {
   key: string;
   name: string;
@@ -115,6 +123,25 @@ export function ReportSheet({
   const ts = fill.font === 1 ? baseTs : { ...baseTs, fontSize: Math.round(baseTs.fontSize * fill.font * 10) / 10 };
   const pad = { a4: Math.round(DENSITY_PAD[ts.density].a4 * fill.pad), a5: Math.round(DENSITY_PAD[ts.density].a5 * fill.pad) };
   const hz = opt(settings.fillHead) ? (cardMode ? 1.3 : headZoom(fill)) : 1;
+  // The bottom group (signature, QR code, footer bar): fixed at the bottom of every printed page, so
+  // its height is measured and kept free there under the results (the frame's footer row).
+  // Measured from its parts as they print: the signature row and the footer bar with its gap (the
+  // row's screen-only top margin left out). It must stay under a quarter of the page, or the browser
+  // stops keeping that space free on each page.
+  const [bottomPx, setBottomPx] = useState(0);
+  useEffect(() => {
+    const el = sheetRef.current?.querySelector<HTMLElement>(".report-bottom");
+    if (!el) return;
+    const measure = () => {
+      const sign = el.querySelector<HTMLElement>(".report-sign");
+      const foot = el.querySelector<HTMLElement>(".report-footer");
+      setBottomPx(Math.ceil((sign?.offsetHeight ?? 0) + (foot ? foot.offsetHeight + (paper === "A5" ? 8 : 16) : 0)));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [paper]);
   // «النتيجة السابقة عند وجود مساحة»: previous results printed when the tests are few.
   const showPrev = printPrev || (opt(settings.fillPrev) && regular.length <= 10 && regular.some((r) => prev[r.key]));
 
@@ -126,13 +153,12 @@ export function ReportSheet({
     if (!smart) return;
     const el = sheetRef.current;
     const head = el?.querySelector<HTMLElement>("[data-fill-head]");
-    const sign = el?.querySelector<HTMLElement>(".report-sign");
     const table = el?.querySelector<HTMLElement>("[data-results]");
-    if (!el || !head || !sign || !table) return;
-    // In print the footer bar is fixed in the bottom margin and the signature sits 5 mm (A5: 2 mm)
-    // under the rest.
+    if (!el || !head || !table) return;
+    // In print the signature, QR code and footer bar are fixed at the bottom of every page, with the
+    // same height kept free under the results (`bottomPx`).
     const mm = 96 / 25.4;
-    const px = Math.round(head.offsetHeight + sign.offsetHeight + (paper === "A5" ? 2 : 5) * mm + (notesOn ? 24 * mm + 16 : 0));
+    const px = Math.round(head.offsetHeight + bottomPx + (notesOn ? 24 * mm + 16 : 0));
     // The table on screen against one line per row: how much its long names and ranges wrap.
     const wrap = Math.round(((table.offsetHeight + GAP_PX[baseTs.gap]) / tableHeight(baseTs, "screen", regular.length, groups.length, fill)) * 100) / 100;
     const key = `${paper}|${regular.length}|${notesOn}`;
@@ -207,26 +233,27 @@ export function ReportSheet({
   return (
     <>
       {printable && <style>{`@media print {
-        @page { size: ${paper}; margin: 0; }
-        #report-sheet {
-          min-height: ${paper === "A5" ? "208mm" : "295mm"};
-          padding: ${x.pre ? `${x.pre.top}mm 12mm ${x.pre.bottom}mm` : "12mm 12mm 22mm"} !important;
-          -webkit-box-decoration-break: clone;
-          box-decoration-break: clone;
-        }
+        @page { size: ${paper}; margin: ${pageMargin(paper, x.pre)}; }
+        #report-sheet { padding: 0 !important; max-width: none; }
         #report-sheet thead { display: table-header-group; }
         #report-sheet tr, #report-sheet .report-keep { break-inside: avoid; }
+        /* The page frame: its header (letterhead, sample barcode, patient) repeats on every page, and
+           its footer row keeps the bottom group's height free; the body flows over the pages. */
+        #report-sheet table.report-frame { font-size: inherit !important; }
+        #report-sheet table.report-frame > * > tr > td { padding: 0 !important; border: 0 !important; }
+        #report-sheet table.report-frame > tbody > tr { break-inside: auto; }
+        #report-sheet table.report-frame > tfoot { display: table-footer-group; }
+        #report-sheet .report-spacer { height: calc(${bottomPx}px + 4mm); }
+        #report-sheet .report-bottom { position: fixed; left: 0; right: 0; bottom: 0; margin: 0; padding-top: 2mm; background: #fff; }
         #report-sheet .report-group { break-after: avoid; }
         #report-sheet .report-page { break-before: page; }
         #report-sheet .form-table td, #report-sheet .form-table th { padding-top: 2px !important; padding-bottom: 2px !important; }
-        #report-sheet .report-footer { position: fixed; left: 12mm; right: 12mm; bottom: 8mm; margin: 0; }
         #report-sheet .report-watermark { position: fixed; }
-        #report-sheet .report-sign { margin-top: 5mm; }
+        #report-sheet .report-sign { margin-top: 0; }
         #report-sheet .report-qr { padding: 2px 5px !important; }
         #report-sheet .report-qr img { width: 19mm !important; height: 19mm !important; }
         #report-sheet td, #report-sheet th { padding-top: ${pad.a4}px !important; padding-bottom: ${pad.a4}px !important; }
         ${paper === "A5" ? `
-        #report-sheet { padding: ${x.pre ? `${x.pre.top}mm 8mm ${x.pre.bottom}mm` : "8mm 8mm 18mm"} !important; }
         #report-sheet table { font-size: ${(ts.fontSize * 10 / 14).toFixed(1)}px !important; }
         #report-sheet td, #report-sheet th { padding: ${pad.a5}px 4px !important; }
         #report-sheet .form-table td, #report-sheet .form-table th { padding: 0.5px 4px !important; }
@@ -236,16 +263,17 @@ export function ReportSheet({
         #report-sheet .cs-ast { margin-top: 3mm; }
         #report-sheet .cs-ast-title { display: none; }
         #report-sheet .report-pbc > span { width: 36mm !important; height: 8mm !important; }
+        #report-sheet [data-fill-head] h2 { font-size: 18px; }
+        #report-sheet [data-testid="report-patient"] { margin-top: 2.5mm; padding: 5px 8px; font-size: 11px; row-gap: 2px; }
         #report-sheet .report-pbc > div { font-size: 9.5px !important; }
         #report-sheet .report-qr img { width: 16mm !important; height: 16mm !important; }
         #report-sheet .form-top { margin-top: 2.5mm; }
         #report-sheet .form-title { font-size: 15px; }
         #report-sheet .form-sec-title { padding-top: 2px; padding-bottom: 2px; font-size: 12px; }
-        #report-sheet .report-sign { margin-top: 2mm; }
         #report-sheet .report-sign .mb-6 { margin-bottom: 4mm; }
         #report-sheet .form-sec:last-child { margin-bottom: 0; }
         #report-sheet table.form-table { font-size: ${(ts.fontSize * 9 / 14).toFixed(1)}px !important; line-height: 1.2 !important; }
-        #report-sheet .report-footer { left: 8mm; right: 8mm; bottom: 5mm; padding: 4px 8px; font-size: 9px; }
+        #report-sheet .report-footer { margin-top: 2mm; padding: 4px 8px; font-size: 9px; }
         ` : ""}
       }`}</style>}
 
@@ -267,7 +295,10 @@ export function ReportSheet({
           </div>
         )}
 
-        <div data-fill-head>{header}</div>
+        <table className="report-frame w-full border-collapse" role="presentation">
+          <thead><tr><td className="p-0 align-top"><div data-fill-head>{header}</div></td></tr></thead>
+          <tfoot className="hidden print:table-footer-group" aria-hidden><tr><td className="p-0"><div className="report-spacer" /></td></tr></tfoot>
+          <tbody><tr><td className="p-0 align-top">
 
         {/* Results — printed in English, left to right (the entry screen stays Arabic). */}
         {cardMode ? (
@@ -283,7 +314,6 @@ export function ReportSheet({
           const first = i === 0 && regular.length === 0;
           return (
             <div key={r.key} className={first ? "" : "report-page mt-10 border-t-2 border-dashed border-gray-300 pt-8 print:mt-0 print:border-0 print:pt-0"}>
-              {!first && header}
               <FormReport code={r.test!.code as FormCode} values={decodeForm(r.value)} ts={ts} opts={formOptionsOf(settings)} />
             </div>
           );
@@ -296,9 +326,12 @@ export function ReportSheet({
             <div className="mt-2 flex-1" style={{ backgroundImage: "repeating-linear-gradient(to bottom, transparent 0 27px, #d1d5db 27px 28px)", ...exact }} />
           </div>
         )}
+          </td></tr></tbody>
+        </table>
 
-        {/* Bottom group — signature sits at the bottom of the last page */}
-        <div className="report-keep mt-auto">
+        {/* Bottom group — signature, QR code and footer bar: at the bottom of the sheet on screen, and
+            at the bottom of every printed page. */}
+        <div className="report-bottom report-keep mt-auto">
           <div className="report-sign mt-10 flex items-end justify-between text-xs text-gray-600">
             {settings.signatureOn ? (
               // Settings → «التوقيع والختم على التقرير»: the analyst's signature (and name), and the lab's stamp.
