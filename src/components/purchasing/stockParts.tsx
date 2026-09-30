@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Search, ScanBarcode } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { Search, ScanBarcode, X } from "lucide-react";
 import type { StationTest } from "@/lib/station/store";
 
 /** Shared by «المخزن» and «الأصناف» of the stock and purchases station. */
@@ -80,6 +80,40 @@ export function ScanBox({ onScan, hint, testid = "scan-box" }: { onScan: (code: 
           placeholder={hint ?? "امسح الباركود هنا…"} className="w-full bg-transparent py-2 text-sm outline-none" dir="ltr" />
       </label>
       {msg && <span className="text-xs text-amber-800" role="status">{msg}</span>}
+    </div>
+  );
+}
+
+/** A window over the page for one task (add an item, record a purchase…); Esc or ✕ closes it. */
+export function Modal({ title, onClose, children, testid, wide = false }: { title: ReactNode; onClose: () => void; children: ReactNode; testid?: string; wide?: boolean }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div className="no-print fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/40 p-3 sm:p-8" role="dialog" aria-modal="true" data-testid={testid}>
+      <div className={`w-full ${wide ? "max-w-3xl" : "max-w-lg"} rounded-2xl border border-line bg-surface shadow-[var(--shadow-pop)]`}>
+        <div className="flex items-center gap-2 border-b border-line px-5 py-3">
+          <div className="min-w-0 flex-1 truncate text-base font-bold">{title}</div>
+          <button type="button" onClick={onClose} aria-label="إغلاق" className="grid size-8 place-items-center rounded-lg text-muted hover:bg-canvas"><X className="size-4" /></button>
+        </div>
+        <div className="p-5">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+/** A row of filter chips with counts (the chosen one filled). */
+export function Chips<T extends string>({ value, onChange, options, label }: { value: T; onChange: (v: T) => void; options: [T, string, number?][]; label: string }) {
+  return (
+    <div className="flex flex-wrap gap-1.5" role="tablist" aria-label={label}>
+      {options.map(([v, text, n]) => (
+        <button key={v} type="button" role="tab" aria-selected={value === v} onClick={() => onChange(v)}
+          className={`rounded-full px-3 py-1.5 text-sm ${value === v ? "bg-amber-600 font-semibold text-white" : "border border-line bg-surface hover:bg-canvas"}`}>
+          {text}{n != null && <span className={`ms-1.5 tabular-nums ${value === v ? "text-white/80" : "text-muted"}`}>{n}</span>}
+        </button>
+      ))}
     </div>
   );
 }

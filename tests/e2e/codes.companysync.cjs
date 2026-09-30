@@ -37,9 +37,9 @@ const A = 'مختبر أ ' + TAG, BB = 'مختبر ب ' + TAG;
     return p;
   };
   const addStock = async (p, name) => {
-    await p.goto(B + '/store/items'); await p.waitForSelector('label:has-text("اسم الصنف") input', { timeout: 20000 });
-    await p.fill('label:has-text("اسم الصنف") input', name); await p.fill('input[aria-label="الكمية"]', '3');
-    await p.click('button:has-text("إضافة")'); await p.waitForTimeout(500);
+    await p.goto(B + '/store/items'); await p.waitForSelector('[data-testid="item-new"]', { timeout: 20000 }); await p.click('[data-testid="item-new"]');
+    await p.fill('[data-testid="item-form"] label:has-text("اسم الصنف") input', name); await p.fill('[data-testid="item-form"] input[aria-label="الكمية"]', '3');
+    await p.click('[data-testid="item-form"] button[type=submit]'); await p.waitForTimeout(500);
   };
   const a1 = await computer(ca.code, 'a1'), a2 = await computer(ca.code, 'a2'), b1 = await computer(cb.code, 'b1');
   const SA1 = `صنف أ1 ${TAG}`, SA2 = `صنف أ2 ${TAG}`, SB = `صنف ب ${TAG}`;

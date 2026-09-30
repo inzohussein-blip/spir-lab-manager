@@ -16,9 +16,9 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   await p.goto(B + '/store/suppliers'); await p.waitForSelector('label:has-text("الاسم *") input', { timeout: 20000 });
   await p.fill('label:has-text("الاسم *") input', 'مورّد الأجهزة'); await p.fill('label:has-text("الهاتف") input', '07701112233');
   await p.click('button:has-text("إضافة")'); await p.waitForTimeout(500);
-  await p.goto(B + '/store/items'); await p.waitForSelector('label:has-text("اسم الصنف") input', { timeout: 20000 });
-  await p.fill('label:has-text("اسم الصنف") input', 'كنترول السكر'); await p.fill('input[aria-label="الكمية"]', '10');
-  await p.click('button:has-text("إضافة")');
+  await p.goto(B + '/store/items'); await p.waitForSelector('[data-testid="item-new"]', { timeout: 20000 }); await p.click('[data-testid="item-new"]');
+  await p.fill('[data-testid="item-form"] label:has-text("اسم الصنف") input', 'كنترول السكر'); await p.fill('[data-testid="item-form"] input[aria-label="الكمية"]', '10');
+  await p.click('[data-testid="item-form"] button[type=submit]');
   ok(await settled(async () => (await qty('كنترول السكر')) === 10), 'control material in the stock room (10)');
 
   // The lab's tests are offered as analyte names (the lab station's catalog exists once it opened).
@@ -66,7 +66,7 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   const after = async () => { const s = (await kv(p, 'station.stock.v1')) || []; return [s.find((x) => x.name.startsWith('أنبوب EDTA'))?.qty, s.find((x) => x.id === 'reagent-cbc')?.qty]; };
   ok(await settled(async () => JSON.stringify(await after()) === '[9,8]'), `a visit with Hb + WBC: one tube (10 → 9) and one reagent per test (10 → 8) — got ${JSON.stringify(await after())}`);
   await p.goto(B + '/store/inventory'); await p.waitForTimeout(1000);
-  ok((await p.locator('tr', { hasText: 'كاشف CBC' }).locator('[data-testid="stock-tests"]').innerText()).includes('2 فحص'), 'the stock room shows the linked tests');
+  ok((await p.locator('li[data-stock="كاشف CBC"] [data-testid="stock-tests"]').innerText()).includes('2 فحص'), 'the stock room shows the linked tests');
 
   // The side menu folds with the small mark at its top, stays folded in every station, and opens again.
   await p.goto(B + '/station'); await p.waitForSelector('[data-testid="side-collapse"]', { timeout: 20000 });

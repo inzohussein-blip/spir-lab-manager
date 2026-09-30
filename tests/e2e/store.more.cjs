@@ -15,7 +15,8 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   await kvPut(p, 'station.stock.v1', [{ id: 'glu', name: 'كاشف السكر', qty: 0 }, { id: 'cal', name: 'محلول المعايرة', qty: 0 }]);
 
   // ── A kit: defined in «الأصناف» ──
-  await p.goto(B + '/store/items'); await p.waitForSelector('[data-testid="kit-form"]', { timeout: 20000 });
+  await p.goto(B + '/store/items'); await p.waitForSelector('[data-testid="items-list"]', { timeout: 20000 });
+  await p.click('button[role=tab]:has-text("الكتات")'); await p.click('[data-testid="kit-new"]');
   const kf = p.locator('[data-testid="kit-form"]');
   await kf.locator('input[aria-label="اسم الكت"]').fill('كت السكر');
   await kf.locator('select[aria-label="صنف في الكت"]').first().selectOption('glu');
@@ -25,10 +26,11 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   await kf.locator('input[aria-label="الكمية في الكت"]').nth(1).fill('1');
   await p.click('[data-testid="kit-save"]');
   ok(await settled(async () => JSON.stringify(((await kv(p, 'station.kits.v1')) || [])[0]?.parts) === JSON.stringify([{ stockId: 'glu', qty: 4 }, { stockId: 'cal', qty: 1 }])), 'kit saved: 4 × reagent + 1 × calibrator');
-  ok((await p.locator('tr[data-kit="كت السكر"]').innerText()).includes('كاشف السكر'), 'kit listed with what it holds');
+  ok(await kf.count() === 0 && (await p.locator('li[data-kit="كت السكر"]').innerText()).includes('كاشف السكر'), 'kit listed with what it holds');
 
   // ── Bought in «المشتريات»: its contents go to the stock room ──
-  await p.goto(B + '/store'); await p.waitForSelector('input[placeholder="الصنف"]', { timeout: 20000 });
+  await p.goto(B + '/store'); await p.waitForSelector('[data-testid="purchase-new"]', { timeout: 20000 });
+  await p.click('[data-testid="purchase-new"]');
   await p.fill('input[placeholder="الصنف"]', 'كت السكر');
   await p.locator('input[aria-label="الكمية"]').first().fill('2');
   ok(await p.locator('[data-testid="line-kit"]').count() === 1 && (await p.locator('[data-testid="kit-contents"]').innerText()).includes('كاشف السكر × 8'), 'the line is marked as a kit, with what it adds (2 kits → 8 reagents)');
@@ -37,9 +39,22 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   ok(await settled(async () => (await qty('glu')) === 8 && (await qty('cal')) === 2), 'buying 2 kits: 8 reagents and 2 calibrators in stock');
   ok(((await kv(p, 'purchasing.purchases.v1')) || [])[0]?.items[0]?.kitId, 'the purchase remembers the kit');
 
+  // ── An unpaid purchase becomes paid in one click (and back) ──
+  const firstPur = async () => ((await kv(p, 'purchasing.purchases.v1')) || [])[0];
+  ok((await firstPur()).paid === false && (await p.locator('[data-testid="purchase-due"]').first().innerText()).includes('غير مدفوعة'), 'saved as unpaid');
+  await p.locator('li[data-purchase] button:has-text("تم الدفع")').first().click();
+  ok(await settled(async () => (await firstPur()).paid === true) && (await p.locator('[data-testid="purchase-due"]').first().innerText()).includes('مدفوعة'), '«تم الدفع»: the purchase is now paid');
+  await p.click('button[role=tab]:has-text("غير مدفوعة")');
+  ok(await p.locator('li[data-purchase]').count() === 0, 'the «غير مدفوعة» filter no longer lists it');
+  await p.click('button[role=tab]:has-text("الكل")');
+  await p.locator('[data-testid="purchase-due"] button:has-text("مدفوعة")').first().click();
+  ok(await settled(async () => (await firstPur()).paid === false), 'clicking «مدفوعة» turns it back to unpaid');
+  await p.locator('li[data-purchase] button[aria-expanded]').first().click();
+  ok((await p.locator('[data-testid="purchase-details"]').innerText()).includes('كت السكر'), 'a click on the row shows its lines');
+
   // ── «سجل الحركة» ──
   await p.goto(B + '/store/inventory'); await p.waitForSelector('[data-testid="stock-qty"]', { timeout: 20000 });
-  await p.click('button[aria-label="صرف من كاشف السكر"]');
+  await p.click('button[aria-label="صرف من كاشف السكر"]'); await p.click('[data-testid="move-dialog"] button[type=submit]');
   ok(await settled(async () => (await qty('glu')) === 7), 'issued by hand (8 → 7)');
   await p.click('a[aria-label="سجل حركة كاشف السكر"]'); await p.waitForSelector('[data-testid="moves"] tbody tr[data-reason]', { timeout: 20000 });
   const reasons = await p.locator('[data-testid="moves"] tbody tr[data-reason]').evaluateAll((rs) => rs.map((r) => r.dataset.reason));
@@ -58,7 +73,8 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   // ── Options: all off at first ──
   await p.goto(B + '/store/settings#extras'); await p.waitForSelector('[data-testid="store-extras"]', { timeout: 20000 });
   ok((await Promise.all(['ديون الموردين', 'الأسعار وقيمة المخزن', 'الباركود'].map((l) => sw(l).getAttribute('aria-checked')))).every((x) => x === 'false'), 'debts, prices and barcode: off by default');
-  await p.goto(B + '/store'); await p.waitForSelector('input[placeholder="الصنف"]', { timeout: 20000 });
+  await p.goto(B + '/store'); await p.waitForSelector('[data-testid="purchase-new"]', { timeout: 20000 }); await p.click('[data-testid="purchase-new"]');
+  await p.waitForSelector('input[placeholder="الصنف"]');
   ok(await p.locator('input[aria-label="المدفوع الآن"]').count() === 0 && await p.locator('[data-testid="scan-box"]').count() === 0, 'purchases as before (no payments, no scanning)');
 
   // ── Supplier debts ──
@@ -66,8 +82,9 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   await sw('ديون الموردين').click();
   ok(await settled(async () => (await kv(p, 'purchasing.settings.v1'))?.debts === true), 'supplier debts switched on');
   await kvPut(p, 'purchasing.suppliers.v1', [{ id: 'sup1', name: 'مورّد الكواشف' }]);
-  await p.goto(B + '/store'); await p.waitForSelector('input[aria-label="المدفوع الآن"]', { timeout: 20000 });
-  await p.locator('select').first().selectOption('sup1');
+  await p.goto(B + '/store'); await p.waitForSelector('[data-testid="purchase-new"]', { timeout: 20000 }); await p.click('[data-testid="purchase-new"]');
+  await p.waitForSelector('input[aria-label="المدفوع الآن"]');
+  await p.fill('input[aria-label="المورّد"]', 'مورّد الكواشف');
   await p.fill('input[placeholder="الصنف"]', 'كاشف السكر');
   await p.locator('input[aria-label="الكمية"]').first().fill('1');
   await p.locator('input[aria-label="سعر الوحدة"]').first().fill('10000');
@@ -82,6 +99,11 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   ok((await p.locator('tr[data-supplier="مورّد الكواشف"] [data-testid="supplier-due"]').innerText()).includes('4,000'), 'the supplier\'s balance: 4,000');
   await p.click('button[aria-label="كشف حساب مورّد الكواشف"]');
   ok((await p.locator('[data-testid="statement"] tbody tr').count()) === 3 && (await p.locator('[data-testid="statement-due"]').innerText()).includes('4,000'), 'account statement: the purchase, two payments, 4,000 owed');
+  await p.goto(B + '/store'); await p.waitForSelector('li[data-purchase]', { timeout: 20000 });
+  await p.locator('li[data-purchase]').first().locator('button:has-text("تم الدفع")').click();
+  ok(await settled(async () => { const x = (await firstPur()); return x.paid === true && x.payments.reduce((t, y) => t + y.amount, 0) === 10000; }), '«تم الدفع» with debts on: the remaining 4,000 recorded as a payment');
+  await p.goto(B + '/store/suppliers'); await p.waitForSelector('tr[data-supplier="مورّد الكواشف"]', { timeout: 20000 });
+  ok(!(await p.locator('tr[data-supplier="مورّد الكواشف"] [data-testid="supplier-due"]').innerText()).includes('4,000'), 'the supplier owes nothing now');
 
   // ── Prices: unit price from the last purchase, stock value, cost per test ──
   await p.goto(B + '/store/settings#extras'); await p.waitForSelector('[data-testid="store-extras"]', { timeout: 20000 });
@@ -92,7 +114,8 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   ok((await p.locator('[data-testid="stock-value"]').innerText()).includes('60,000'), `stock value: 6 × 10,000 = 60,000 (${(await p.locator('[data-testid="stock-value"]').innerText()).replace(/\s+/g, ' ')})`);
   const hb = (await kv(p, 'station.tests.v1')).find((t) => t.code === 'HB');
   await kvPut(p, 'station.stock.v1', (await stock()).map((s) => (s.id === 'glu' ? { ...s, testIds: [hb.id] } : s)));
-  await p.goto(B + '/store/items'); await p.waitForSelector('tr[data-test="HB"] [data-testid="test-cost"]', { timeout: 20000 });
+  await p.goto(B + '/store/items'); await p.waitForSelector('[data-testid="items-list"]', { timeout: 20000 });
+  await p.click('button[role=tab]:has-text("التحاليل وموادها")'); await p.waitForSelector('tr[data-test="HB"] [data-testid="test-cost"]', { timeout: 20000 });
   ok((await p.locator('tr[data-test="HB"] [data-testid="test-cost"]').innerText()).includes('10,000'), 'cost per test: the material linked to it');
 
   // ── Barcodes ──
@@ -102,7 +125,8 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   await p.goto(B + '/store/items?edit=glu'); await p.waitForSelector('input[aria-label="باركود الصنف"]', { timeout: 20000 });
   await p.fill('input[aria-label="باركود الصنف"]', '6291041500213'); await p.click('button:has-text("حفظ التعديل")');
   ok(await settled(async () => (await stock()).find((s) => s.id === 'glu')?.barcode === '6291041500213'), 'barcode saved on the item');
-  await p.goto(B + '/store'); await p.waitForSelector('[data-testid="scan-box"]', { timeout: 20000 });
+  await p.goto(B + '/store'); await p.waitForSelector('[data-testid="purchase-new"]', { timeout: 20000 }); await p.click('[data-testid="purchase-new"]');
+  await p.waitForSelector('[data-testid="scan-box"]', { timeout: 20000 });
   const scan = async (code) => { await p.fill('input[aria-label="امسح الباركود"]', code); await p.press('input[aria-label="امسح الباركود"]', 'Enter'); await p.waitForTimeout(150); };
   await scan('6291041500213'); await scan('6291041500213');
   ok(await p.locator('input[placeholder="الصنف"]').first().inputValue() === 'كاشف السكر' && await p.locator('input[aria-label="الكمية"]').first().inputValue() === '2', 'purchases: scanning twice adds the item with 2');
