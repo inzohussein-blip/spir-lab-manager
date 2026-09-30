@@ -428,7 +428,7 @@ export default function StationSettingsPage() {
                   checked={s.entryWhatsApp !== false}
                   onChange={(v) => setOption({ entryWhatsApp: v })}
                   label="زر مشاركة واتساب بجانب زر الطباعة"
-                  desc="يحفظ الزيارة ويصنع التقرير ملف PDF ويشاركه (واتساب من خيارات الجهاز)، أو يحفظه ويفتح واتساب على رقم المريض لإرفاقه."
+                  desc="يحفظ الزيارة ويفتح واتساب مباشرة على رقم المريض (أو واتساب لاختيار المريض إن لم يكن له رقم)، ويحفظ التقرير ملف PDF لإرفاقه في المحادثة."
                 />
               </SettingCard>
 

@@ -68,6 +68,18 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   await wa.waitForLoadState().catch(() => {});
   ok(wa.url().startsWith('https://wa.me/9647701234567'), `WhatsApp opened on the patient's number (${wa.url().slice(0, 40)})`);
   await wa.close();
+  // No phone number: WhatsApp opens to choose the contact, the PDF still saved.
+  const r = await ctx.newPage(); r.on('dialog', (d) => d.accept());
+  await r.goto(B + '/station'); await r.waitForSelector('label:has-text("الاسم الثلاثي") input', { timeout: 20000 });
+  await r.locator('label:has-text("الاسم الثلاثي") input').fill('مريض بلا رقم');
+  await r.fill('input[placeholder="ابحث عن فحص…"]', 'Hemoglobin'); await r.waitForTimeout(150);
+  await r.locator('div.grid button:has(span.flex-1)').first().click();
+  await r.fill('input[placeholder="ابحث عن فحص…"]', '');
+  await r.locator('input[data-result-idx]').first().fill('13');
+  const [dl2, wa2] = await Promise.all([r.waitForEvent('download', { timeout: 30000 }), ctx.waitForEvent('page', { timeout: 30000 }), r.click('[data-testid="entry-whatsapp"]')]);
+  await wa2.waitForLoadState().catch(() => {});
+  ok(wa2.url().startsWith('https://wa.me/?text=') && dl2.suggestedFilename().endsWith('.pdf'), `no number: WhatsApp opened to choose the patient (${wa2.url().slice(0, 30)}), PDF saved`);
+  await wa2.close(); await r.close();
   await p.locator('input[aria-label^="تمييز"]').first().check();
   ok(await p.locator('#report-sheet tr[data-hl="1"] mark').count() === 1, 'ticked result is highlighted on the report');
   await p.click('button[title="حفظ (Ctrl+S)"]');

@@ -15,6 +15,7 @@ import { TubeLabels } from "@/components/station/TubeLabel";
 import { FormDialog, fillNormals } from "@/components/station/ReportForms";
 import { isFormCode, decodeForm, encodeForm, formProgress, formOptionsOf, hlCount, type FormCode } from "@/lib/station/templates";
 import { computeDerived } from "@/lib/station/derived";
+import { sheetPdf, savePdf, openWhatsApp, waNumber } from "@/lib/station/sharePdf";
 import { useToast } from "@/components/station/Toast";
 import { fmtDate } from "@/lib/utils";
 import { stockOptions } from "@/lib/local/links";
@@ -424,21 +425,22 @@ function StationEntryPage() {
     }
   }
 
-  /** «واتساب»: the sheet as a PDF, shared (or saved, with WhatsApp opened on the patient's number). */
+  /** «واتساب»: WhatsApp opens at once on the patient's number (or, with no number, to choose the
+   *  contact), and the report is saved as a PDF to attach in that chat. */
   const [sharing, setSharing] = useState(false);
   async function onShare() {
+    if (sharing) return;
     const acc = readyToSend("المشاركة");
-    if (!acc || sharing) return;
+    if (!acc) return;
+    openWhatsApp(phone, `نتائج التحاليل — ${name.trim()}${settings.labName ? ` — ${settings.labName}` : ""}`);
     setSharing(true);
     try {
       await Promise.race([loadBarcode(), new Promise((r) => setTimeout(r, 3000))]);
       await new Promise((r) => setTimeout(r, 120)); // the new sample number drawn on the sheet
       const el = document.getElementById("report-sheet");
       if (!el) return;
-      const { sheetPdf, sharePdf } = await import("@/lib/station/sharePdf");
-      const pdf = await sheetPdf(el, paper);
-      const how = await sharePdf(pdf, `${acc}.pdf`, { phone, text: `نتائج التحاليل — ${name.trim()}${settings.labName ? ` — ${settings.labName}` : ""}` });
-      toast.show(how === "saved" ? "حُفظ ملف PDF — أرفقه في واتساب الذي فُتح" : "تمت المشاركة");
+      savePdf(await sheetPdf(el, paper), `${acc}.pdf`);
+      toast.show(waNumber(phone) ? "فُتح واتساب على رقم المريض — أرفق ملف PDF المحفوظ في المحادثة" : "لا رقم هاتف — اختر المريض في واتساب وأرفق ملف PDF المحفوظ");
     } catch {
       toast.show("تعذّر إنشاء ملف PDF — استعمل الطباعة", "warn");
     } finally {
