@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { flagFor, rangeLabel, type Gender, type PrevResult, type StationSettings, type StationTest } from "@/lib/station/store";
 import { tableStyleOf, reportColors, PURPLE, GOLD, DENSITY_PAD, GAP_PX, type TableStyle } from "@/lib/station/tableStyle";
 import { Barcode, loadBarcode } from "@/components/station/Barcode";
@@ -10,6 +10,7 @@ import { FormReport } from "@/components/station/FormReport";
 import { isFormCode, decodeForm, formOptionsOf, type FormCode } from "@/lib/station/templates";
 import { reportExtrasOf, LOGO_PX, WM_SIZE } from "@/lib/station/reportExtras";
 import { CATEGORY_EN } from "@/lib/categoryEn";
+import { NO_FILL, fillSteps, smartFill, headZoom, tableHeight, type Fill } from "@/lib/station/fillPage";
 // The report fonts one can choose (Settings → «خيارات إضافية للتقرير المطبوع»); bundled with the
 // app so they print offline too. The browser only downloads a font when it is used.
 import "@fontsource/cairo/arabic-400.css";
@@ -84,12 +85,6 @@ export function ReportSheet({
   const formRows = rows.filter((r) => isFormCode(r.test?.code));
   const regular = rows.filter((r) => !isFormCode(r.test?.code));
 
-  // Few tests (Settings → «ملء الصفحة عند قلة الفحوصات»): larger text and taller rows, so the
-  // results table reaches further down the page.
-  const fill = settings.reportFill === true ? fillScale(regular.length) : { font: 1, pad: 1 };
-  const ts = fill.font === 1 ? baseTs : { ...baseTs, fontSize: Math.round(baseTs.fontSize * fill.font * 10) / 10 };
-  const pad = { a4: Math.round(DENSITY_PAD[ts.density].a4 * fill.pad), a5: Math.round(DENSITY_PAD[ts.density].a5 * fill.pad) };
-
   // Group rows by catalog category, keeping first-appearance order.
   const groups: { cat: string; rows: ReportRow[] }[] = [];
   for (const r of regular) {
@@ -100,19 +95,65 @@ export function ReportSheet({
     else groups.push({ cat, rows: [r] });
   }
 
+  // Extra options (pre-printed paper, logo placement and watermark, font) — see lib/station/reportExtras.
+  const x = reportExtrasOf(settings);
+
+  // Few tests (Settings → «ملء الصفحة»): larger text and taller rows, so the results table reaches
+  // further down the page. The section's other ways are all off unless chosen (lib/station/fillPage).
+  const fillOn = settings.reportFill === true;
+  const opt = (v?: boolean) => fillOn && v === true;
+  const level = fillOn ? settings.fillLevel : undefined;
+  const cardMode = opt(settings.fillCard) && formRows.length === 0 && regular.length > 0 && regular.length <= 2;
+  const smart = opt(settings.fillSmart) && !cardMode;
+  const notesOn = opt(settings.fillNotes) && regular.length > 0 && regular.length <= 12;
+  // «ملء ذكي»: the height of everything but the table, measured on the sheet (see the effect below).
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const [measured, setMeasured] = useState({ other: 0, wrap: 1 });
+  const fill: Fill = !fillOn || cardMode ? NO_FILL
+    : smart && measured.other > 0 ? smartFill(baseTs, paper, regular.length, groups.length, measured.other, measured.wrap, x.pre ?? undefined, level)
+    : fillSteps(regular.length, paper, opt(settings.fillPaper), level);
+  const ts = fill.font === 1 ? baseTs : { ...baseTs, fontSize: Math.round(baseTs.fontSize * fill.font * 10) / 10 };
+  const pad = { a4: Math.round(DENSITY_PAD[ts.density].a4 * fill.pad), a5: Math.round(DENSITY_PAD[ts.density].a5 * fill.pad) };
+  const hz = opt(settings.fillHead) ? (cardMode ? 1.3 : headZoom(fill)) : 1;
+  // «النتيجة السابقة عند وجود مساحة»: previous results printed when the tests are few.
+  const showPrev = printPrev || (opt(settings.fillPrev) && regular.length <= 10 && regular.some((r) => prev[r.key]));
+
+  // Measured after every render (the name, logo or doctor can change the letterhead's height); the
+  // counter stops a back-and-forth once the measure settles.
+  const measures = useRef({ key: "", n: 0 });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!smart) return;
+    const el = sheetRef.current;
+    const head = el?.querySelector<HTMLElement>("[data-fill-head]");
+    const sign = el?.querySelector<HTMLElement>(".report-sign");
+    const table = el?.querySelector<HTMLElement>("[data-results]");
+    if (!el || !head || !sign || !table) return;
+    // In print the footer bar is fixed in the bottom margin and the signature sits 5 mm (A5: 2 mm)
+    // under the rest.
+    const mm = 96 / 25.4;
+    const px = Math.round(head.offsetHeight + sign.offsetHeight + (paper === "A5" ? 2 : 5) * mm + (notesOn ? 24 * mm + 16 : 0));
+    // The table on screen against one line per row: how much its long names and ranges wrap.
+    const wrap = Math.round(((table.offsetHeight + GAP_PX[baseTs.gap]) / tableHeight(baseTs, "screen", regular.length, groups.length, fill)) * 100) / 100;
+    const key = `${paper}|${regular.length}|${notesOn}`;
+    if (measures.current.key !== key) measures.current = { key, n: 0 };
+    if ((Math.abs(px - measured.other) > 6 || Math.abs(wrap - measured.wrap) > 0.03) && measures.current.n < 6) {
+      measures.current.n++;
+      setMeasured({ other: px, wrap });
+    }
+  });
+
   // QR code at the bottom (Settings → «رمز QR أسفل التقرير», see lib/station/labQr).
   const qrCode = labQrCode(settings);
   const qrLogo = settings.labQrLogo !== false ? settings.logo : undefined;
 
-  // Extra options (pre-printed paper, logo placement and watermark, font) — see lib/station/reportExtras.
-  const x = reportExtrasOf(settings);
   const logoPx = LOGO_PX[x.head.logoSize];
   const logoImg = settings.logo && (
     // eslint-disable-next-line @next/next/no-img-element
     <img src={settings.logo} alt="" className="shrink-0 object-contain" style={{ width: logoPx, height: logoPx }} data-testid="report-logo" />
   );
   const nameBlock = (
-    <div className={x.head.logo === "center" ? "text-center" : ""}>
+    <div className={x.head.logo === "center" ? "text-center" : ""} style={hz !== 1 ? { zoom: hz } : undefined}>
       <h2 className="text-2xl font-extrabold leading-tight" style={{ color: c.title }}>{settings.labName}</h2>
       {settings.labSubtitle && <p className="text-sm font-medium" style={{ color: c.subtitle }}>{settings.labSubtitle}</p>}
     </div>
@@ -153,7 +194,7 @@ export function ReportSheet({
         {/* Accent rule with a main-colour center */}
         {!x.pre && <div className="h-1 w-full rounded" style={{ background: `linear-gradient(90deg, ${c.border} 0%, ${c.title} 50%, ${c.border} 100%)`, ...exact }} />}
 
-        <div className="report-keep mt-4 grid grid-cols-2 gap-x-6 gap-y-1.5 rounded-lg border-2 p-3 text-sm sm:grid-cols-3" style={{ borderColor: c.border }}>
+        <div className="report-keep mt-4 grid grid-cols-2 gap-x-6 gap-y-1.5 rounded-lg border-2 p-3 text-sm sm:grid-cols-3" style={{ borderColor: c.border, ...(hz !== 1 ? { zoom: hz } : {}) }} data-testid="report-patient">
           <div><span style={{ color: c.title }} className="font-semibold">المريض:</span> <b>{patient.name || "—"}</b></div>
           <div><span style={{ color: c.title }} className="font-semibold">الجنس:</span> {gender === "male" ? "ذكر" : gender === "female" ? "أنثى" : "—"}</div>
           <div><span style={{ color: c.title }} className="font-semibold">العمر:</span> {patient.age || "—"}</div>
@@ -208,7 +249,7 @@ export function ReportSheet({
         ` : ""}
       }`}</style>}
 
-      <div id="report-sheet" data-pre={x.pre ? "1" : undefined}
+      <div id="report-sheet" ref={sheetRef} data-pre={x.pre ? "1" : undefined} data-fill={fillOn ? `${fill.font}` : undefined}
         className={`relative isolate mx-auto flex max-w-[210mm] flex-col bg-white p-8 text-black shadow-sm print:mt-0 print:shadow-none ${printable ? "" : "print:hidden"} ${className}`}
         style={{ ...(x.font ? { fontFamily: x.font } : {}), ...(x.pre ? { paddingTop: `${x.pre.top}mm`, paddingBottom: `${x.pre.bottom}mm` } : {}) }}>
         {/* Pre-printed paper: where its own letterhead and footer are (on screen only) */}
@@ -226,13 +267,15 @@ export function ReportSheet({
           </div>
         )}
 
-        {header}
+        <div data-fill-head>{header}</div>
 
         {/* Results — printed in English, left to right (the entry screen stays Arabic). */}
-        {(regular.length > 0 || formRows.length === 0) && (
+        {cardMode ? (
+          <ResultCards ts={ts} rows={regular} gender={gender} age={patient.age} prev={showPrev ? prev : {}} />
+        ) : (regular.length > 0 || formRows.length === 0) && (
           <ResultsTable
             ts={ts} groups={groups} empty={rows.length === 0} emptyText={emptyText}
-            gender={gender} age={patient.age} prev={prev} printPrev={printPrev} paper={paper} padScale={fill.pad}
+            gender={gender} age={patient.age} prev={prev} printPrev={showPrev} paper={paper} padScale={fill.pad}
           />
         )}
 
@@ -245,6 +288,14 @@ export function ReportSheet({
             </div>
           );
         })}
+
+        {/* «مربع ملاحظات في الفراغ»: lined space for handwriting between the results and the signature */}
+        {notesOn && (
+          <div className="report-keep mt-4 flex min-h-[24mm] flex-1 flex-col rounded-lg border-2 border-dashed p-3" style={{ borderColor: c.border }} data-testid="report-notes">
+            <div className="text-xs font-bold" style={{ color: c.title }}>ملاحظات / Notes</div>
+            <div className="mt-2 flex-1" style={{ backgroundImage: "repeating-linear-gradient(to bottom, transparent 0 27px, #d1d5db 27px 28px)", ...exact }} />
+          </div>
+        )}
 
         {/* Bottom group — signature sits at the bottom of the last page */}
         <div className="report-keep mt-auto">
@@ -284,13 +335,45 @@ export function ReportSheet({
 
 type Group = { cat: string; rows: ReportRow[] };
 
-/** How much larger the results table gets when only a few tests are on the sheet. */
-export function fillScale(n: number): { font: number; pad: number } {
-  if (n <= 3) return { font: 1.45, pad: 3 };
-  if (n <= 6) return { font: 1.3, pad: 2.3 };
-  if (n <= 10) return { font: 1.15, pad: 1.6 };
-  if (n <= 14) return { font: 1.05, pad: 1.25 };
-  return { font: 1, pad: 1 };
+/** «عرض البطاقة»: one or two tests, each result large in its own card (the ranges and flag under it). */
+function ResultCards({ ts, rows, gender, age, prev }: { ts: TableStyle; rows: ReportRow[]; gender: Gender; age?: string; prev: Record<string, PrevResult> }) {
+  const c = reportColors(ts);
+  return (
+    <div dir="ltr" className="mt-6 flex flex-col gap-5" data-testid="report-cards">
+      {rows.map((r) => {
+        const t = r.test;
+        const qual = t?.normal.kind === "qual";
+        const f = t ? flagFor(r.value, t.normal, gender, age) : null;
+        const color = f === "H" ? "#b91c1c" : f === "L" ? "#1d4ed8" : "#111827";
+        const p = prev[r.key];
+        const ar = t?.category?.trim();
+        return (
+          <div key={r.key} className="report-keep overflow-hidden rounded-xl border-2" style={{ borderColor: c.border, background: r.hl ? HL_ROW : "#fff", ...exact }} data-card={r.key}>
+            <div className="flex items-center justify-between px-6 py-3 text-white" style={{ background: c.header, ...exact }}>
+              <span className="text-2xl font-bold">{t?.name_en?.trim() || r.name}</span>
+              {ar && <span className="text-sm opacity-90">{CATEGORY_EN[ar] ?? ar}</span>}
+            </div>
+            <div className="flex flex-wrap items-end justify-center gap-x-6 gap-y-2 px-6 py-10">
+              <span className="text-8xl font-extrabold tabular-nums leading-none" style={{ color }}>
+                {r.hl && r.value ? <mark className="rounded px-1" style={{ background: HL_MARK, color: "inherit", ...exact }}>{r.value}</mark> : r.value || "—"}
+              </span>
+              {r.unit && <span className="pb-2 text-3xl text-gray-500">{r.unit}</span>}
+              {!qual && (f === "H" || f === "L" || f === "N") && (
+                <span className="mb-2 inline-grid size-12 place-items-center rounded-full text-xl font-bold" data-flag
+                  style={f === "N" ? { background: "#e7f6ef", color: "#127a4f", ...exact } : { background: color, color: "#fff", ...exact }}>{f}</span>
+              )}
+            </div>
+            {(!qual || p) && (
+              <div className="flex flex-wrap justify-between gap-3 border-t px-6 py-4 text-lg text-gray-600" style={{ borderColor: c.line }}>
+                {!qual && <span data-range>Reference Range: <b className="text-gray-800">{t ? rangeLabel(t.normal, gender, t.unit, age) : "—"}</b></span>}
+                {p && <span>Previous: <b className="tabular-nums text-gray-800">{p.value}</b> <span className="text-sm">({ymd(p.at)})</span></span>}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 /** The results table alone — used by the printed sheet and by the Settings preview. */
@@ -313,7 +396,7 @@ export function ResultsTable({ ts, groups, empty = false, emptyText = "No tests 
   const inset = ts.width === "inset" ? { marginInline: 24 } : {};
 
   return (
-    <div dir="ltr" style={{ marginTop: GAP_PX[ts.gap], ...inset }}>
+    <div dir="ltr" style={{ marginTop: GAP_PX[ts.gap], ...inset }} data-results>
       <div className="flex items-center gap-2">
         <span className="h-5 w-1.5 rounded" style={{ background: c.border, ...exact }} />
         <span className="text-sm font-bold" style={{ color: c.groupText }}>Test Results</span>

@@ -3,10 +3,11 @@
 import { SyncPanel } from "@/components/local/SyncPanel";
 import { kvFlush } from "@/lib/local/kv";
 import { useEffect, useRef, useState } from "react";
-import { Settings, Image as ImageIcon, Download, Upload, Trash2, Stethoscope, Plus, Pencil, X, Smartphone, History, ListCollapse, ClipboardList, QrCode as QrCodeIcon, Hash, PenLine, RotateCcw, FileText, Building2, Phone, Eye, Calculator, Printer, Tag, Boxes, HardDrive, ShieldCheck } from "lucide-react";
+import { Settings, Image as ImageIcon, Download, Upload, Trash2, Stethoscope, Plus, Pencil, X, Smartphone, History, ListCollapse, ClipboardList, QrCode as QrCodeIcon, Hash, PenLine, RotateCcw, FileText, Building2, Phone, Eye, Calculator, Printer, Tag, Boxes, HardDrive, ShieldCheck, Maximize2, Sparkles } from "lucide-react";
 import { labQrCode, QR_TITLE_DEFAULT, QR_HINT_DEFAULT } from "@/lib/station/labQr";
 import { SettingsLayout, notifySaved } from "@/components/SettingsLayout";
 import { ReportPreview } from "@/components/station/ReportPreview";
+import { FILL_LEVELS } from "@/lib/station/fillPage";
 import {
   getSettings, saveSettings, normalizeUrl, exportBackup, importBackup, getDoctors, saveDoctors, markBackupNow, daysSinceBackup, getVisits, storageUsage, requestPersistentStorage, uid, type StorageUsage,
   getDeviceTag, setDeviceTag, resetBuiltinTests, restoreDefaultTests,
@@ -116,7 +117,8 @@ export default function StationSettingsPage() {
 
   // What is switched on in each section (shown beside its name).
   const onCount = (xs: boolean[]) => { const n = xs.filter(Boolean).length; return n ? `${n} مفعّل` : null; };
-  const reportOn = onCount([s.reportBarcode !== false, s.labQr !== false, s.printPrevious === true, s.reportFill === true, s.signatureOn === true, s.prePrinted === true, s.reportHeadOn === true, s.reportFontOn === true]);
+  const reportOn = onCount([s.reportBarcode !== false, s.labQr !== false, s.printPrevious === true, s.signatureOn === true, s.prePrinted === true, s.reportHeadOn === true, s.reportFontOn === true]);
+  const fillOn = onCount([s.reportFill === true, s.fillSmart === true, s.fillPaper === true, s.fillNotes === true, s.fillHead === true, s.fillCard === true, s.fillPrev === true, !!s.fillLevel]);
   const formsOn = onCount([s.formBoldAbnormal !== false, s.formHideEmpty === true, s.csTestedOnly === true, s.sfaDiagnosis !== false, s.sfaAutoCalc !== false, s.formExtraNormals === true]);
   const entryOn = onCount([s.entryPrintButton !== false, s.entryWhatsApp !== false, s.entryHighlight !== false, s.showPrevious !== false, s.autoDerived === true, s.tubeLabel === true, s.collapseGroups === true, s.ageUnit === true, s.deliveryStatus === true]);
   const preview = <ReportPreview settings={s} />;
@@ -220,12 +222,6 @@ export default function StationSettingsPage() {
                   onChange={(v) => setOption({ printPrevious: v })}
                   label="طباعة النتيجة السابقة مع الجديدة"
                   desc="يضيف عمود «النتيجة السابقة» إلى جدول النتائج."
-                />
-                <Toggle
-                  checked={s.reportFill === true}
-                  onChange={(v) => setOption({ reportFill: v })}
-                  label="ملء الصفحة عند قلة الفحوصات"
-                  desc="إذا كانت الفحوصات قليلة يكبر خط جدول النتائج وتتسع أسطره فينزل الجدول إلى أسفل الورقة بدل أن يبقى صغيراً في أعلاها. كلما قلّت الفحوصات زاد التوسيع."
                 />
               </SettingCard>
 
@@ -358,6 +354,59 @@ export default function StationSettingsPage() {
                         </button>
                       );
                     })}
+                  </SubOptions>
+                )}
+              </SettingCard>
+            </>
+          ),
+        },
+        {
+          id: "fill", label: "ملء الصفحة", hint: "حين تكون الفحوصات قليلة", icon: <Maximize2 />, badge: fillOn,
+          aside: preview,
+          content: (
+            <>
+              <SettingCard title="ملء الصفحة عند قلة الفحوصات" icon={<Maximize2 />} desc="يُشغَّل ويُوقف أيضاً بزر «ملء الصفحة» تحت إدخال النتائج." testid="fill-card">
+                <Toggle
+                  checked={s.reportFill === true}
+                  onChange={(v) => setOption({ reportFill: v })}
+                  label="ملء الصفحة عند قلة الفحوصات"
+                  desc="إذا كانت الفحوصات قليلة يكبر خط جدول النتائج وتتسع أسطره فينزل الجدول إلى أسفل الورقة بدل أن يبقى صغيراً في أعلاها. كلما قلّت الفحوصات زاد التوسيع."
+                />
+              </SettingCard>
+
+              <SettingCard title="طرق إضافية لملء الصفحة" icon={<Sparkles />} testid="fill-more"
+                desc={s.reportFill === true ? "كلها موقوفة في البداية — شغّل ما تريد وانظر المعاينة." : "تعمل حين يكون «ملء الصفحة» مشغّلاً (أعلاه أو بزره تحت إدخال النتائج)."}>
+                <Toggle checked={s.fillSmart === true} onChange={(v) => setOption({ fillSmart: v })}
+                  label="ملء ذكي بقياس المساحة"
+                  desc="يقيس الفراغ الفعلي في الورقة (بعد الترويسة والتوقيع) ويكبّر الجدول حتى يملأه، بدل الدرجات الثابتة حسب عدد الفحوصات." />
+                <Toggle checked={s.fillPaper === true} onChange={(v) => setOption({ fillPaper: v })}
+                  label="التكبير حسب حجم الورق"
+                  desc="تكبير أكثر على A4 وأقل على A5 (مع الدرجات الثابتة؛ الملء الذكي يراعي حجم الورق بنفسه)." />
+                <Toggle checked={s.fillNotes === true} onChange={(v) => setOption({ fillNotes: v })}
+                  label="مربع ملاحظات في الفراغ"
+                  desc="مربع «ملاحظات» بأسطر للكتابة باليد يملأ المسافة بين النتائج والتوقيع (التوقيع والتذييل أسفل الورقة دائماً)." />
+                <Toggle checked={s.fillHead === true} onChange={(v) => setOption({ fillHead: v })}
+                  label="تكبير اسم المختبر ومعلومات المريض أيضاً"
+                  desc="تكبر الترويسة ومربع معلومات المريض مع الجدول بتناسق." />
+                <Toggle checked={s.fillCard === true} onChange={(v) => setOption({ fillCard: v })}
+                  label="عرض البطاقة لفحص أو فحصين"
+                  desc="كل نتيجة بخط كبير في بطاقة خاصة، وتحتها المعدل الطبيعي والعلامة، بدل الجدول." />
+                <Toggle checked={s.fillPrev === true} onChange={(v) => setOption({ fillPrev: v })}
+                  label="النتيجة السابقة عند وجود مساحة"
+                  desc="إذا كانت للمريض نتيجة سابقة لنفس الفحص تُطبع بجانب الجديدة للمقارنة (حتى 10 فحوصات)." />
+                <Toggle checked={!!s.fillLevel} onChange={(v) => setOption({ fillLevel: v ? "medium" : undefined })}
+                  label="درجة التكبير"
+                  desc="حدّ لما يكبر إليه الخط: خفيف أو متوسط أو كامل." />
+                {s.fillLevel && (
+                  <SubOptions>
+                    <div className="flex gap-2" role="group" aria-label="درجة التكبير">
+                      {(Object.keys(FILL_LEVELS) as (keyof typeof FILL_LEVELS)[]).map((k) => (
+                        <button key={k} type="button" onClick={() => setOption({ fillLevel: k })} aria-pressed={s.fillLevel === k}
+                          className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium ${s.fillLevel === k ? "border-brand bg-teal-50 text-brand-dark" : "border-line hover:bg-canvas"}`}>
+                          {FILL_LEVELS[k].label}
+                        </button>
+                      ))}
+                    </div>
                   </SubOptions>
                 )}
               </SettingCard>

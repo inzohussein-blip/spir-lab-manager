@@ -186,6 +186,21 @@ export interface StationSettings {
   reportBarcode?: boolean;
   /** Few tests: a larger results table that fills more of the page (off by default). */
   reportFill?: boolean;
+  /** «ملء الصفحة» — more ways, each off by default and working while `reportFill` is on:
+   *  the table sized to the space measured on the sheet; */
+  fillSmart?: boolean;
+  /** larger on A4, smaller on A5 (the fixed steps); */
+  fillPaper?: boolean;
+  /** a «ملاحظات» box for handwriting in the space between the results and the signature; */
+  fillNotes?: boolean;
+  /** the lab's name and the patient's details larger too; */
+  fillHead?: boolean;
+  /** one or two tests: each result in a large card instead of the table; */
+  fillCard?: boolean;
+  /** the patient's previous result printed beside the new one when there is room; */
+  fillPrev?: boolean;
+  /** how far it may grow: light / medium / full (unset: as before). */
+  fillLevel?: "light" | "medium" | "full";
   /** A «واتساب» button beside it: the report as a PDF to share — on by default. */
   entryWhatsApp?: boolean;
   /** A «طباعة» button under the results entry box — on by default. */

@@ -108,7 +108,7 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   // ── Few tests: «ملء الصفحة» makes the results table larger ──
   const font = async () => Number(await p.locator('#report-sheet table[data-font]').first().getAttribute('data-font'));
   const before = await font();
-  await p.goto(B + '/station/settings#report'); await p.waitForTimeout(1200);
+  await p.goto(B + '/station/settings#fill'); await p.waitForTimeout(1200);
   await p.locator('label:has(span:text-is("ملء الصفحة عند قلة الفحوصات"))').locator('button[role=switch]').click();
   ok(await settled(async () => (await kv(p, 'station.settings.v1'))?.reportFill === true), 'fill-page option switched on');
   await p.goto(B + '/station'); await p.waitForSelector('label:has-text("الاسم الثلاثي") input');
