@@ -2,6 +2,7 @@
 
 import { SyncPanel } from "@/components/local/SyncPanel";
 import { ThemeCard } from "@/components/local/LocalTheme";
+import { PinCard } from "@/components/local/PinGate";
 import { THEME_KEYS } from "@/lib/local/theme";
 import { LockGate } from "@/components/training/LockGate";
 import { useEffect, useRef, useState } from "react";
@@ -152,6 +153,7 @@ export default function TrainingSettingsPage() {
             <>
               <LockGate><div className="flex flex-col gap-4"><BackupCard /><LockCard /><SyncPanel /></div></LockGate>
               <ThemeCard storageKey={THEME_KEYS.training} />
+              <PinCard station="training" />
             </>
           ),
         },

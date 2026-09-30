@@ -306,7 +306,7 @@ export default function StationVisitsPage() {
             accession={sel.accession}
             patient={sel.patient}
             referrer={sel.referrer}
-            rows={sel.results.map((r) => ({ key: r.testId, name: r.name_ar, value: r.value, unit: r.unit, test: byId(r.testId) }))}
+            rows={sel.results.map((r) => ({ key: r.testId, name: r.name_ar, value: r.value, unit: r.unit, test: byId(r.testId), hl: r.hl }))}
             prev={prev}
             printPrev={printPrev}
             emptyText="No results"

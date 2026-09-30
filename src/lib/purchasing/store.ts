@@ -1,12 +1,13 @@
 "use client";
 
 /**
- * Local, offline-first store for the standalone Purchasing app — a separate
- * system with no link to the lab admin panel or the lab station. Everything
- * lives in this browser's storage (lib/local/kv — single machine, no database).
+ * Local, offline-first store for the Purchasing app. Everything lives in this browser's
+ * storage (lib/local/kv — single machine, no database). Its stock room is the lab station's
+ * (station.stock.v1): purchases add to it and the lab station deducts from it.
  */
 
 import { kvGet, kvSet } from "@/lib/local/kv";
+import { getStock, saveStock } from "@/lib/station/store";
 
 export interface Supplier {
   id: string;
@@ -31,6 +32,8 @@ export interface Purchase {
   total: number;
   paid: boolean;
   notes?: string;
+  /** Quantities this purchase added to the stock room (taken back if it is deleted). */
+  stockAdded?: { id: string; qty: number }[];
 }
 
 export interface PurchasingSettings {
@@ -91,7 +94,33 @@ export function updatePurchase(p: Purchase): void {
 }
 export function deletePurchases(ids: string[]): void {
   const set = new Set(ids);
-  write(K_PUR, getPurchases().filter((p) => !set.has(p.id)));
+  const all = getPurchases();
+  const back = all.filter((p) => set.has(p.id)).flatMap((p) => p.stockAdded ?? []);
+  write(K_PUR, all.filter((p) => !set.has(p.id)));
+  if (back.length) changeStock(back.map((b) => ({ id: b.id, qty: -b.qty })));
+}
+
+// ── Stock room link ──────────────────────────────────────────────────────────
+const key = (s: string) => s.trim().toLowerCase();
+/** The stock item a bought line refers to (same name), if any. */
+export function stockMatch(name: string): { id: string; name: string; qty: number } | null {
+  const k = key(name);
+  if (!k) return null;
+  return getStock().find((s) => key(s.name) === k) ?? null;
+}
+function changeStock(moves: { id: string; qty: number }[]): void {
+  const by = new Map<string, number>();
+  for (const m of moves) by.set(m.id, (by.get(m.id) ?? 0) + m.qty);
+  saveStock(getStock().map((s) => (by.has(s.id) ? { ...s, qty: Math.max(0, Number(s.qty) + by.get(s.id)!) } : s)));
+}
+/** Add bought quantities to the matching stock items; returns what was added. */
+export function addToStock(items: PurchaseItem[]): { id: string; qty: number }[] {
+  const added = items
+    .map((it) => ({ m: stockMatch(it.name), qty: Number(it.qty) || 0 }))
+    .filter((x): x is { m: NonNullable<typeof x.m>; qty: number } => !!x.m && x.qty > 0)
+    .map((x) => ({ id: x.m.id, qty: x.qty }));
+  if (added.length) changeStock(added);
+  return added;
 }
 export function getPurchase(id: string): Purchase | null {
   return getPurchases().find((p) => p.id === id) ?? null;
@@ -118,6 +147,8 @@ export interface PurchasingBackup {
   suppliers: Supplier[];
   purchases: Purchase[];
   settings: PurchasingSettings;
+  /** The stock room (shared with the lab station on this device). */
+  stock?: ReturnType<typeof getStock>;
 }
 export function exportBackup(): PurchasingBackup {
   return {
@@ -127,6 +158,7 @@ export function exportBackup(): PurchasingBackup {
     suppliers: getSuppliers(),
     purchases: getPurchases(),
     settings: getSettings(),
+    stock: getStock(),
   };
 }
 export function importBackup(data: unknown): boolean {
@@ -136,6 +168,7 @@ export function importBackup(data: unknown): boolean {
     if (b.suppliers) write(K_SUP, b.suppliers);
     if (b.purchases) write(K_PUR, b.purchases);
     if (b.settings) write(K_SET, b.settings);
+    if (Array.isArray(b.stock)) saveStock(b.stock);
     return true;
   } catch {
     return false;

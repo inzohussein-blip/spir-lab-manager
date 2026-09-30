@@ -60,11 +60,30 @@ const fs = require('node:fs');
   await d.screenshot({ path: tmp('lic-msg.png') });
   await d.locator('button:text-is("تم")').click(); await d.reload(); await d.waitForTimeout(1500);
   ok(await d.locator('text=رسالة من المزوّد').count() === 0, 'message stays dismissed after «تم»');
+  // station PIN forgotten: the owner sets a new one, the device takes it with «نسيت الرمز؟ ← تحديث»
+  await d.goto(B + '/station/settings#device'); await d.waitForTimeout(1500);
+  await d.click('[data-testid="pin-card"] button:has-text("تفعيل رمز الدخول")');
+  await d.fill('input[aria-label="الرمز الجديد"]', '1111'); await d.fill('input[aria-label="تأكيد الرمز"]', '1111'); await d.click('button:has-text("حفظ الرمز")');
+  const dp = await ctxD.newPage(); dp.on('pageerror', e => errs.push(e.message.slice(0, 120)));
+  await dp.goto(B + '/station'); await dp.waitForTimeout(1500);
+  ok(await dp.locator('[data-testid="pin-gate"]').isVisible(), 'device PIN asked in a new window');
+  await o.reload(); await o.waitForTimeout(800);
+  await card('مختبر الرسالة').locator('button:has-text("الدفع والجهاز والرسالة والسجل")').click();
+  const po = card('مختبر الرسالة').locator('[data-testid="pin-owner"]');
+  await po.locator('input[aria-label="رمز الدخول الجديد"]').fill('2468'); await po.locator('button:has-text("تعيين الرمز")').click(); await o.waitForTimeout(800);
+  ok((await card('مختبر الرسالة').locator('[data-testid="pin-owner"]').innerText()).includes('رمز جديد'), 'owner set a new station PIN');
+  await dp.click('[data-testid="pin-gate"] button:has-text("نسيت الرمز؟")');
+  await dp.click('[data-testid="pin-gate"] button:has-text("تحديث من المزوّد")'); await dp.waitForTimeout(1500);
+  await dp.fill('input[aria-label="رمز الدخول"]', '1111'); await dp.click('[data-testid="pin-gate"] button:has-text("دخول")');
+  ok(await dp.locator('text=رمز غير صحيح').isVisible(), 'the forgotten PIN no longer works');
+  await dp.fill('input[aria-label="رمز الدخول"]', '2468'); await dp.click('[data-testid="pin-gate"] button:has-text("دخول")');
+  ok(await dp.locator('[data-testid="pin-gate"]').count() === 0, 'the owner\'s new PIN opens the station');
+  await dp.close();
   // 3. history
   await o.reload(); await o.waitForTimeout(800);
   await card('مختبر الرسالة').locator('button:has-text("الدفع والجهاز والرسالة والسجل")').click();
   const hist = await card('مختبر الرسالة').locator('ul').innerText();
-  ok(['إنشاء الرمز', 'تفعيل على جهاز', 'تسجيل الدفع', 'رسالة للمختبر'].every((k) => hist.includes(k)), 'history lists create / activate / payment / message');
+  ok(['إنشاء الرمز', 'تفعيل على جهاز', 'تسجيل الدفع', 'رسالة للمختبر', 'رمز دخول المحطات'].every((k) => hist.includes(k)), 'history lists create / activate / payment / message / PIN');
   // 1. filters & sort
   await o.click('button[aria-pressed]:has-text("تجريبي")'); await o.waitForTimeout(200);
   ok(await o.locator('div[data-lab]').count() === 1 && await o.locator('div[data-lab="مختبر التجربة"]').count() === 1, 'filter «تجريبي» shows only the trial code');

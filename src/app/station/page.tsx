@@ -55,10 +55,11 @@ function PrevLine({ prev, current }: { prev: { value: string; at: number }; curr
 /** Serialized form state used to detect unsaved changes. */
 function formSnapshot(
   f: { name: string; gender: Gender; age: string; phone: string; referrer: string },
-  selected: Set<string>, results: Record<string, string>, tests: StationTest[],
+  selected: Set<string>, results: Record<string, string>, tests: StationTest[], hl: Set<string> = new Set(),
 ): string {
   const chosen = tests.filter((t) => selected.has(t.id));
-  return JSON.stringify([f.name.trim(), f.gender, f.age, f.phone, f.referrer, Array.from(selected).sort(), chosen.map((t) => results[t.id] ?? "")]);
+  const marks = chosen.filter((t) => hl.has(t.id)).map((t) => t.id);
+  return JSON.stringify([f.name.trim(), f.gender, f.age, f.phone, f.referrer, Array.from(selected).sort(), chosen.map((t) => results[t.id] ?? ""), ...(marks.length ? [marks] : [])]);
 }
 
 /** Card header — icon tile + title + hint, matching the sidebar style. */
@@ -89,6 +90,8 @@ function StationEntryPage() {
   const [referrer, setReferrer] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [results, setResults] = useState<Record<string, string>>({});
+  // Results ticked «تمييز» (highlighted on the printed report).
+  const [hl, setHl] = useState<Set<string>>(new Set());
   const [q, setQ] = useState("");
   const [openCats, setOpenCats] = useState<Set<string>>(new Set()); // collapsible groups
   const [paper, setPaper] = useState<"A4" | "A5">("A4");
@@ -144,9 +147,11 @@ function StationEntryPage() {
         const rmap: Record<string, string> = {};
         v.results.forEach((r) => { rmap[r.testId] = r.value; });
         setResults(rmap);
+        const marks = new Set(v.results.filter((r) => r.hl).map((r) => r.testId));
+        setHl(marks);
         setBaseline(formSnapshot(
           { name: v.patient.name, gender: v.patient.gender, age: v.patient.age ?? "", phone: v.patient.phone ?? "", referrer: v.referrer ?? "" },
-          ids, rmap, catalog,
+          ids, rmap, catalog, marks,
         ));
       }
       return;
@@ -248,7 +253,7 @@ function StationEntryPage() {
   const filledCount = chosen.length - missingResults.length;
 
   // Unsaved-changes tracking (note field is checked separately — it clears on save).
-  const snapshot = formSnapshot({ name, gender, age, phone, referrer }, selected, results, tests);
+  const snapshot = formSnapshot({ name, gender, age, phone, referrer }, selected, results, tests, hl);
   const unsaved = (!!name.trim() || selected.size > 0) && (snapshot !== baseline || !!newNote.trim());
 
   function resetForm() {
@@ -256,7 +261,7 @@ function StationEntryPage() {
     setEditId(null); setCreatedAt(null); setAccession("");
     setPatientId(null); setPatientNotes([]); setNewNote("");
     setName(""); setGender(""); setAge(""); setAgeU("y"); setPhone(""); setReferrer("");
-    setSelected(new Set()); setResults({}); setQ(""); setBaseline("");
+    setSelected(new Set()); setResults({}); setHl(new Set()); setQ(""); setBaseline("");
     if (searchParams.get("edit") || searchParams.get("patient")) router.replace("/station");
     nameRef.current?.focus();
   }
@@ -327,6 +332,7 @@ function StationEntryPage() {
       referrer: referrer.trim() || undefined,
       results: chosen.map((t) => ({
         testId: t.id, name_ar: t.name_ar, value: results[t.id] ?? "", unit: t.unit,
+        ...(hl.has(t.id) && !isFormCode(t.code) ? { hl: true } : {}),
       })),
     };
     // Tests already on the saved visit had their stock deducted when first saved.
@@ -706,6 +712,14 @@ function StationEntryPage() {
                         <div className="mb-1 flex items-center justify-between gap-2">
                           <span className="truncate text-sm font-medium">{t.name_ar}</span>
                           <div className="flex items-center gap-1">
+                            {settings.entryHighlight !== false && (
+                              <label title="تمييز النتيجة بلون على التقرير المطبوع" className={`inline-flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${hl.has(t.id) ? "bg-yellow-200 text-yellow-900" : "text-muted hover:bg-canvas"}`}>
+                                <input type="checkbox" checked={hl.has(t.id)} aria-label={`تمييز ${t.name_ar}`}
+                                  onChange={() => setHl((s) => { const n = new Set(s); n.has(t.id) ? n.delete(t.id) : n.add(t.id); return n; })}
+                                  className="size-3.5 accent-yellow-500" />
+                                تمييز
+                              </label>
+                            )}
                             <FlagPill f={f} />
                             <button
                               type="button"
@@ -724,7 +738,7 @@ function StationEntryPage() {
                             onChange={(e) => setResults((r) => ({ ...r, [t.id]: e.target.value }))}
                             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusNextResult(idx); } }}
                             placeholder="النتيجة"
-                            className={`${inp} text-base font-semibold ${tint}`}
+                            className={`${inp} text-base font-semibold ${tint} ${hl.has(t.id) ? "ring-2 ring-yellow-300" : ""}`}
                           />
                           {t.unit && <span dir="ltr" className="shrink-0 text-xs text-muted">{t.unit}</span>}
                         </div>
@@ -774,6 +788,12 @@ function StationEntryPage() {
                   {missingResults.length} فحص بدون نتيجة — أكملها قبل الطباعة.
                 </p>
               )}
+              {chosen.length > 0 && settings.entryPrintButton !== false && (
+                <button onClick={onPrint} data-testid="entry-print" title="طباعة (Ctrl+P)"
+                  className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-brand px-3.5 py-2.5 text-sm font-semibold text-white hover:bg-brand-dark">
+                  <Printer className="size-4" /> طباعة {paper}
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -788,7 +808,7 @@ function StationEntryPage() {
         accession={accession || undefined}
         patient={{ name, gender, age, phone }}
         referrer={referrer || undefined}
-        rows={chosen.map((t) => ({ key: t.id, name: t.name_ar, value: results[t.id] ?? "", unit: t.unit, test: t }))}
+        rows={chosen.map((t) => ({ key: t.id, name: t.name_ar, value: results[t.id] ?? "", unit: t.unit, test: t, hl: hl.has(t.id) }))}
         prev={prev}
         printPrev={printPrev}
         printable={!labelJob}

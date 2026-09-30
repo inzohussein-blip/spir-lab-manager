@@ -2,16 +2,19 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  ShoppingCart, Plus, Trash2, Search, X,
+  ShoppingCart, Plus, Trash2, Search, X, Boxes,
 } from "lucide-react";
 import {
-  getPurchases, addPurchase, deletePurchases, getSuppliers, purchaseTotal, uid,
+  getPurchases, savePurchases, addPurchase, deletePurchases, getSuppliers, purchaseTotal, uid, stockMatch, addToStock,
   type Purchase, type PurchaseItem, type Supplier,
 } from "@/lib/purchasing/store";
+import { getStock, type StockItem } from "@/lib/station/store";
+import { NumberInput } from "@/components/local/NumberInput";
 import { money } from "@/lib/utils";
 
 const inp = "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
 const today = () => new Date().toLocaleDateString("en-CA"); // local date, not UTC
+const nowMs = () => Date.now();
 
 function StatCard({ label, value, tone }: { label: string; value: string; tone?: "danger" }) {
   return (
@@ -35,8 +38,12 @@ export default function PurchasesPage() {
   const [paid, setPaid] = useState(false);
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState<PurchaseItem[]>([{ name: "", qty: 1, unitPrice: 0 }]);
+  const [stock, setStock] = useState<StockItem[]>([]);
+  const [toStock, setToStock] = useState(true);
 
-  useEffect(() => { setPurchases(getPurchases()); setSuppliers(getSuppliers()); }, []);
+  useEffect(() => { setPurchases(getPurchases()); setSuppliers(getSuppliers()); setStock(getStock()); }, []);
+  const linked = (name: string) => !!name.trim() && stock.some((s) => s.name.trim().toLowerCase() === name.trim().toLowerCase());
+  const anyLinked = items.some((it) => linked(it.name));
 
   const total = purchaseTotal(items);
 
@@ -47,7 +54,7 @@ export default function PurchasesPage() {
   function removeRow(i: number) { setItems((a) => (a.length > 1 ? a.filter((_, idx) => idx !== i) : a)); }
 
   function resetForm() {
-    setDate(today()); setSupplierId(""); setSupplierName(""); setPaid(false); setNotes("");
+    setDate(today()); setSupplierId(""); setSupplierName(""); setPaid(false); setNotes(""); setToStock(true);
     setItems([{ name: "", qty: 1, unitPrice: 0 }]);
   }
 
@@ -55,15 +62,21 @@ export default function PurchasesPage() {
     const clean = items.filter((it) => it.name.trim() !== "");
     if (clean.length === 0) { alert("أضف بنداً واحداً على الأقل."); return; }
     const sup = suppliers.find((s) => s.id === supplierId);
+    const lines = clean.map((it) => ({ name: stockMatch(it.name)?.name ?? it.name.trim(), qty: Number(it.qty) || 0, unitPrice: Number(it.unitPrice) || 0 }));
     const p: Purchase = {
-      id: uid(), created_at: Date.now(), date,
+      id: uid(), created_at: nowMs(), date,
       supplierId: supplierId || undefined,
       supplierName: sup?.name || supplierName.trim() || undefined,
-      items: clean.map((it) => ({ name: it.name.trim(), qty: Number(it.qty) || 0, unitPrice: Number(it.unitPrice) || 0 })),
+      items: lines,
       total: purchaseTotal(clean), paid, notes: notes.trim() || undefined,
     };
     if (!addPurchase(p)) { alert("تعذّر الحفظ: مساحة التخزين في المتصفح ممتلئة — خذ نسخة احتياطية من الإعدادات."); return; }
+    if (toStock) {
+      const added = addToStock(lines);
+      if (added.length) setPurchasesStock(p.id, added);
+    }
     setPurchases(getPurchases());
+    setStock(getStock());
     resetForm();
   }
 
@@ -76,11 +89,19 @@ export default function PurchasesPage() {
     );
   }, [purchases, q]);
 
+  function setPurchasesStock(id: string, added: { id: string; qty: number }[]) {
+    const all = getPurchases();
+    savePurchases(all.map((x) => (x.id === id ? { ...x, stockAdded: added } : x)));
+  }
+
   function remove(ids: string[]) {
     if (ids.length === 0) return;
-    if (!window.confirm(ids.length === 1 ? "حذف هذه العملية؟" : `حذف ${ids.length} عملية؟`)) return;
+    const back = purchases.some((p) => ids.includes(p.id) && p.stockAdded?.length);
+    const msg = (ids.length === 1 ? "حذف هذه العملية؟" : `حذف ${ids.length} عملية؟`) + (back ? "\nستُطرح كمياتها من المخزن." : "");
+    if (!window.confirm(msg)) return;
     deletePurchases(ids);
     setPurchases(getPurchases());
+    setStock(getStock());
     setChecked((c) => { const n = new Set(c); ids.forEach((id) => n.delete(id)); return n; });
   }
   function toggle(id: string) { setChecked((c) => { const n = new Set(c); n.has(id) ? n.delete(id) : n.add(id); return n; }); }
@@ -130,15 +151,29 @@ export default function PurchasesPage() {
           <div className="flex flex-col gap-2">
             {items.map((it, i) => (
               <div key={i} className="grid grid-cols-[minmax(0,1fr)_64px_88px_auto] items-center gap-2 sm:grid-cols-[1fr_80px_110px_110px_auto]">
-                <input value={it.name} onChange={(e) => setItem(i, { name: e.target.value })} placeholder="الصنف" className={inp} />
-                <input type="number" step="any" min="0" value={it.qty} onChange={(e) => setItem(i, { qty: Number(e.target.value) })} placeholder="الكمية" className={`${inp} tabular-nums`} />
-                <input type="number" step="any" min="0" value={it.unitPrice} onChange={(e) => setItem(i, { unitPrice: Number(e.target.value) })} placeholder="سعر الوحدة" className={`${inp} tabular-nums`} />
+                <div className="relative">
+                  <input value={it.name} onChange={(e) => setItem(i, { name: e.target.value })} placeholder="الصنف" list="stock-names" aria-label="الصنف" className={`${inp} ${linked(it.name) ? "pe-16" : ""}`} />
+                  {linked(it.name) && (
+                    <span title="صنف من المخزن — تُضاف الكمية إليه" className="pointer-events-none absolute end-2 top-1/2 inline-flex -translate-y-1/2 items-center gap-1 rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700"><Boxes className="size-3" /> مخزن</span>
+                  )}
+                </div>
+                <NumberInput value={it.qty} onValue={(v) => setItem(i, { qty: Number(v) || 0 })} placeholder="الكمية" aria-label="الكمية" className={inp} />
+                <NumberInput value={it.unitPrice} onValue={(v) => setItem(i, { unitPrice: Number(v) || 0 })} group zeroEmpty placeholder="سعر الوحدة" aria-label="سعر الوحدة" className={inp} />
                 <div className="hidden text-sm tabular-nums text-muted sm:block">{money(Number(it.qty || 0) * Number(it.unitPrice || 0))} د.ع</div>
                 <button onClick={() => removeRow(i)} className="grid size-8 place-items-center rounded-lg border border-line text-red-600 hover:bg-red-50" title="حذف البند"><X className="size-4" /></button>
               </div>
             ))}
           </div>
-          <button onClick={addRow} className="mt-2 inline-flex items-center gap-1 text-xs text-amber-700 hover:underline"><Plus className="size-3.5" /> إضافة بند</button>
+          <datalist id="stock-names">{stock.map((s) => <option key={s.id} value={s.name} />)}</datalist>
+          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+            <button onClick={addRow} className="inline-flex items-center gap-1 text-xs text-amber-700 hover:underline"><Plus className="size-3.5" /> إضافة بند</button>
+            {anyLinked && (
+              <label className="inline-flex items-center gap-1.5 text-xs text-muted">
+                <input type="checkbox" checked={toStock} onChange={(e) => setToStock(e.target.checked)} className="size-3.5" aria-label="إضافة الكميات إلى المخزن" />
+                إضافة كميات أصناف المخزن إلى المخزن عند الحفظ
+              </label>
+            )}
+          </div>
         </div>
 
         <div className="mt-3">

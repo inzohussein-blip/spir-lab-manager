@@ -16,6 +16,7 @@ import { InstallButton } from "@/components/station/InstallButton";
 import { TableStyleCard } from "@/components/station/TableStyleCard";
 import { ORIGINAL_HEAD, PRE_BOTTOM_DEFAULT, PRE_TOP_DEFAULT, REPORT_FONTS, type ReportHead } from "@/lib/station/reportExtras";
 import { ThemeCard } from "@/components/local/LocalTheme";
+import { PinCard } from "@/components/local/PinGate";
 import { LABEL_SIZES, type LabelSize } from "@/components/station/TubeLabel";
 import { THEME_KEYS } from "@/lib/local/theme";
 import { OfflineStatusLine } from "@/components/local/OfflineReady";
@@ -113,7 +114,7 @@ export default function StationSettingsPage() {
   // What is switched on in each section (shown beside its name).
   const onCount = (xs: boolean[]) => { const n = xs.filter(Boolean).length; return n ? `${n} مفعّل` : null; };
   const reportOn = onCount([s.labQr !== false, s.printPrevious === true, s.signatureOn === true, s.prePrinted === true, s.reportHeadOn === true, s.reportFontOn === true]);
-  const entryOn = onCount([s.showPrevious !== false, s.autoDerived === true, s.tubeLabel === true, s.collapseGroups === true, s.ageUnit === true, s.deliveryStatus === true]);
+  const entryOn = onCount([s.entryPrintButton !== false, s.entryHighlight !== false, s.showPrevious !== false, s.autoDerived === true, s.tubeLabel === true, s.collapseGroups === true, s.ageUnit === true, s.deliveryStatus === true]);
 
   return (
     <SettingsLayout
@@ -400,6 +401,20 @@ export default function StationSettingsPage() {
       <div className="mb-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
         <div className="mb-3 flex items-center gap-2 text-sm font-semibold"><ListCollapse className="size-4" /> شاشة الإدخال</div>
         <Toggle
+          checked={s.entryPrintButton !== false}
+          onChange={(v) => setOption({ entryPrintButton: v })}
+          label="زر طباعة تحت إدخال النتائج"
+          desc="زر «طباعة» عريض أسفل مربع إدخال النتائج، إضافةً لزر الطباعة في أعلى الصفحة."
+        />
+        <div className="h-3" />
+        <Toggle
+          checked={s.entryHighlight !== false}
+          onChange={(v) => setOption({ entryHighlight: v })}
+          label="مربع «تمييز» بجانب كل نتيجة"
+          desc="علامة صح بجانب النتيجة تلوّنها بلون التظليل (هاي لايت) على التقرير المطبوع."
+        />
+        <div className="h-3" />
+        <Toggle
           checked={s.autoDerived === true}
           onChange={(v) => setOption({ autoDerived: v })}
           label="الحساب التلقائي للفحوصات المشتقة"
@@ -596,6 +611,7 @@ export default function StationSettingsPage() {
       </div>
 
       <ThemeCard storageKey={THEME_KEYS.station} />
+      <PinCard station="station" />
       {/* This device's letter in its sample numbers (kept on this device only) */}
       <div className="mt-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]" data-testid="device-tag">
         <div className="mb-1 flex items-center gap-2 text-sm font-semibold"><Hash className="size-4" /> حرف هذا الجهاز في رقم العينة</div>

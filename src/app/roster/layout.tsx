@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { OfflineReady } from "@/components/local/OfflineReady";
 import { ActivationGate } from "@/components/local/ActivationGate";
+import { PinGate } from "@/components/local/PinGate";
 import { LocalDataGate } from "@/components/local/LocalDataGate";
 import { ACTIVATION_SCRIPT } from "@/lib/local/activation";
 import { LocalThemeApplier } from "@/components/local/LocalTheme";
@@ -14,6 +15,7 @@ export default function RosterLayout({ children }: { children: ReactNode }) {
     <div className="roster min-h-screen md:flex">
       <script dangerouslySetInnerHTML={{ __html: ACTIVATION_SCRIPT }} />
       <ActivationGate module="roster" />
+      <PinGate station="roster" title="محطة الكادر والدوام" />
       <script dangerouslySetInnerHTML={{ __html: themeScript(THEME_KEYS.roster) }} />
       <LocalThemeApplier storageKey={THEME_KEYS.roster} />
       <LocalDataGate>

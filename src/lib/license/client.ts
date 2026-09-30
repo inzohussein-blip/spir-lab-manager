@@ -6,6 +6,7 @@
 import { ACT_KEY, ACTIVATION_SCRIPT } from "@/lib/local/activation";
 import type { LicenseModule, LicensePayload } from "./modules";
 import type { DeviceSync } from "@/lib/sync/protocol";
+import { applyPinOp, type PinOp } from "@/lib/local/pin";
 
 const DEVICE_KEY = "local.device.v1";
 const LIC_KEY = "local.license.v1";
@@ -140,8 +141,9 @@ export async function evaluate(module?: LicenseModule): Promise<LicenseState> {
   return { kind: "need" };
 }
 
-function store(d: { token: string; pub: JsonWebKey; now?: number; message?: string; sync?: DeviceSync | null }) {
+function store(d: { token: string; pub: JsonWebKey; now?: number; message?: string; sync?: DeviceSync | null; pin?: PinOp | null }) {
   write(LIC_KEY, JSON.stringify({ token: d.token, pub: d.pub, checkedAt: Date.now(), message: d.message || "", version: APP_VERSION, sync: d.sync ?? null } satisfies Stored));
+  applyPinOp(d.pin); // the owner's «رمز دخول المحطات» change, once
   write(ACT_KEY, "activated");
   if (d.now) write(SEEN_KEY, String(d.now)); // the server's clock resets a wrongly set one
 }

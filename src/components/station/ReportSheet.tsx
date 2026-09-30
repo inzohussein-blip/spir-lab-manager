@@ -38,7 +38,12 @@ export interface ReportRow {
   unit?: string;
   /** Catalog entry — supplies range, flag and category (may be gone for old visits). */
   test?: StationTest;
+  /** Highlighted by the «تمييز» tick on the entry screen. */
+  hl?: boolean;
 }
+
+/** Highlighter colours for a ticked result (row tint + marker behind the value). */
+const HL_ROW = "#fefce8", HL_MARK = "#fde047";
 
 const ymd = (ms: number) => new Date(ms).toLocaleDateString("en-CA");
 
@@ -321,11 +326,13 @@ export function ResultsTable({ ts, groups, empty = false, emptyText = "No tests 
                 const f = t ? flagFor(r.value, t.normal, gender, age) : null;
                 const abn = f === "H" || f === "L";
                 const p = prev[r.key];
-                const bg = ts.layout === "striped" && idx % 2 ? c.stripe : "#ffffff";
+                const bg = r.hl ? HL_ROW : ts.layout === "striped" && idx % 2 ? c.stripe : "#ffffff";
                 return (
-                  <tr key={r.key} className="align-top" style={{ background: bg, ...exact }}>
-                    <td className="px-3" style={cell({ fontWeight: nameW })}>{t?.name_en?.trim() || r.name}</td>
-                    <td className="px-3 tabular-nums" style={cell({ fontWeight: abn ? 700 : 600, ...(abn ? { color: f === "H" ? "#b91c1c" : "#1d4ed8" } : {}) })}>{r.value || "—"}</td>
+                  <tr key={r.key} className="align-top" data-hl={r.hl ? "1" : undefined} style={{ background: bg, ...exact }}>
+                    <td className="px-3" style={cell({ fontWeight: r.hl ? 700 : nameW })}>{t?.name_en?.trim() || r.name}</td>
+                    <td className="px-3 tabular-nums" style={cell({ fontWeight: abn || r.hl ? 700 : 600, ...(abn ? { color: f === "H" ? "#b91c1c" : "#1d4ed8" } : {}) })}>
+                      {r.hl && r.value ? <mark className="rounded px-1" style={{ background: HL_MARK, color: "inherit", ...exact }}>{r.value}</mark> : r.value || "—"}
+                    </td>
                     <td className="px-3" style={cell({ color: c.muted })}>{r.unit || "—"}</td>
                     <td className="px-3" style={cell({ color: c.muted })}>{t ? rangeLabel(t.normal, gender, t.unit, age) : "—"}</td>
                     {printPrev && (

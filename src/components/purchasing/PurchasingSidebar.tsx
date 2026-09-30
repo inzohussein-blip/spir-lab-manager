@@ -3,11 +3,13 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ShoppingCart, Truck, Settings, Home, FileBarChart, Menu, X } from "lucide-react";
+import { ShoppingCart, Truck, Settings, Home, FileBarChart, Menu, X, Boxes } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getStock, daysToExpiry } from "@/lib/station/store";
 
 const FIXED = [
   { href: "/store", label: "المشتريات", icon: ShoppingCart },
+  { href: "/store/inventory", label: "المخزن", icon: Boxes },
   { href: "/store/report", label: "التقارير (شهري/سنوي)", icon: FileBarChart },
   { href: "/store/suppliers", label: "الموردون", icon: Truck },
   { href: "/store/settings", label: "الإعدادات والنسخ الاحتياطي", icon: Settings },
@@ -19,7 +21,14 @@ export function PurchasingSidebar() {
     href === "/store" ? pathname === "/store" : pathname.startsWith(href);
   // Phones: the menu slides in from a top bar instead of taking the screen width.
   const [open, setOpen] = useState(false);
-  useEffect(() => setOpen(false), [pathname]);
+  const [stockAlerts, setStockAlerts] = useState(0);
+  useEffect(() => {
+    setOpen(false);
+    setStockAlerts(getStock().filter((s) => {
+      const d = daysToExpiry(s.expiry);
+      return (s.minQty != null && Number(s.qty) <= Number(s.minQty)) || (d != null && d <= 30);
+    }).length);
+  }, [pathname]);
 
   return (
     <>
@@ -55,6 +64,9 @@ export function PurchasingSidebar() {
           >
             <it.icon className="size-4.5 shrink-0" />
             {it.label}
+            {it.href === "/store/inventory" && stockAlerts > 0 && (
+              <span data-testid="stock-alerts" className="ms-auto rounded-full bg-amber-500 px-1.5 text-[11px] font-bold text-white tabular-nums">{stockAlerts}</span>
+            )}
           </Link>
         ))}
       </nav>

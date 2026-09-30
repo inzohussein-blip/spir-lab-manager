@@ -2,6 +2,7 @@
 
 import { SyncPanel } from "@/components/local/SyncPanel";
 import { ThemeCard } from "@/components/local/LocalTheme";
+import { PinCard } from "@/components/local/PinGate";
 import { THEME_KEYS } from "@/lib/local/theme";
 import { useEffect, useRef, useState } from "react";
 import { Settings, Download, Upload, HardDrive, FileText } from "lucide-react";
@@ -65,6 +66,7 @@ export default function QcSettingsPage() {
                 {msg && <p className="mt-2 text-xs text-brand-dark">{msg}</p>}
               </div>
               <ThemeCard storageKey={THEME_KEYS.qc} />
+              <PinCard station="qc" />
               <SyncPanel />
             </>
           ),

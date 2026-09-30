@@ -43,7 +43,8 @@ const CHEM = plain("Nil", "Trace", "+", "++", "+++", "++++");
 const PERCENT = Array.from({ length: 21 }, (_, i) => ({ v: `${i * 5}%` }));
 
 // ── General Urine Examination ────────────────────────────────────────────────
-const HPF_U = [...plain("0 - 1", "1 - 2", "2 - 3", "2 - 4", "3 - 5", "5 - 10", "10 - 15", "15 - 20", "20 - 30", "30 - 50"), o("Over 100 / Plenty / Loaded", "مملوء")];
+/** Pus cells and red cells are read as a sign scale, not counts (a count can still be typed). */
+const CELLS = [o("Nil", "لا يوجد"), o("+", "بسيط"), o("++", "متوسط"), o("+++", "كثير"), o("++++", "كثير جداً"), o("More than (++++)", "مملوء")];
 export const GUE: Template = {
   code: "GUE",
   title: "GENERAL URINE EXAMINATION (G.U.E)",
@@ -69,8 +70,8 @@ export const GUE: Template = {
     {
       title: "2. Microscopic Examination", col: "Unit / Field",
       rows: [
-        { k: "pus", label: "Pus Cells (WBCs)", unit: "/ H.P.F", normal: "0 - 1", ok: ["1 - 2", "2 - 3", "2 - 4", "3 - 5"], opts: HPF_U },
-        { k: "rbc", label: "R.B.Cs (Red Blood Cells)", unit: "/ H.P.F", normal: "0 - 1", ok: ["1 - 2", "2 - 3"], opts: HPF_U },
+        { k: "pus", label: "Pus Cells (WBCs)", unit: "/ H.P.F", normal: "Nil", ok: ["+", "0 - 1", "1 - 2", "2 - 3", "2 - 4", "3 - 5"], opts: CELLS },
+        { k: "rbc", label: "R.B.Cs (Red Blood Cells)", unit: "/ H.P.F", normal: "Nil", ok: ["+", "0 - 1", "1 - 2", "2 - 3"], opts: CELLS },
         { k: "epi", label: "Epithelial Cells", unit: "/ H.P.F", normal: "Few", ok: ["Nil", "+"], opts: AMOUNT },
         { k: "casts", label: "Casts (Hyaline / Granular / Others)", unit: "/ L.P.F", normal: "Nil",
           opts: [o("Nil"), o("Hyaline Casts (Few)"), o("Hyaline Casts (Many)"), o("Granular Casts (Few)"), o("Granular Casts (Many)"), o("WBC Casts"), o("RBC Casts")] },

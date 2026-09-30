@@ -73,7 +73,8 @@ export interface StationVisit {
   patientId?: string; // links to a saved patient record
   patient: { name: string; gender: Gender; age?: string; phone?: string };
   referrer?: string;
-  results: { testId: string; name_ar: string; value: string; unit?: string }[];
+  /** hl: the result is highlighted on the printed report (the «تمييز» tick). */
+  results: { testId: string; name_ar: string; value: string; unit?: string; hl?: boolean }[];
   /** When the results were handed to the patient (Settings → «حالة التسليم»). */
   delivered_at?: number;
 }
@@ -159,6 +160,10 @@ export interface StationSettings {
   derivedEgfr?: boolean;
   /** Under autoDerived: LDL by Sampson when TG 400–800 — off by default. */
   derivedSampson?: boolean;
+  /** A «طباعة» button under the results entry box — on by default. */
+  entryPrintButton?: boolean;
+  /** A «تمييز» tick beside each result that colours it on the report — on by default. */
+  entryHighlight?: boolean;
   /** Tube label printing from the entry screen — off (and hidden) by default. */
   tubeLabel?: boolean;
   labelSize?: "50x25" | "60x30";

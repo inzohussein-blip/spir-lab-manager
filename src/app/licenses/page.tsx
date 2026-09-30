@@ -33,6 +33,8 @@ interface Row {
   devices: { device_id: string; label: string; activated_at: number; last_seen_at: number | null; app_version: string }[];
   /** "signup": registered by the lab itself. */
   source: string;
+  /** The last «رمز دخول المحطات» change (applied by the devices at their next check). */
+  pin: { id: string; hash: string | null; scope: LicenseModule | "all"; at: number } | null;
 }
 interface Ev { license_id: string; at: number; kind: string; detail: string }
 interface Storage { source: "license-db" | "app-db" | "embedded"; ok: boolean; codes?: number; roundTripMs?: number; error?: string; keySealed?: boolean }
@@ -78,7 +80,7 @@ const EVENT_LABEL: Record<string, string> = {
   resumed: "إعادة تفعيل", device_reset: "فك ربط الجهاز", modules: "تغيير المحطات", renamed: "تعديل الاسم",
   paid: "تسجيل الدفع", unpaid: "إلغاء الدفع", message: "رسالة للمختبر", new_code: "رمز جديد", sync: "قاعدة بيانات المختبر",
   admin_db: "قاعدة لوحة الإدارة", device_added: "جهاز إضافي", device_removed: "إزالة جهاز", max_devices: "عدد الأجهزة",
-  data_export: "تصدير البيانات",
+  data_export: "تصدير البيانات", pin: "رمز دخول المحطات",
 };
 const eventDetail = (e: Ev) => (e.kind === "modules" ? e.detail.split(",").filter(Boolean).map(moduleLabel).join("، ") || "لا شيء" : e.detail);
 
@@ -662,6 +664,37 @@ export default function LicensesPage() {
   );
 }
 
+/** «رمز دخول المحطات»: set a new PIN (a lab that forgot its own) or remove it; the devices apply it at their next check. */
+function PinOwner({ r, onChange }: { r: Row; onChange: (c: Record<string, unknown>) => void }) {
+  const stations = LICENSE_MODULES.filter((m) => m.id !== "admin" && r.modules.includes(m.id));
+  const [scope, setScope] = useState<string>("all");
+  const [pin, setPin] = useState("");
+  const ok = /^\d{4,8}$/.test(pin);
+  const scopeLabel = (s: string) => (s === "all" ? "كل المحطات" : moduleLabel(s));
+  return (
+    <div className="md:col-span-2" data-testid="pin-owner">
+      <div className="mb-1 flex items-center gap-1 text-xs font-semibold"><Lock className="size-3.5" /> رمز دخول المحطات (PIN)</div>
+      <p className="mb-1 text-[11px] text-muted">لمختبر نسي رمزه: عيّن رمزاً جديداً أو أزِله. يُطبَّق عند اتصال الجهاز التالي، أو فوراً بـ«نسيت الرمز؟ ← تحديث من المزوّد» في شاشة الدخول.</p>
+      <div className="flex flex-wrap gap-2">
+        <select value={scope} onChange={(e) => setScope(e.target.value)} aria-label="المحطة" className={`${inp} w-auto`}>
+          <option value="all">كل المحطات</option>
+          {stations.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+        </select>
+        <input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 8))} inputMode="numeric" dir="ltr" placeholder="4–8 أرقام"
+          aria-label="رمز الدخول الجديد" className={`${inp} w-32 text-center tracking-widest`} />
+        <button onClick={() => { onChange({ action: "pin", pin, scope }); setPin(""); }} disabled={!ok} className="rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-dark disabled:opacity-40">تعيين الرمز</button>
+        <button onClick={() => { if (window.confirm(`إزالة رمز الدخول من ${scopeLabel(scope)}؟`)) onChange({ action: "pin", pin: "", scope }); }} className="rounded-lg border border-line px-3 py-1.5 text-xs hover:bg-surface">إزالة الرمز</button>
+      </div>
+      {r.pin && (
+        <div className="mt-1 text-[11px] text-muted">
+          آخر تغيير: {r.pin.hash ? "رمز جديد" : "إزالة الرمز"} — {scopeLabel(r.pin.scope)} — {fmtTime(r.pin.at)}
+          {r.last_seen_at != null && r.last_seen_at >= r.pin.at ? " — وصل الجهاز" : " — بانتظار اتصال الجهاز"}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Payment, device name, message to the lab and the code's history. */
 function Details({ r, evs, multi, onChange }: { r: Row; evs: Ev[]; multi: boolean; onChange: (c: Record<string, unknown>) => void }) {
   const [maxDev, setMaxDev] = useState(r.max_devices);
@@ -720,6 +753,7 @@ function Details({ r, evs, multi, onChange }: { r: Row; evs: Ev[]; multi: boolea
           {r.message && <button onClick={() => onChange({ action: "message", text: "" })} className="rounded-lg border border-line px-3 py-1.5 text-xs hover:bg-surface">إزالة</button>}
         </div>
       </div>
+      <PinOwner r={r} onChange={onChange} />
       <div className="md:col-span-2">
         <div className="mb-1 flex items-center gap-1 text-xs font-semibold"><History className="size-3.5" /> السجل</div>
         {evs.length === 0 ? <p className="text-xs text-muted">لا أحداث بعد.</p> : (

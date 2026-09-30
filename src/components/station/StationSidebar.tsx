@@ -26,7 +26,7 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
     title: "الإدارة",
     items: [
       { href: "/station/tests", label: "إدارة الفحوصات", hint: "الأسماء والمعدلات", icon: ListChecks },
-      { href: "/station/inventory", label: "المخزن", hint: "الكميات والصلاحية", icon: Boxes },
+      { href: "/store/inventory", label: "المخزن", hint: "في محطة المشتريات", icon: Boxes },
       { href: "/station/settings", label: "الإعدادات", hint: "الترويسة والنسخ", icon: Settings },
     ],
   },
@@ -211,8 +211,8 @@ export function StationSidebar() {
                     key={it.href}
                     {...it}
                     active={isActive(it.href)}
-                    badge={it.href === "/station/visits" ? todayCount : it.href === "/station/inventory" ? stockAlerts : undefined}
-                    badgeTone={it.href === "/station/inventory" ? "warn" : "brand"}
+                    badge={it.href === "/station/visits" ? todayCount : it.href === "/store/inventory" ? stockAlerts : undefined}
+                    badgeTone={it.href === "/store/inventory" ? "warn" : "brand"}
                   />
                 ))}
               </div>
