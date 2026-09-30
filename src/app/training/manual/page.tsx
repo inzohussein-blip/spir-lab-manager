@@ -37,7 +37,7 @@ export default function ManualPage() {
   return (
     <div>
       <div className="no-print">
-        <h1 className="mb-1 flex items-center gap-2 text-2xl font-bold"><BookOpen className="size-6 text-brand" /> طباعة الدليل الكامل</h1>
+        <h1 className="mb-1 flex items-center gap-2 text-2xl font-bold"><BookOpen className="size-6 text-brand" /> طباعة البروسيجرات</h1>
         <p className="mb-5 text-sm text-muted">يطبع كل البروسيجرات (أو تصنيفاً واحداً) في ملف واحد: غلاف وفهرس ثم كل فحص في صفحة جديدة — جاهز للتجليد.</p>
 
         <div className="mb-5 flex flex-wrap items-end gap-3 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">

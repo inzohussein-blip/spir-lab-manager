@@ -2,7 +2,7 @@
 const { B, ok, launch, done, kv, resetLocal } = require('./lib.cjs');
 const routes = ['/welcome', '/station', '/station/inventory', '/store/inventory', '/store/items', '/store/count', '/store/moves', '/station/records', '/station/settings', '/station/tests', '/station/visits',
   '/store', '/store/report', '/store/settings', '/store/suppliers',
-  '/training', '/training/cards', '/training/edit', '/training/exam', '/training/manual', '/training/map', '/training/media', '/training/quiz',
+  '/training', '/training/cards', '/training/edit', '/training/exam', '/training/guide', '/training/manual', '/training/map', '/training/media', '/training/quiz',
   '/training/settings', '/training/tools', '/training/trainees', '/training/tubes', '/training/test/FIRST',
   '/qc', '/qc/analytes', '/qc/chart', '/qc/devices', '/qc/entry', '/qc/settings', '/qc/temps',
   '/roster', '/roster/attendance', '/roster/leaves', '/roster/payroll', '/roster/schedule', '/roster/settings', '/roster/staff', '/sync', '/sync/file', '/sync/auto', '/sync/log', '/sync/settings', '/licenses'];

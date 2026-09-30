@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   GraduationCap, Library, FilePlus2, TestTubes, Wrench, Images, Settings, Home, Menu, X, ChevronLeft,
-  Network, BrainCircuit, Users, BookOpen, Layers, FileQuestion, type LucideIcon,
+  Network, BrainCircuit, Users, BookOpen, BookMarked, Layers, FileQuestion, type LucideIcon,
 } from "lucide-react";
 import { getTests, getTubes, getTools } from "@/lib/training/store";
 import { cn } from "@/lib/utils";
@@ -19,6 +19,7 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
   {
     title: "المعرفة",
     items: [
+      { href: "/training/guide", label: "الدليل", hint: "دليل كامل من الصفر", icon: BookMarked },
       { href: "/training", label: "مكتبة الفحوصات", hint: "البروسيجر والتفسير والربط", icon: Library, exact: true },
       { href: "/training/edit", label: "إضافة فحص", hint: "بطاقة فحص جديدة", icon: FilePlus2 },
       { href: "/training/map", label: "خريطة الربط", hint: "العلاقات بين الفحوصات", icon: Network },
@@ -44,7 +45,7 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
   {
     title: "الإدارة",
     items: [
-      { href: "/training/manual", label: "طباعة الدليل", hint: "كتاب SOP كامل مع فهرس", icon: BookOpen },
+      { href: "/training/manual", label: "طباعة البروسيجرات", hint: "كتاب SOP كامل مع فهرس", icon: BookOpen },
       { href: "/training/settings", label: "الإعدادات", hint: "الترويسة والسلامة والنسخ", icon: Settings },
     ],
   },
