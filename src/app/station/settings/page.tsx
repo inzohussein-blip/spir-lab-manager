@@ -113,8 +113,8 @@ export default function StationSettingsPage() {
 
   // What is switched on in each section (shown beside its name).
   const onCount = (xs: boolean[]) => { const n = xs.filter(Boolean).length; return n ? `${n} مفعّل` : null; };
-  const reportOn = onCount([s.labQr !== false, s.printPrevious === true, s.signatureOn === true, s.prePrinted === true, s.reportHeadOn === true, s.reportFontOn === true]);
-  const entryOn = onCount([s.entryPrintButton !== false, s.entryHighlight !== false, s.showPrevious !== false, s.autoDerived === true, s.tubeLabel === true, s.collapseGroups === true, s.ageUnit === true, s.deliveryStatus === true]);
+  const reportOn = onCount([s.labQr !== false, s.printPrevious === true, s.reportFill === true, s.signatureOn === true, s.prePrinted === true, s.reportHeadOn === true, s.reportFontOn === true]);
+  const entryOn = onCount([s.entryPrintButton !== false, s.entryWhatsApp !== false, s.entryHighlight !== false, s.showPrevious !== false, s.autoDerived === true, s.tubeLabel === true, s.collapseGroups === true, s.ageUnit === true, s.deliveryStatus === true]);
 
   return (
     <SettingsLayout
@@ -347,6 +347,15 @@ export default function StationSettingsPage() {
           desc="يضيف عمود «النتيجة السابقة» إلى ورقة النتائج المطبوعة."
         />
       </div>
+      {/* Few tests: a larger table */}
+      <div className="mb-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
+        <Toggle
+          checked={s.reportFill === true}
+          onChange={(v) => setOption({ reportFill: v })}
+          label="ملء الصفحة عند قلة الفحوصات"
+          desc="إذا كانت الفحوصات قليلة يكبر خط جدول النتائج وتتسع أسطره فينزل الجدول إلى أسفل الورقة بدل أن يبقى صغيراً في أعلاها. كلما قلّت الفحوصات زاد التوسيع."
+        />
+      </div>
       {/* Report forms (urine, stool, semen, culture) */}
       <div className="mb-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
         <div className="mb-3 flex items-center gap-2 text-sm font-semibold"><ClipboardList className="size-4" /> استمارات التقارير (الإدرار، الخروج، السائل المنوي، الزرع)</div>
@@ -405,6 +414,13 @@ export default function StationSettingsPage() {
           onChange={(v) => setOption({ entryPrintButton: v })}
           label="زر طباعة تحت إدخال النتائج"
           desc="زر «طباعة» عريض أسفل مربع إدخال النتائج، إضافةً لزر الطباعة في أعلى الصفحة."
+        />
+        <div className="h-3" />
+        <Toggle
+          checked={s.entryWhatsApp !== false}
+          onChange={(v) => setOption({ entryWhatsApp: v })}
+          label="زر مشاركة واتساب بجانب زر الطباعة"
+          desc="يحفظ الزيارة ويصنع التقرير ملف PDF ويشاركه (واتساب من خيارات الجهاز)، أو يحفظه ويفتح واتساب على رقم المريض لإرفاقه."
         />
         <div className="h-3" />
         <Toggle

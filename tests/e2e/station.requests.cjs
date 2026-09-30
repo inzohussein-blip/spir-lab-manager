@@ -3,7 +3,9 @@
 const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
 (async () => {
   const b = await launch();
-  const ctx = await b.newContext({ viewport: { width: 1440, height: 950 } });
+  const ctx = await b.newContext({ viewport: { width: 1440, height: 950 }, acceptDownloads: true });
+  // WhatsApp is opened in a new tab: answered here (no internet needed).
+  await ctx.route('https://wa.me/**', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: 'wa' }));
   const p = await ctx.newPage();
   const errs = []; p.on('pageerror', (e) => errs.push(`${p.url()} ${e.message.slice(0, 140)}`)); p.on('dialog', (d) => d.accept());
   await p.goto(B + '/welcome'); await resetLocal(p, { 'local.activation.v1': 'legacy' });
@@ -49,11 +51,20 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   // ── Lab station: print button under the results + highlight ──
   await p.goto(B + '/station'); await p.waitForSelector('label:has-text("الاسم الثلاثي") input', { timeout: 20000 });
   await p.locator('label:has-text("الاسم الثلاثي") input').fill('مريض التمييز');
+  await p.locator('label:has-text("رقم الهاتف") input').fill('07701234567');
   await p.fill('input[placeholder="ابحث عن فحص…"]', 'Hemoglobin'); await p.waitForTimeout(150);
   await p.locator('div.grid button:has(span.flex-1)').first().click();
   await p.fill('input[placeholder="ابحث عن فحص…"]', '');
   await p.locator('input[data-result-idx]').first().fill('9.1');
   ok(await p.locator('[data-testid="entry-print"]').isVisible(), 'print button under the results');
+  // «واتساب»: the report as a PDF (saved here, as this browser cannot share files) and WhatsApp
+  // opened on the patient's number in the international form.
+  const [dl, wa] = await Promise.all([p.waitForEvent('download', { timeout: 30000 }), ctx.waitForEvent('page', { timeout: 30000 }), p.click('[data-testid="entry-whatsapp"]')]);
+  const pdf = require('node:fs').readFileSync(await dl.path());
+  ok(pdf.slice(0, 5).toString() === '%PDF-' && /\/Count 1\b/.test(pdf.toString('latin1')) && pdf.length > 20000, `WhatsApp: the report as a one-page PDF (${pdf.length} bytes, ${dl.suggestedFilename()})`);
+  await wa.waitForLoadState().catch(() => {});
+  ok(wa.url().startsWith('https://wa.me/9647701234567'), `WhatsApp opened on the patient's number (${wa.url().slice(0, 40)})`);
+  await wa.close();
   await p.locator('input[aria-label^="تمييز"]').first().check();
   ok(await p.locator('#report-sheet tr[data-hl="1"] mark').count() === 1, 'ticked result is highlighted on the report');
   await p.click('button[title="حفظ (Ctrl+S)"]');
@@ -78,6 +89,18 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   await p.fill('input[placeholder="ابحث عن فحص…"]', 'Hemoglobin'); await p.waitForTimeout(150);
   await p.locator('div.grid button:has(span.flex-1)').first().click();
   ok(await p.locator('[data-testid="entry-print"]').count() === 0 && await p.locator('input[aria-label^="تمييز"]').count() === 0, 'hidden when switched off');
+
+  // ── Few tests: «ملء الصفحة» makes the results table larger ──
+  const font = async () => Number(await p.locator('#report-sheet table[data-font]').first().getAttribute('data-font'));
+  const before = await font();
+  await p.goto(B + '/station/settings#report'); await p.waitForTimeout(1200);
+  await p.locator('label:has(span:text-is("ملء الصفحة عند قلة الفحوصات"))').locator('button[role=switch]').click();
+  ok(await settled(async () => (await kv(p, 'station.settings.v1'))?.reportFill === true), 'fill-page option switched on');
+  await p.goto(B + '/station'); await p.waitForSelector('label:has-text("الاسم الثلاثي") input');
+  await p.fill('input[placeholder="ابحث عن فحص…"]', 'Hemoglobin'); await p.waitForTimeout(150);
+  await p.locator('div.grid button:has(span.flex-1)').first().click();
+  const after = await font();
+  ok(after > before * 1.3, `one test: larger results table (${before}px → ${after}px)`);
 
   // ── Urine: pus cells and red cells as a sign scale ──
   await p.fill('input[placeholder="ابحث عن فحص…"]', 'General Urine'); await p.waitForTimeout(150);

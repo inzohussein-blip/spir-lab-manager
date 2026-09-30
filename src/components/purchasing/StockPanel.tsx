@@ -1,16 +1,56 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, Pencil, X, AlertTriangle, CalendarClock } from "lucide-react";
+import { Plus, Trash2, Pencil, X, AlertTriangle, CalendarClock, Search, PackagePlus } from "lucide-react";
 import {
-  getStock, saveStock, getTests, daysToExpiry, uid,
+  getStock, saveStock, getTests, daysToExpiry, uid, stockTestIds,
   type StockItem, type StationTest,
 } from "@/lib/station/store";
+import { consumablePresets } from "@/lib/purchasing/presets";
 import { NumberInput } from "@/components/local/NumberInput";
 import { qcLinks } from "@/lib/local/links";
 
 const inp = "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
-const empty = { name: "", qty: "", minQty: "", expiry: "", linkedTestId: "" };
+const empty = { name: "", qty: "", minQty: "", expiry: "", testIds: [] as string[], perVisit: false };
+
+/** Pick the lab station's tests that use a stock item (search + ticks, grouped by department). */
+function TestPicker({ tests, value, onChange }: { tests: StationTest[]; value: string[]; onChange: (ids: string[]) => void }) {
+  const [q, setQ] = useState("");
+  const on = new Set(value);
+  const term = q.trim().toLowerCase();
+  const shown = tests.filter((t) => !term || t.name_ar.toLowerCase().includes(term) || (t.name_en ?? "").toLowerCase().includes(term) || (t.category ?? "").includes(q.trim()));
+  const groups = new Map<string, StationTest[]>();
+  for (const t of shown) groups.set(t.category || "أخرى", [...(groups.get(t.category || "أخرى") ?? []), t]);
+  const toggle = (id: string) => onChange(on.has(id) ? value.filter((x) => x !== id) : [...value, id]);
+  return (
+    <div data-testid="test-picker" className="rounded-lg border border-line">
+      <div className="flex items-center gap-2 border-b border-line px-3">
+        <Search className="size-4 text-muted" />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="ابحث عن فحص من محطة المختبر…" aria-label="بحث في الفحوصات" className="w-full bg-transparent py-2 text-sm outline-none" />
+        <span className="shrink-0 text-xs text-muted tabular-nums">{value.length} مختار</span>
+        {value.length > 0 && <button type="button" onClick={() => onChange([])} className="shrink-0 text-xs text-red-600 hover:underline">مسح</button>}
+      </div>
+      <div className="max-h-48 overflow-y-auto p-2">
+        {[...groups].map(([cat, list]) => (
+          <div key={cat} className="mb-1.5">
+            <div className="flex items-center gap-2 px-1 text-[11px] font-semibold text-muted">
+              {cat}
+              <button type="button" onClick={() => onChange(Array.from(new Set([...value, ...list.map((t) => t.id)])))} className="font-normal text-amber-700 hover:underline">الكل</button>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {list.map((t) => (
+                <label key={t.id} className={`inline-flex cursor-pointer items-center gap-1 rounded-md border px-2 py-0.5 text-xs ${on.has(t.id) ? "border-amber-400 bg-amber-50 text-amber-800" : "border-line hover:bg-canvas"}`}>
+                  <input type="checkbox" checked={on.has(t.id)} onChange={() => toggle(t.id)} className="size-3" aria-label={t.name_ar} /> {t.name_ar}
+                </label>
+              ))}
+            </div>
+          </div>
+        ))}
+        {shown.length === 0 && <p className="px-1 py-2 text-xs text-muted">لا فحوصات مطابقة.</p>}
+      </div>
+    </div>
+  );
+}
 
 function Tile({ label, value, tone }: { label: string; value: number; tone?: "danger" | "warn" }) {
   const c = tone === "danger" ? "text-red-600" : tone === "warn" ? "text-amber-600" : "text-amber-700";
@@ -43,13 +83,14 @@ export function StockPanel() {
       qty: Number(f.qty) || 0,
       minQty: f.minQty.trim() ? Number(f.minQty) : undefined,
       expiry: f.expiry || undefined,
-      linkedTestId: f.linkedTestId || undefined,
+      testIds: f.testIds.length ? f.testIds : undefined,
+      perVisit: f.perVisit || undefined,
     };
     persist(editId ? rows.map((r) => (r.id === editId ? rec : r)) : [...rows, rec]);
     reset();
   }
   function edit(s: StockItem) {
-    setF({ name: s.name, qty: String(s.qty), minQty: s.minQty != null ? String(s.minQty) : "", expiry: s.expiry ?? "", linkedTestId: s.linkedTestId ?? "" });
+    setF({ name: s.name, qty: String(s.qty), minQty: s.minQty != null ? String(s.minQty) : "", expiry: s.expiry ?? "", testIds: stockTestIds(s), perVisit: !!s.perVisit });
     setEditId(s.id);
   }
   function del(id: string) {
@@ -63,6 +104,14 @@ export function StockPanel() {
 
   const isLow = (s: StockItem) => s.minQty != null && Number(s.qty) <= Number(s.minQty);
   const testName = (id?: string) => tests.find((t) => t.id === id)?.name_ar;
+  /** Add the lab's common tubes and containers, already linked to their tests (missing ones only). */
+  function addPresets() {
+    const have = new Set(rows.map((r) => r.name.trim()));
+    const add = consumablePresets(tests).filter((p) => !have.has(p.name))
+      .map((p): StockItem => ({ id: uid(), name: p.name, qty: 0, testIds: p.testIds, perVisit: true }));
+    if (!add.length) { window.alert("الأنابيب والمستلزمات الشائعة موجودة في المخزن."); return; }
+    persist([...rows, ...add]);
+  }
 
   const { lowCount, soonCount } = useMemo(() => {
     let low = 0, soon = 0;
@@ -77,9 +126,14 @@ export function StockPanel() {
   return (
     <div>
       <div className="mb-5">
-        <p className="text-sm text-muted">أصناف المختبر (كواشف/عُدد) بكمياتها وتواريخ انتهائها. مرتبط بمحطة المختبر: تُحسم وحدة تلقائياً عند إدخال فحص مرتبط بالصنف، وتُضاف الكمية عند تسجيل شرائه في المشتريات.</p>
+        <p className="text-sm text-muted">أصناف المختبر (كواشف، أنابيب، علب، مستلزمات) بكمياتها وتواريخ انتهائها. مرتبط بفحوصات محطة المختبر: الكاشف يُحسم وحدةً لكل فحص، والأنبوب أو العلبة وحدةً لكل زيارة فيها أحد فحوصاته. وتُضاف الكمية عند الشراء.</p>
       </div>
 
+      <div className="mb-3 flex justify-end">
+        <button onClick={addPresets} data-testid="stock-presets" title="تُضاف مرتبطة بفحوصات محطة المختبر (وحدة لكل زيارة)" className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-2 text-sm hover:bg-canvas">
+          <PackagePlus className="size-4" /> الأنابيب والمستلزمات الشائعة
+        </button>
+      </div>
       <div className="mb-4 grid gap-4 sm:grid-cols-3">
         <Tile label="عدد الأصناف" value={rows.length} />
         <Tile label="تحت الحد الأدنى" value={lowCount} tone={lowCount ? "danger" : undefined} />
@@ -97,12 +151,16 @@ export function StockPanel() {
           <label className="text-sm font-medium">الكمية<NumberInput value={f.qty} onValue={(v) => setF({ ...f, qty: v })} aria-label="الكمية" className={`mt-1 ${inp}`} /></label>
           <label className="text-sm font-medium">الحد الأدنى للتنبيه<NumberInput value={f.minQty} onValue={(v) => setF({ ...f, minQty: v })} aria-label="الحد الأدنى للتنبيه" className={`mt-1 ${inp}`} /></label>
           <label className="text-sm font-medium">تاريخ الانتهاء<input type="date" value={f.expiry} onChange={(e) => setF({ ...f, expiry: e.target.value })} className={`mt-1 ${inp}`} /></label>
-          <label className="text-sm font-medium sm:col-span-2 lg:col-span-1">مرتبط بفحص (يُحسم عند إدخاله)
-            <select value={f.linkedTestId} onChange={(e) => setF({ ...f, linkedTestId: e.target.value })} className={`mt-1 ${inp}`}>
-              <option value="">— بدون ربط —</option>
-              {tests.map((t) => <option key={t.id} value={t.id}>{t.name_ar}</option>)}
+          <label className="text-sm font-medium">يُحسم من المخزن
+            <select value={f.perVisit ? "visit" : "test"} onChange={(e) => setF({ ...f, perVisit: e.target.value === "visit" })} aria-label="طريقة الحسم" className={`mt-1 ${inp}`}>
+              <option value="test">وحدة لكل فحص (كاشف / عُدّة)</option>
+              <option value="visit">وحدة لكل زيارة (أنبوب، علبة، سرنجة)</option>
             </select>
           </label>
+          <div className="text-sm font-medium sm:col-span-2 lg:col-span-3">
+            الفحوصات المرتبطة من محطة المختبر (يُحسم عند إدخالها)
+            <div className="mt-1"><TestPicker tests={tests} value={f.testIds} onChange={(ids) => setF({ ...f, testIds: ids })} /></div>
+          </div>
         </div>
         <button onClick={submit} className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700">
           <Plus className="size-4" /> {editId ? "حفظ التعديل" : "إضافة"}
@@ -135,7 +193,17 @@ export function StockPanel() {
                   <td className="px-4 py-3 font-medium">{s.name}</td>
                   <td className={`px-4 py-3 tabular-nums ${low ? "font-bold text-red-600" : ""}`}>{s.qty}</td>
                   <td className="px-4 py-3 text-muted">
-                    {testName(s.linkedTestId) ?? (qc.has(s.id) ? null : "—")}
+                    {(() => {
+                      const ids = stockTestIds(s);
+                      if (!ids.length) return qc.has(s.id) ? null : "—";
+                      const names = ids.map(testName).filter(Boolean) as string[];
+                      return (
+                        <span data-testid="stock-tests" title={names.join("، ")} className="inline-flex flex-wrap items-center gap-1">
+                          {ids.length === 1 ? names[0] : <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-800">{ids.length} فحص</span>}
+                          {s.perVisit && <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs text-sky-700">لكل زيارة</span>}
+                        </span>
+                      );
+                    })()}
                     {qc.has(s.id) && <span data-testid="qc-link" className="ms-1 rounded-full bg-rose-50 px-2 py-0.5 text-xs text-rose-700">سيطرة: {qc.get(s.id)!.join("، ")}</span>}
                   </td>
                   <td className={`px-4 py-3 ${expired ? "text-red-600" : soon ? "text-amber-700" : "text-muted"}`}>{s.expiry ?? "—"}</td>

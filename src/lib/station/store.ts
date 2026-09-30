@@ -98,15 +98,24 @@ export interface StationDoctor {
   clinic?: string;
 }
 
-/** A stock (reagent/kit) item; one unit is deducted per linked test ordered. */
+/** A stock item: a reagent / kit (one unit per linked test ordered) or a consumable such as a
+ *  tube (`perVisit`: one unit per visit that has any of its tests). */
 export interface StockItem {
   id: string;
   name: string;
   qty: number;
   minQty?: number;
   expiry?: string; // YYYY-MM-DD
+  /** The lab station's tests that use this item. */
+  testIds?: string[];
+  /** One unit per visit (tubes, containers, needles) instead of one per test. */
+  perVisit?: boolean;
+  /** Older single link (kept readable). */
   linkedTestId?: string;
 }
+/** The tests a stock item is linked to (old single link included). */
+export const stockTestIds = (s: StockItem): string[] =>
+  Array.from(new Set([...(s.testIds ?? []), ...(s.linkedTestId ? [s.linkedTestId] : [])]));
 
 export interface StationPage {
   id: string;
@@ -162,6 +171,10 @@ export interface StationSettings {
   derivedEgfr?: boolean;
   /** Under autoDerived: LDL by Sampson when TG 400–800 — off by default. */
   derivedSampson?: boolean;
+  /** Few tests: a larger results table that fills more of the page (off by default). */
+  reportFill?: boolean;
+  /** A «واتساب» button beside it: the report as a PDF to share — on by default. */
+  entryWhatsApp?: boolean;
   /** A «طباعة» button under the results entry box — on by default. */
   entryPrintButton?: boolean;
   /** A «تمييز» tick beside each result that colours it on the report — on by default. */
@@ -588,20 +601,30 @@ export function getStock(): StockItem[] {
 export function saveStock(list: StockItem[]): void {
   write(K_STOCK, list);
 }
-/** Deduct one unit from each stock item linked to one of these tests. */
-export function deductStockForTests(testIds: string[]): void {
+/** Use stock for the tests newly ordered on a visit: a reagent loses one unit per linked test, a
+ *  consumable (per visit) one unit when the visit has any of its tests — and none when the visit
+ *  already had one of them (`already`: the visit's tests before this save). */
+export function deductStockForTests(testIds: string[], already: string[] = []): void {
   if (testIds.length === 0) return;
-  const set = new Set(testIds);
-  const next = getStock().map((s) =>
-    s.linkedTestId && set.has(s.linkedTestId) ? { ...s, qty: Math.max(0, Number(s.qty) - 1) } : s
-  );
-  saveStock(next);
+  const added = new Set(testIds), before = new Set(already);
+  let changed = false;
+  const next = getStock().map((s) => {
+    const ids = stockTestIds(s);
+    const n = ids.filter((id) => added.has(id)).length;
+    if (!n) return s;
+    const use = s.perVisit ? (ids.some((id) => before.has(id)) ? 0 : 1) : n;
+    if (!use) return s;
+    changed = true;
+    return { ...s, qty: Math.max(0, Number(s.qty) - use) };
+  });
+  if (changed) saveStock(next);
 }
-/** Clear the link on any stock item that pointed at a now-deleted test. */
+/** Drop a now-deleted test from every stock item's links. */
 export function unlinkTestFromStock(testId: string): void {
   const list = getStock();
-  if (!list.some((s) => s.linkedTestId === testId)) return;
-  saveStock(list.map((s) => (s.linkedTestId === testId ? { ...s, linkedTestId: undefined } : s)));
+  if (!list.some((s) => stockTestIds(s).includes(testId))) return;
+  saveStock(list.map((s) => (stockTestIds(s).includes(testId)
+    ? { ...s, linkedTestId: undefined, testIds: stockTestIds(s).filter((id) => id !== testId) } : s)));
 }
 /** Calendar days until expiry (0 = expires today, negative = expired), or null when no expiry set. */
 export function daysToExpiry(expiry?: string): number | null {

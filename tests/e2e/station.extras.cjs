@@ -54,6 +54,9 @@ const IMG = '/lab-images/test/أنبوب اختبار.png';
   ok(JSON.stringify(labels) === JSON.stringify(['Positive', 'Negative', '+', '++', '+++']), `qualitative quick choices: ${labels.join(' ')}`);
   await p.click('button:text-is("Positive")');
   ok(await p.locator('[data-result-idx="0"]').inputValue() === 'Positive', '«Positive» fills the result');
+  const qrow = p.locator('#report-sheet tbody tr', { hasText: 'Positive' }).first();
+  ok((await qrow.locator('td[data-range]').innerText()).trim() === '' && (await qrow.locator('td[data-flag]').innerText()).trim() === '',
+    'positive / negative test: no reference range and no flag on the report');
 
   // ── A long visits list: drawn in parts, searched in full ──
   const many = Array.from({ length: 260 }, (_, i) => ({

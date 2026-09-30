@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search, Printer, Save, Check, Tag, ClipboardList, Beaker, Layers, Pencil, UserRound, StickyNote, Plus, X, RotateCcw, ListChecks, ChevronDown, type LucideIcon } from "lucide-react";
+import { Search, Printer, MessageCircle, Save, Check, Tag, ClipboardList, Beaker, Layers, Pencil, UserRound, StickyNote, Plus, X, RotateCcw, ListChecks, ChevronDown, type LucideIcon } from "lucide-react";
 import {
   getTests, addVisit, updateVisit, getVisit, getSettings, getPanels, nextAccession, uid, rangeLabel, flagFor,
   getPatients, getPatient, upsertPatient, addPatientNote, deductStockForTests, getDoctors, addDoctor,
@@ -350,34 +350,63 @@ function StationEntryPage() {
       deductStockForTests(Array.from(selected));
     } else {
       // Editing: deduct only the tests added since the last save (never twice).
-      deductStockForTests(Array.from(selected).filter((id) => !before!.has(id)));
+      deductStockForTests(Array.from(selected).filter((id) => !before!.has(id)), Array.from(before!));
     }
     setBaseline(snapshot);
     setSavedTick((n) => n + 1);
     return true;
   }
 
-  function onPrint() {
-    if (!requireName()) return;
+  /** The checks before a sheet leaves the station (print or share): a name, a test, filled results
+   *  (or a confirmed warning), a sample number — then the visit is saved. The sample number, or null. */
+  function readyToSend(what: string): string | null {
+    if (!requireName()) return null;
     if (chosen.length === 0) {
       toast.show("اختر فحصاً واحداً على الأقل", "warn");
-      return;
+      return null;
     }
     // Incomplete-entry protection: warn before printing a sheet with blank results.
     if (missingResults.length > 0) {
       const names = missingResults.map((t) => `• ${t.name_ar}`).join("\n");
       const ok = window.confirm(
-        `${missingResults.length} فحص بدون نتيجة:\n${names}\n\nهل تريد الطباعة رغم ذلك؟`
+        `${missingResults.length} فحص بدون نتيجة:\n${names}\n\nهل تريد ${what} رغم ذلك؟`
       );
-      if (!ok) return;
+      if (!ok) return null;
     }
     const acc = accession || nextAccession();
     setAccession(acc);
-    if (!saveVisit(acc)) return;
+    if (!saveVisit(acc)) return null;
+    return acc;
+  }
+
+  function onPrint() {
+    if (!readyToSend("الطباعة")) return;
     toast.show("تم الحفظ — جارٍ فتح نافذة الطباعة");
     // The new sample number's barcode must be on the sheet before the print window opens
     // (the library normally loaded with the page; never wait more than 3 s for it).
     Promise.race([loadBarcode(), new Promise((r) => setTimeout(r, 3000))]).then(() => setTimeout(() => window.print(), 80));
+  }
+
+  /** «واتساب»: the sheet as a PDF, shared (or saved, with WhatsApp opened on the patient's number). */
+  const [sharing, setSharing] = useState(false);
+  async function onShare() {
+    const acc = readyToSend("المشاركة");
+    if (!acc || sharing) return;
+    setSharing(true);
+    try {
+      await Promise.race([loadBarcode(), new Promise((r) => setTimeout(r, 3000))]);
+      await new Promise((r) => setTimeout(r, 120)); // the new sample number drawn on the sheet
+      const el = document.getElementById("report-sheet");
+      if (!el) return;
+      const { sheetPdf, sharePdf } = await import("@/lib/station/sharePdf");
+      const pdf = await sheetPdf(el, paper);
+      const how = await sharePdf(pdf, `${acc}.pdf`, { phone, text: `نتائج التحاليل — ${name.trim()}${settings.labName ? ` — ${settings.labName}` : ""}` });
+      toast.show(how === "saved" ? "حُفظ ملف PDF — أرفقه في واتساب الذي فُتح" : "تمت المشاركة");
+    } catch {
+      toast.show("تعذّر إنشاء ملف PDF — استعمل الطباعة", "warn");
+    } finally {
+      setSharing(false);
+    }
   }
 
   // Local date (not UTC); an edited visit keeps its original date on reprint.
@@ -789,11 +818,21 @@ function StationEntryPage() {
                   {missingResults.length} فحص بدون نتيجة — أكملها قبل الطباعة.
                 </p>
               )}
-              {chosen.length > 0 && settings.entryPrintButton !== false && (
-                <button onClick={onPrint} data-testid="entry-print" title="طباعة (Ctrl+P)"
-                  className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-brand px-3.5 py-2.5 text-sm font-semibold text-white hover:bg-brand-dark">
-                  <Printer className="size-4" /> طباعة {paper}
-                </button>
+              {chosen.length > 0 && (settings.entryPrintButton !== false || settings.entryWhatsApp !== false) && (
+                <div className="mt-3 flex gap-2">
+                  {settings.entryPrintButton !== false && (
+                    <button onClick={onPrint} data-testid="entry-print" title="طباعة (Ctrl+P)"
+                      className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-brand px-3.5 py-2.5 text-sm font-semibold text-white hover:bg-brand-dark">
+                      <Printer className="size-4" /> طباعة {paper}
+                    </button>
+                  )}
+                  {settings.entryWhatsApp !== false && (
+                    <button onClick={() => void onShare()} disabled={sharing} data-testid="entry-whatsapp" title="مشاركة التقرير PDF عبر واتساب"
+                      className={`inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#25D366] px-3 py-2.5 text-sm font-semibold text-white hover:bg-[#1ebe5b] disabled:opacity-60 ${settings.entryPrintButton === false ? "flex-1" : ""}`}>
+                      <MessageCircle className={`size-4 ${sharing ? "animate-pulse" : ""}`} /> واتساب
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           </div>

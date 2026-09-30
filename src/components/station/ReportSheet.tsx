@@ -76,14 +76,19 @@ export function ReportSheet({
   // Ready before «طباعة» assigns a sample number, so its barcode is on the first print too.
   useEffect(() => { void loadBarcode(); }, []);
   const gender = patient.gender;
-  const ts = tableStyleOf(settings.reportTable);
-  const pad = DENSITY_PAD[ts.density];
+  const baseTs = tableStyleOf(settings.reportTable);
   // The lab's colours (Settings → «التقرير المطبوع»; purple + gold unless changed).
-  const c = reportColors(ts);
+  const c = reportColors(baseTs);
 
   // Structured reports (urine / stool / semen / culture) print on their own page.
   const formRows = rows.filter((r) => isFormCode(r.test?.code));
   const regular = rows.filter((r) => !isFormCode(r.test?.code));
+
+  // Few tests (Settings → «ملء الصفحة عند قلة الفحوصات»): larger text and taller rows, so the
+  // results table reaches further down the page.
+  const fill = settings.reportFill === true ? fillScale(regular.length) : { font: 1, pad: 1 };
+  const ts = fill.font === 1 ? baseTs : { ...baseTs, fontSize: Math.round(baseTs.fontSize * fill.font * 10) / 10 };
+  const pad = { a4: Math.round(DENSITY_PAD[ts.density].a4 * fill.pad), a5: Math.round(DENSITY_PAD[ts.density].a5 * fill.pad) };
 
   // Group rows by catalog category, keeping first-appearance order.
   const groups: { cat: string; rows: ReportRow[] }[] = [];
@@ -227,7 +232,7 @@ export function ReportSheet({
         {(regular.length > 0 || formRows.length === 0) && (
           <ResultsTable
             ts={ts} groups={groups} empty={rows.length === 0} emptyText={emptyText}
-            gender={gender} age={patient.age} prev={prev} printPrev={printPrev} paper={paper}
+            gender={gender} age={patient.age} prev={prev} printPrev={printPrev} paper={paper} padScale={fill.pad}
           />
         )}
 
@@ -279,14 +284,25 @@ export function ReportSheet({
 
 type Group = { cat: string; rows: ReportRow[] };
 
+/** How much larger the results table gets when only a few tests are on the sheet. */
+export function fillScale(n: number): { font: number; pad: number } {
+  if (n <= 3) return { font: 1.45, pad: 3 };
+  if (n <= 6) return { font: 1.3, pad: 2.3 };
+  if (n <= 10) return { font: 1.15, pad: 1.6 };
+  if (n <= 14) return { font: 1.05, pad: 1.25 };
+  return { font: 1, pad: 1 };
+}
+
 /** The results table alone — used by the printed sheet and by the Settings preview. */
-export function ResultsTable({ ts, groups, empty = false, emptyText = "No tests selected", gender, age, prev = {}, printPrev = false }: {
+export function ResultsTable({ ts, groups, empty = false, emptyText = "No tests selected", gender, age, prev = {}, printPrev = false, padScale = 1 }: {
   ts: TableStyle; groups: Group[]; empty?: boolean; emptyText?: string; gender: Gender; age?: string;
   prev?: Record<string, PrevResult>; printPrev?: boolean; paper?: "A4" | "A5";
+  /** Taller rows (the «ملء الصفحة» option). */
+  padScale?: number;
 }) {
   const c = reportColors(ts);
   const cols = printPrev ? 6 : 5;
-  const py = DENSITY_PAD[ts.density].screen;
+  const py = Math.round(DENSITY_PAD[ts.density].screen * padScale);
   const small = (ts.fontSize * 12) / 14; // header & group rows (text-xs at the original size)
   const cell = (extra: React.CSSProperties = {}): React.CSSProperties => ({
     paddingTop: py, paddingBottom: py,
@@ -303,7 +319,7 @@ export function ResultsTable({ ts, groups, empty = false, emptyText = "No tests 
         <span className="text-sm font-bold" style={{ color: c.groupText }}>Test Results</span>
       </div>
       <div className="mt-2 overflow-hidden rounded-lg border text-left" style={{ borderColor: c.border, ...exact }}>
-        <table className="w-full border-collapse" style={{ fontSize: ts.fontSize, lineHeight: 1.4286 }}>
+        <table className="w-full border-collapse" data-font={ts.fontSize} style={{ fontSize: ts.fontSize, lineHeight: 1.4286 }}>
           <thead>
             <tr className="text-left text-white" style={{ background: c.header, fontSize: small, lineHeight: 1.3333, ...exact }}>
               {["Test", "Result", "Unit", "Reference Range", ...(printPrev ? ["Previous"] : []), "Flag"].map((h) => (
@@ -323,6 +339,8 @@ export function ResultsTable({ ts, groups, empty = false, emptyText = "No tests 
               </tr>,
               ...g.rows.map((r, idx) => {
                 const t = r.test;
+                // Positive / negative tests: the answer says it all — no reference range and no flag.
+                const qual = t?.normal.kind === "qual";
                 const f = t ? flagFor(r.value, t.normal, gender, age) : null;
                 const abn = f === "H" || f === "L";
                 const p = prev[r.key];
@@ -334,7 +352,7 @@ export function ResultsTable({ ts, groups, empty = false, emptyText = "No tests 
                       {r.hl && r.value ? <mark className="rounded px-1" style={{ background: HL_MARK, color: "inherit", ...exact }}>{r.value}</mark> : r.value || "—"}
                     </td>
                     <td className="px-3" style={cell({ color: c.muted })}>{r.unit || "—"}</td>
-                    <td className="px-3" style={cell({ color: c.muted })}>{t ? rangeLabel(t.normal, gender, t.unit, age) : "—"}</td>
+                    <td className="px-3" style={cell({ color: c.muted })} data-range>{qual ? "" : t ? rangeLabel(t.normal, gender, t.unit, age) : "—"}</td>
                     {printPrev && (
                       <td className="px-3" style={cell({ color: c.muted })}>
                         {p ? (
@@ -345,8 +363,8 @@ export function ResultsTable({ ts, groups, empty = false, emptyText = "No tests 
                         ) : "—"}
                       </td>
                     )}
-                    <td className="px-3" style={cell()}>
-                      {f === "H" ? <span className="inline-grid size-6 place-items-center rounded-full text-xs font-bold text-white" style={{ background: "#b91c1c", ...exact }}>H</span>
+                    <td className="px-3" style={cell()} data-flag>
+                      {qual ? null : f === "H" ? <span className="inline-grid size-6 place-items-center rounded-full text-xs font-bold text-white" style={{ background: "#b91c1c", ...exact }}>H</span>
                         : f === "L" ? <span className="inline-grid size-6 place-items-center rounded-full text-xs font-bold text-white" style={{ background: "#1d4ed8", ...exact }}>L</span>
                         : f === "N" ? <span className="inline-grid size-6 place-items-center rounded-full text-xs font-bold" style={{ background: "#e7f6ef", color: "#127a4f", ...exact }}>N</span>
                         : <span className="text-gray-400">—</span>}
