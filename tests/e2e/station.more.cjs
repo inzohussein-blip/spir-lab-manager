@@ -36,7 +36,7 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   await p.goto(B + '/station'); await p.waitForTimeout(1200); // the catalog exists once the station opened
   await p.goto(B + '/station/settings#lab'); await p.waitForSelector('[data-testid="settings-nav"]', { timeout: 20000 });
   const ids = await p.locator('[data-testid="settings-nav"] button[data-section]').evaluateAll((bs) => bs.map((x) => x.dataset.section));
-  ok(JSON.stringify(ids) === JSON.stringify(['lab', 'report', 'forms', 'entry', 'stock', 'tests', 'device', 'look']), `sections: ${ids.join(', ')}`);
+  ok(JSON.stringify(ids) === JSON.stringify(['lab', 'report', 'fill', 'forms', 'entry', 'stock', 'tests', 'device', 'look']), `sections: ${ids.join(', ')}`);
   ok(await p.locator('[data-sec="lab"] [data-testid="lab-identity"]').count() === 1 && await p.locator('[data-sec="lab"] [data-testid="lab-contact"]').count() === 1, '«المختبر»: name and logo, contact details');
   ok(await p.locator('[data-sec="look"] [data-testid="pin-card"]').count() === 1 && await p.locator('[data-sec="device"] [data-testid="pin-card"]').count() === 0, 'PIN under «الأمان والمظهر»');
   for (const st of ['qc', 'roster', 'training', 'store']) {
