@@ -7,6 +7,7 @@ export const THEME_KEYS = {
   qc: "qc.theme.v1",
   roster: "roster.theme.v1",
   sync: "sync.theme.v1",
+  about: "about.theme.v1",
 } as const;
 export type ThemeStation = keyof typeof THEME_KEYS;
 

@@ -95,37 +95,37 @@ main > * {
 }
 
 /* ── Local stations interactions (scoped to .station / .training / .qc / .roster — admin/purchasing untouched) ── */
-:is(.station, .training, .qc, .roster) button:not(:disabled),
-:is(.station, .training, .qc, .roster) a[href] {
+:is(.station, .training, .qc, .roster, .about) button:not(:disabled),
+:is(.station, .training, .qc, .roster, .about) a[href] {
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease,
     box-shadow 0.15s ease, transform 0.1s ease;
 }
 /* Tactile press feedback */
-:is(.station, .training, .qc, .roster) button:not(:disabled):active {
+:is(.station, .training, .qc, .roster, .about) button:not(:disabled):active {
   transform: scale(0.96);
 }
-:is(.station, .training, .qc, .roster) button:disabled {
+:is(.station, .training, .qc, .roster, .about) button:disabled {
   cursor: not-allowed;
   opacity: 0.5;
 }
 /* Primary buttons lift slightly on hover */
-:is(.station, .training, .qc, .roster) button.bg-brand:not(:disabled):hover {
+:is(.station, .training, .qc, .roster, .about) button.bg-brand:not(:disabled):hover {
   box-shadow: 0 4px 12px color-mix(in oklab, var(--color-brand) 35%, transparent);
 }
 /* Keyboard focus ring for buttons/links */
-:is(.station, .training, .qc, .roster) button:focus-visible,
-:is(.station, .training, .qc, .roster) a:focus-visible {
+:is(.station, .training, .qc, .roster, .about) button:focus-visible,
+:is(.station, .training, .qc, .roster, .about) a:focus-visible {
   outline: 2px solid var(--color-brand);
   outline-offset: 2px;
 }
 /* Soft glow around focused fields */
-:is(.station, .training, .qc, .roster) input:focus,
-:is(.station, .training, .qc, .roster) select:focus,
-:is(.station, .training, .qc, .roster) textarea:focus {
+:is(.station, .training, .qc, .roster, .about) input:focus,
+:is(.station, .training, .qc, .roster, .about) select:focus,
+:is(.station, .training, .qc, .roster, .about) textarea:focus {
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-brand) 18%, transparent);
 }
 /* Dark theme: the brand teal is bright, so text sitting on it goes dark for contrast */
-:root[data-theme="dark"] :is(.station, .training, .qc, .roster) :is(.bg-brand, .from-brand).text-white {
+:root[data-theme="dark"] :is(.station, .training, .qc, .roster, .about) :is(.bg-brand, .from-brand).text-white {
   color: #042f2e;
 }
 /* Training station — its own accent (indigo) so it reads as a separate app */
@@ -181,8 +181,19 @@ main > * {
   --color-brand-dark: #0ea5e9;
   --color-brand-light: #082f49;
 }
-:root[data-theme="dark"] :is(.qc, .roster) :is(.bg-brand, .from-brand).text-white {
+:root[data-theme="dark"] :is(.qc, .roster, .about) :is(.bg-brand, .from-brand).text-white {
   color: #0f172a;
+}
+/* About the app — purple accent */
+.about {
+  --color-brand: #9333ea;
+  --color-brand-dark: #7e22ce;
+  --color-brand-light: #faf5ff;
+}
+:root[data-theme="dark"] .about {
+  --color-brand: #c084fc;
+  --color-brand-dark: #a855f7;
+  --color-brand-light: #3b0764;
 }
 /* Toast slide-in */
 @keyframes station-toast-in {
@@ -193,7 +204,7 @@ main > * {
   animation: station-toast-in 0.18s ease-out;
 }
 @media (prefers-reduced-motion: reduce) {
-  :is(.station, .training, .qc, .roster) button:not(:disabled):active { transform: none; }
+  :is(.station, .training, .qc, .roster, .about) button:not(:disabled):active { transform: none; }
   .station-toast { animation: none; }
 }
 
