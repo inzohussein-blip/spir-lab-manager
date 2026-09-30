@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { AlertTriangle, Database, RefreshCw } from "lucide-react";
 import { kvReady, KV_ERROR_EVENT, KV_REMOTE_EVENT } from "@/lib/local/kv";
-import { STATION_SYNC } from "@/lib/sync/protocol";
+import { STATION_SYNC, companySyncOn } from "@/lib/sync/protocol";
 
 /** Shows a station once its data is loaded from the browser's storage (see lib/local/kv), and —
  *  only when station sync is switched on (STATION_SYNC) — starts the sync with the lab's database. */
@@ -19,7 +19,10 @@ export function LocalDataGate({ children }: { children: ReactNode }) {
     kvReady().finally(() => {
       if (!alive) return;
       setReady(true);
-      if (!STATION_SYNC) return;
+      // When each record changed here, for «محطة المزامنة» (syncing the lab's computers).
+      void import("@/lib/local/fileSync").then((m) => m.startSyncClock()).catch(() => {});
+      // The lab's automatic sync (switched on per computer in «محطة المزامنة»), or the build's.
+      if (!STATION_SYNC && !companySyncOn()) return;
       import("@/lib/sync/client").then((m) => {
         if (!alive) return;
         const upd = () => setNeedsJoin(m.syncStatus().state === "needs_join");

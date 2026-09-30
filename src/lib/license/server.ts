@@ -1,6 +1,6 @@
 import "server-only";
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "node:crypto";
-import { SignJWT, exportJWK, generateKeyPair, importJWK, type JWK, type KeyLike } from "jose";
+import { SignJWT, exportJWK, generateKeyPair, importJWK, jwtVerify, type JWK, type KeyLike } from "jose";
 import { mainQuery as appQuery } from "@/lib/db";
 import { cleanModules, DEFAULT_MODULES, MODULE_IDS, moduleLabel, type LicenseModule, type LicensePayload } from "./modules";
 import { licenseDbUrl } from "./env";
@@ -296,6 +296,26 @@ export async function signingKeySealed(): Promise<boolean> {
   } catch { return false; }
 }
 export async function publicKey(): Promise<JWK> { return (await signingKeys()!).pub; }
+
+/** A device's signed license, checked with this server's key (null: not one it signed). */
+export async function verifyDeviceToken(token: unknown): Promise<LicensePayload | null> {
+  if (typeof token !== "string" || token.length > 4000) return null;
+  try {
+    const key = await importJWK(await publicKey(), "ES256");
+    const { payload } = await jwtVerify(token, key, { algorithms: ["ES256"] });
+    const p = payload as unknown as LicensePayload;
+    return typeof p.lid === "string" && typeof p.dev === "string" ? p : null;
+  } catch { return null; }
+}
+
+/** The lab code a device may act for: its signed license, for this very device, and the code
+ *  still bound to it, running and in date. A lab code or device id alone is never enough. */
+export async function deviceFromToken(token: unknown, device: unknown): Promise<{ ok: true; lid: string; row: LicenseRow } | { ok: false; error: string }> {
+  const p = await verifyDeviceToken(token);
+  if (!p || typeof device !== "string" || p.dev !== device) return { ok: false, error: "bad_token" };
+  const lic = await deviceLicense(p.lid, device);
+  return lic.ok ? { ok: true, lid: p.lid, row: lic.row } : lic;
+}
 
 async function signLicense(p: Omit<LicensePayload, "iat">): Promise<string> {
   const { priv } = await signingKeys()!;

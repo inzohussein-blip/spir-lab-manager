@@ -202,6 +202,13 @@ export function licenseSync(): DeviceSync | null {
   const s = readJson<Stored>(LIC_KEY);
   return s && !s.blocked ? s.sync ?? null : null;
 }
+/** This device's signed license, as the server's sync endpoints ask for it (null: none valid here). */
+export async function licenseProof(): Promise<{ lid: string; device: string; token: string } | null> {
+  const s = readJson<Stored>(LIC_KEY);
+  if (!s || s.blocked) return null;
+  const p = await verify(s);
+  return p && p.dev === deviceId() ? { lid: p.lid, device: p.dev, token: s.token } : null;
+}
 /** Who this device is to the server (for the lab-database calls): its code's id and device id. */
 export async function licenseIdentity(): Promise<{ lid: string; device: string } | null> {
   const s = readJson<Stored>(LIC_KEY);

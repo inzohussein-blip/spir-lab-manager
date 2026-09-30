@@ -5,9 +5,9 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   FlaskConical, ClipboardPlus, ListChecks, FileText, Plus, Settings, Home,
-  Archive, Boxes, Menu, X, ChevronLeft, Trash2, type LucideIcon,
+  Archive, Menu, X, ChevronLeft, Trash2, type LucideIcon,
 } from "lucide-react";
-import { getPages, savePages, getVisits, getStock, daysToExpiry, requestPersistentStorage, uid, TRASH_DAYS, type StationPage } from "@/lib/station/store";
+import { getPages, savePages, getVisits, requestPersistentStorage, uid, TRASH_DAYS, type StationPage } from "@/lib/station/store";
 import { cn } from "@/lib/utils";
 
 interface NavItem { href: string; label: string; hint: string; icon: LucideIcon }
@@ -26,7 +26,6 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
     title: "الإدارة",
     items: [
       { href: "/station/tests", label: "إدارة الفحوصات", hint: "الأسماء والمعدلات", icon: ListChecks },
-      { href: "/store/inventory", label: "المخزن", hint: "في محطة المشتريات", icon: Boxes },
       { href: "/station/settings", label: "الإعدادات", hint: "الترويسة والنسخ", icon: Settings },
     ],
   },
@@ -82,7 +81,6 @@ export function StationSidebar() {
   const router = useRouter();
   const [pages, setPages] = useState<StationPage[]>([]);
   const [todayCount, setTodayCount] = useState(0);
-  const [stockAlerts, setStockAlerts] = useState(0);
   const [open, setOpen] = useState(false); // mobile drawer
 
   useEffect(() => {
@@ -90,12 +88,6 @@ export function StationSidebar() {
     const start = new Date();
     start.setHours(0, 0, 0, 0);
     setTodayCount(getVisits().filter((v) => v.created_at >= start.getTime()).length);
-    setStockAlerts(
-      getStock().filter((s) => {
-        const d = daysToExpiry(s.expiry);
-        return (s.minQty != null && Number(s.qty) <= Number(s.minQty)) || (d != null && d <= 30);
-      }).length
-    );
     setOpen(false);
   }, [pathname]);
 
@@ -211,8 +203,7 @@ export function StationSidebar() {
                     key={it.href}
                     {...it}
                     active={isActive(it.href)}
-                    badge={it.href === "/station/visits" ? todayCount : it.href === "/store/inventory" ? stockAlerts : undefined}
-                    badgeTone={it.href === "/store/inventory" ? "warn" : "brand"}
+                    badge={it.href === "/station/visits" ? todayCount : undefined}
                   />
                 ))}
               </div>
@@ -254,7 +245,6 @@ export function StationSidebar() {
             <div className="font-medium text-ink">{today}</div>
             <div>
               اليوم: <b className="tabular-nums text-brand-dark">{todayCount}</b> زيارة
-              {stockAlerts > 0 && <> · <b className="tabular-nums text-amber-600">{stockAlerts}</b> تنبيه مخزن</>}
             </div>
           </div>
           <Link

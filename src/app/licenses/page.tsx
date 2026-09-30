@@ -443,6 +443,7 @@ export default function LicensesPage() {
                     {r.source === "signup" && <span data-testid="signup-badge" className="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-700">تسجيل ذاتي</span>}
                     {r.price.trim() && <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${r.paid ? "bg-teal-50 text-brand-dark" : "bg-amber-50 text-amber-700"}`}>{r.paid ? "مدفوع" : "غير مدفوع"} · <span className="tabular-nums">{r.price}</span></span>}
                     {r.message && <span title={r.message} className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-xs text-sky-700"><MessageSquare className="size-3" /> رسالة</span>}
+                    {r.pin?.hash && <span data-testid="pin-badge" title="عيّنتَ رمز دخول للمحطات" className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700"><Lock className="size-3" /> PIN</span>}
                   </div>
                   {r.note && <div className="mt-0.5 text-xs text-muted">{r.note}</div>}
                 </div>
@@ -458,6 +459,10 @@ export default function LicensesPage() {
                   {/* Less frequent actions: one size of square icon buttons, named by their tooltip */}
                   {r.device_id && <IconBtn label="نقل لجهاز جديد" onClick={() => change(r, { action: "reset_device" }, "فك ربط الجهاز؟ يستطيع المختبر بعدها إدخال نفس الرمز على جهاز جديد، والمدة تستمر كما هي.")}><MonitorSmartphone className="size-4" /></IconBtn>}
                   {STATION_SYNC && <IconBtn label="قاعدة بيانات المختبر" onClick={() => setDbFor(r)}><Database className="size-4" /></IconBtn>}
+                  <IconBtn label="رمز دخول المحطات (PIN)" onClick={() => {
+                    setOpen((s) => new Set(s).add(r.id));
+                    setTimeout(() => document.querySelector(`[data-lab="${CSS.escape(r.lab_name)}"] [data-testid="pin-owner"] input`)?.scrollIntoView({ block: "center" }), 80);
+                  }}><Lock className="size-4" /></IconBtn>
                   <IconBtn label="رمز جديد" onClick={() => change(r, { action: "new_code" }, "إنشاء رمز جديد لهذا المختبر؟ الرمز القديم لا يعمل بعدها لتفعيل جهاز، والجهاز الحالي يستمر.")}><KeyRound className="size-4" /></IconBtn>
                   <IconBtn label="تعديل الاسم" onClick={() => { const lab = window.prompt("اسم المختبر:", r.lab_name); if (lab == null) return; const note = window.prompt("ملاحظة:", r.note) ?? r.note; change(r, { action: "rename", lab, note }); }}><Pencil className="size-4" /></IconBtn>
                   {r.status === "active"
@@ -1083,7 +1088,8 @@ function Databases({ rows, now, needsOwn, onOpen, onReset, onChecked, onExport }
   const [pick, setPick] = useState("");
   const [checks, setChecks] = useState<Record<string, { busy?: boolean; ok?: boolean; text?: string }>>({});
   const [checkingAll, setCheckingAll] = useState(false);
-  const clients = useMemo(() => rows.filter((r) => r.modules.includes("admin") || r.admin_db), [rows]);
+  // Every code is listed: its admin panel's database, and the one its stations sync through.
+  const clients = rows;
   const count = (t: DbTab) => (t === "all" ? clients.length : clients.filter((r) => providerOfRow(r) === t).length);
   const list = useMemo(() => {
     const t = q.trim();
@@ -1092,6 +1098,7 @@ function Databases({ rows, now, needsOwn, onOpen, onReset, onChecked, onExport }
       .filter((r) => !t || r.lab_name.includes(t) || r.note.includes(t) || deviceOf(r).includes(t) || (r.admin_db?.host ?? "").includes(t))
       .sort((a, b) => Number(!!b.admin_db) - Number(!!a.admin_db) || a.lab_name.localeCompare(b.lab_name, "ar"));
   }, [clients, tab, q]);
+  const panels = clients.filter((r) => r.modules.includes("admin"));
   const own = clients.filter((r) => r.admin_db);
   const down = own.filter((r) => r.admin_db_check && !r.admin_db_check.ok);
 
@@ -1134,14 +1141,14 @@ function Databases({ rows, now, needsOwn, onOpen, onReset, onChecked, onExport }
     setChecks((c) => ({ ...c, [r.id]: d.ok ? { ok: true, text: `✓ نُقلت البيانات القديمة: ${d.copied?.rows ?? 0} سجلاً` } : { ok: false, text: adminDbError(d.error) } }));
   }
   const tabs: [DbTab, string][] = [["all", "الكل"], ...PROVIDERS.map((p) => [p.id, p.name] as [DbTab, string])];
-  const candidates = clients.filter((r) => r.modules.includes("admin"));
+  const candidates = clients;
 
   return (
     <>
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        {([["عملاء بلوحة الإدارة", candidates.length, ""], ["بقاعدة خاصة", own.length, ""],
-          ["أقسام في قاعدة الموقع", candidates.filter((r) => placeOf(r, needsOwn) === "site").length, ""],
-          ["بانتظار قاعدة", candidates.filter((r) => placeOf(r, needsOwn) === "waiting").length, candidates.some((r) => placeOf(r, needsOwn) === "waiting") ? "text-amber-700" : ""],
+        {([["كل الرموز", clients.length, ""], ["بقاعدة خاصة", own.length, ""],
+          ["أقسام في قاعدة الموقع", panels.filter((r) => placeOf(r, needsOwn) === "site").length, ""],
+          ["بانتظار قاعدة", panels.filter((r) => placeOf(r, needsOwn) === "waiting").length, panels.some((r) => placeOf(r, needsOwn) === "waiting") ? "text-amber-700" : ""],
           ["لا تستجيب", down.length, down.length ? "text-red-700" : ""]] as const).map(([k, v, tone]) => (
           <div key={k} className="rounded-2xl border border-line bg-surface p-4 shadow-[var(--shadow-card)]">
             <div className="text-xs text-muted">{k}</div>
@@ -1185,7 +1192,7 @@ function Databases({ rows, now, needsOwn, onOpen, onReset, onChecked, onExport }
       </div>
       {list.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-line bg-surface p-8 text-center text-sm text-muted">
-          {q.trim() ? "لا نتائج." : tab !== "all" ? `لا عملاء على ${providerById(tab).name} بعد — اختر عميلاً أعلاه واربطه.` : "لا عملاء بلوحة الإدارة الكاملة بعد — فعّل «لوحة الإدارة الكاملة» في رمز المختبر ثم اربط قاعدته هنا."}
+          {q.trim() ? "لا نتائج." : tab !== "all" ? `لا عملاء على ${providerById(tab).name} بعد — اختر عميلاً أعلاه واربطه.` : "لا رموز بعد — أنشئ رمزاً من «رمز جديد» فيظهر هنا."}
         </div>
       ) : (
         <ul data-testid="db-list" className="overflow-hidden rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)]">
@@ -1206,7 +1213,9 @@ function Databases({ rows, now, needsOwn, onOpen, onReset, onChecked, onExport }
                       ? <>{providerById(p).name}: <span dir="ltr" className="font-mono">{r.admin_db.host}</span> · {r.admin_db.by === "lab" ? "ضبطها المختبر" : "ضبطتها أنت"} · {fmt(r.admin_db.at)}</>
                       : placeOf(r, needsOwn) === "waiting"
                         ? <span className="text-amber-700">بانتظار قاعدة خاصة — لوحة الإدارة مقفلة حتى الربط</span>
-                        : <>قسم مستقل في قاعدة الموقع{r.is_trial ? " (رمز تجريبي)" : ""} — لا يرى بيانات غيره</>}
+                        : placeOf(r, needsOwn) === "none"
+                          ? <>المحطات فقط — بلا قاعدة خاصة (اربطها لمزامنة محطاته أو قبل تفعيل لوحة الإدارة)</>
+                          : <>قسم مستقل في قاعدة الموقع{r.is_trial ? " (رمز تجريبي)" : ""} — لا يرى بيانات غيره</>}
                   </div>
                   {(r.admin_db || checks[r.id]) && <div data-testid="db-check" className="mt-1 text-xs">{lastCheck(r)}</div>}
                 </div>
