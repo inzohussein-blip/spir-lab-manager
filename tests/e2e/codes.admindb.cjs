@@ -285,7 +285,7 @@ const settingsReady = (pg) => pg.waitForFunction(() => document.querySelectorAll
 
   // ── Owner unlinks it: the panel goes back to its section, and the lab links a database itself ──
   await item.locator('button:has-text("تغيير")').click();
-  await modal.locator('button:has-text("إلغاء ربط القاعدة")').click();
+  await modal.locator('button:has-text("إرجاع لقسمه في قاعدة الموقع")').click(); // (rule off: back to its section, not «إلغاء ربط القاعدة»)
   await waitFor(async () => (await item.locator('[data-testid="db-state"]').innerText()).includes('قسم مستقل'), 15000);
   ok((await item.locator('[data-testid="db-state"]').innerText()).includes('قسم مستقل في قاعدة الموقع'), 'owner: unlinked → back to its section');
   ok(await signInOn(p, 'secadmin', 'sec-pass-2') && await p.locator('[data-testid="needs-db"]').count() === 0, 'the panel opens in its section (no «needs a database» screen)');
