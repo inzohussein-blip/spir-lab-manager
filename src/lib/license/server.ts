@@ -1,4 +1,5 @@
 import "server-only";
+import { NEEDS_DB_GATE } from "./flags";
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "node:crypto";
 import { SignJWT, exportJWK, generateKeyPair, importJWK, jwtVerify, type JWK, type KeyLike } from "jose";
 import { mainQuery as appQuery } from "@/lib/db";
@@ -216,7 +217,8 @@ export function cleanPrefs(v: unknown): OwnerPrefs {
     defaultModules: Array.isArray(p.defaultModules) ? cleanModules(p.defaultModules) : [...DEFAULT_PREFS.defaultModules],
     trialDays: within(p.trialDays, 1, 60, DEFAULT_PREFS.trialDays),
     soonDays: within(p.soonDays, 1, 90, DEFAULT_PREFS.soonDays),
-    adminNeedsOwnDb: typeof p.adminNeedsOwnDb === "boolean" ? p.adminNeedsOwnDb : DEFAULT_PREFS.adminNeedsOwnDb,
+    // Off while the owner keeps the «needs a database» screen disabled (lib/license/flags — do not switch on).
+    adminNeedsOwnDb: NEEDS_DB_GATE && (typeof p.adminNeedsOwnDb === "boolean" ? p.adminNeedsOwnDb : DEFAULT_PREFS.adminNeedsOwnDb),
     multiDevice: p.multiDevice === true,
     selfSignup: p.selfSignup === true,
     errorLog: p.errorLog === true,

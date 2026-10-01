@@ -16,6 +16,7 @@ import { adminDbError } from "@/lib/db/labErrors";
 import { PROVIDERS, providerById, providerOf, type ProviderId } from "@/lib/db/providers";
 import { ConnInput, ProviderGuide, ProviderMark, ProviderPicker } from "@/components/DbProviders";
 import { fmtDateTime } from "@/lib/utils";
+import { NEEDS_DB_GATE } from "@/lib/license/flags";
 
 /** «إدارة الرموز» — the owner's page: one code per lab, bound to one device, with a period and stations. */
 
@@ -51,7 +52,7 @@ type Prefs = {
   multiDevice: boolean; selfSignup: boolean; errorLog: boolean; dataExport: boolean;
 };
 const DEFAULT_PREFS: Prefs = {
-  defaultDays: 365, defaultModules: [...DEFAULT_MODULES], trialDays: 7, soonDays: 14, adminNeedsOwnDb: true,
+  defaultDays: 365, defaultModules: [...DEFAULT_MODULES], trialDays: 7, soonDays: 14, adminNeedsOwnDb: NEEDS_DB_GATE,
   multiDevice: false, selfSignup: false, errorLog: false, dataExport: false,
 };
 type Data = { enabled: boolean; owner: boolean; needsDb?: boolean; storage?: Storage; licenses?: Row[]; events?: Ev[]; signIns?: SignIn[]; twoFactor?: TwoFactor; contact?: string; prefs?: Prefs; version?: string; now?: number };
@@ -1380,10 +1381,12 @@ function PrefsCard({ prefs, onSaved }: { prefs: Prefs; onSaved: () => void }) {
       </div>
       <div className="mt-3 text-sm font-medium">المحطات المفعّلة في الرمز الجديد</div>
       <ModuleChips value={p.defaultModules} onChange={(m) => setP({ ...p, defaultModules: m })} />
-      <label data-testid="needs-own-db" className="mt-4 flex items-start gap-2 rounded-lg border border-line p-3 text-sm">
-        <input type="checkbox" checked={p.adminNeedsOwnDb} onChange={(e) => setP({ ...p, adminNeedsOwnDb: e.target.checked })} aria-label="لوحة الإدارة تحتاج قاعدة خاصة" className="mt-1" />
+      {/* Disabled on the owner's request (lib/license/flags NEEDS_DB_GATE) — shown greyed, not to be switched on. */}
+      <label data-testid="needs-own-db" className={`mt-4 flex items-start gap-2 rounded-lg border border-line p-3 text-sm ${NEEDS_DB_GATE ? "" : "opacity-60"}`}>
+        <input type="checkbox" checked={NEEDS_DB_GATE && p.adminNeedsOwnDb} disabled={!NEEDS_DB_GATE} onChange={(e) => setP({ ...p, adminNeedsOwnDb: e.target.checked })} aria-label="لوحة الإدارة تحتاج قاعدة خاصة" className="mt-1" />
         <span>
           <b>لوحة الإدارة الكاملة تحتاج قاعدة بيانات خاصة لكل مختبر</b>
+          {!NEEDS_DB_GATE && <span data-testid="needs-own-db-off" className="ms-2 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">معطّلة</span>}
           <span className="mt-0.5 block text-xs text-muted">
             لا تُفتح لوحة الإدارة لرمز مدفوع حتى تُربط قاعدته (منك في «قواعد البيانات» أو من المختبر نفسه). الرموز التجريبية تعمل في قسم مستقل من قاعدة الموقع.
             عند الإيقاف يعمل كل مختبر بلا قاعدة خاصة في قسمه المستقل من قاعدة الموقع. في الحالتين لا يرى مختبر بيانات غيره.

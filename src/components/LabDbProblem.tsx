@@ -2,10 +2,12 @@ import Link from "next/link";
 import { DatabaseZap } from "lucide-react";
 import { adminDbError } from "@/lib/db/labErrors";
 import { NeedsDbGate } from "./NeedsDbGate";
+import { NEEDS_DB_GATE } from "@/lib/license/flags";
 
 /** Shown instead of the admin panel while the lab's own database does not answer. */
 export function LabDbProblem({ code, host }: { code: string; host: string }) {
-  if (code === "needs_db") return <NeedsDbGate />;
+  // Disabled on the owner's request (lib/license/flags) — kept, not to be switched on again.
+  if (code === "needs_db" && NEEDS_DB_GATE) return <NeedsDbGate />;
   return (
     <div className="flex min-h-screen items-center justify-center bg-canvas p-4">
       <div data-testid="lab-db-problem" className="w-full max-w-md rounded-2xl border border-line bg-surface p-7 text-center shadow-sm">

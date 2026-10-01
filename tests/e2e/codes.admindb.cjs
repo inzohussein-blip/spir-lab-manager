@@ -1,8 +1,8 @@
 // Where each lab's full admin panel keeps its data:
 //  • without a database of its own, its own section of the site's database — labs never see each
 //    other's records; the old shared data can be brought to the lab that used it;
-//  • with «لوحة الإدارة تحتاج قاعدة خاصة» on (the default), a paid code's panel stays closed until
-//    a database is linked (trial codes keep their section); the lab can link one itself;
+//  • «لوحة الإدارة تحتاج قاعدة خاصة» (the panel closed until a database is linked) is disabled on
+//    the owner's request (lib/license/flags NEEDS_DB_GATE): shown greyed, never applied;
 //  • a lab's own PostgreSQL, linked by the owner through each provider's interface (Neon,
 //    Supabase, Railway, other), checked, with the admin's password reset and default tests;
 //  • a new database or section starts with a first-admin form at the sign-in page.
@@ -40,11 +40,10 @@ const settingsReady = (pg) => pg.waitForFunction(() => document.querySelectorAll
   ok(await o.locator('input[aria-label="سطر التواصل"]').count() === 1, 'settings section: holds the contact line too');
   const prefs = o.locator('[data-testid="prefs-card"]');
   const needsOwn = prefs.locator('input[aria-label="لوحة الإدارة تحتاج قاعدة خاصة"]');
-  ok(await needsOwn.isChecked(), '«لوحة الإدارة تحتاج قاعدة خاصة» is on by default');
+  ok(!(await needsOwn.isChecked()) && await needsOwn.isDisabled() && await prefs.locator('[data-testid="needs-own-db-off"]').count() === 1, '«لوحة الإدارة تحتاج قاعدة خاصة» is disabled (owner\'s request) and cannot be switched on');
   await prefs.locator('select[aria-label="مدة الرمز الافتراضية"]').selectOption('90');
   await prefs.locator('input[aria-label="أيام الرمز التجريبي"]').fill('10');
   await prefs.locator('button[aria-pressed]:has-text("لوحة الإدارة الكاملة")').click();
-  await needsOwn.uncheck(); // first: every lab in its own section of the site's database
   await prefs.locator('button:has-text("حفظ الإعدادات")').click();
   await waitFor(async () => (await prefs.locator('[data-testid="prefs-msg"]').innerText().catch(() => '')).includes('حُفظت'), 10000);
   await o.goto(B + '/license#new'); await o.reload(); await o.waitForSelector('text=إنشاء الرمز', { timeout: 15000 });
@@ -135,25 +134,23 @@ const settingsReady = (pg) => pg.waitForFunction(() => document.querySelectorAll
   await rm.locator('button:has-text("إغلاق")').click();
   ok(!(await signInOn(p, 'secadmin', 'sec-pass-1')) && await signInOn(p, 'secadmin', 'sec-pass-2'), 'only the new password opens lab 1\'s panel');
 
-  // ── Rule on: a paid code needs a database of its own; a trial code keeps its section ──
-  await o.goto(B + '/license#settings'); await o.reload(); await o.waitForSelector('[data-testid="prefs-card"]', { timeout: 15000 });
-  await needsOwn.check();
-  await prefs.locator('button:has-text("حفظ الإعدادات")').click();
-  await waitFor(async () => (await prefs.locator('[data-testid="prefs-msg"]').innerText().catch(() => '')).includes('حُفظت'), 10000);
+  // ── The «needs a database» rule stays off: even sent on, a paid code opens in its section ──
+  await api({ op: 'prefs', prefs: { adminNeedsOwnDb: true } });
   await p.goto(B + '/'); await p.waitForTimeout(500);
   await p.goto(B + '/login');
-  ok(await p.locator('[data-testid="needs-db"]').count() === 1, 'lab 1 (paid, no database): the panel asks for a database of its own');
+  ok(await p.locator('[data-testid="needs-db"]').count() === 0, 'lab 1 (paid, no database): no «needs a database» screen');
+  ok(await signInOn(p, 'secadmin', 'sec-pass-2') && await lists(p, P1), 'lab 1 keeps working in its own section');
   const { p: pt } = await device(ct.code);
-  ok(await firstRun(pt, 'trialadmin', 'trial-pass-1') && !(await lists(pt, P1)), 'the trial code still works in its own section');
+  ok(await firstRun(pt, 'trialadmin', 'trial-pass-1') && !(await lists(pt, P1)), 'the trial code works in its own section');
   await o.goto(B + '/license#databases'); await o.reload(); await o.waitForSelector('[data-testid="db-list"]', { timeout: 15000 });
-  ok((await item.locator('[data-testid="db-state"]').innerText()).includes('بانتظار قاعدة خاصة'), 'databases section: lab 1 «بانتظار قاعدة خاصة»');
-  ok(Number(await o.locator('[data-testid="db-waiting-count"]').innerText()) >= 2, 'summary counts the codes waiting for a database');
+  ok((await item.locator('[data-testid="db-state"]').innerText()).includes('قسم مستقل في قاعدة الموقع'), 'databases section: lab 1 still in its section (not «بانتظار»)');
+  ok(Number(await o.locator('[data-testid="db-waiting-count"]').innerText()) === 0, 'no code waits for a database');
 
   // ── Owner links lab 1's own database: one interface per provider ──
   await o.goto(B + '/license'); await o.waitForSelector(`div[data-lab="${LAB}"]`, { timeout: 15000 });
   const card = o.locator(`div[data-lab="${LAB}"]`);
   ok(await card.locator('[data-testid="lab-db"]').count() === 0, 'card: no station-sync column (station sync off)');
-  ok((await card.locator('[data-testid="admin-db"]').innerText()).includes('بانتظار قاعدة خاصة'), 'card: waiting for a database');
+  ok((await card.locator('[data-testid="admin-db"]').innerText()).includes('قسم في قاعدة الموقع'), 'card: in its section of the site\'s database');
   await card.locator('button[aria-label="قاعدة لوحة الإدارة"]').click();
   const modal = o.locator('[data-testid="admin-db-modal"]');
   const msg = () => modal.locator('[data-testid="admin-db-msg"]').innerText();
@@ -286,20 +283,19 @@ const settingsReady = (pg) => pg.waitForFunction(() => document.querySelectorAll
   ok(!!(await waitFor(async () => (await o.locator('[data-testid="badge-databases"]').count()) === 0, 15000)), 'checked again: no longer counted');
   errs.length = 0; // the error page above is expected
 
-  // ── Owner unlinks it: the panel closes again (rule on), and the lab links a database itself ──
+  // ── Owner unlinks it: the panel goes back to its section, and the lab links a database itself ──
   await item.locator('button:has-text("تغيير")').click();
   await modal.locator('button:has-text("إلغاء ربط القاعدة")').click();
-  await waitFor(async () => (await item.locator('[data-testid="db-state"]').innerText()).includes('بانتظار'), 15000);
-  ok((await item.locator('[data-testid="db-state"]').innerText()).includes('بانتظار قاعدة خاصة'), 'owner: unlinked → waiting for a database');
-  await p.goto(B + '/'); await p.goto(B + '/login'); await p.waitForSelector('[data-testid="needs-db"]', { timeout: 20000 });
-  const gate = p.locator('[data-testid="needs-db"]');
-  ok(await gate.locator('[data-provider]').count() === 4, 'the lab\'s gate offers the same provider interfaces');
-  await gate.locator('[data-provider="postgres"]').click();
-  await gate.locator('input[aria-label="رابط قاعدة المختبر"]').fill(db2.url);
-  await gate.locator('button:has-text("ربط القاعدة")').click();
-  await p.waitForSelector('[data-testid="first-run"]', { timeout: 60000 });
-  ok(true, 'the lab linked its database from the gate → first-admin form');
-  ok(await firstRun(p, 'admin', 'lab-own-1'), 'the lab creates its first admin and is in');
+  await waitFor(async () => (await item.locator('[data-testid="db-state"]').innerText()).includes('قسم مستقل'), 15000);
+  ok((await item.locator('[data-testid="db-state"]').innerText()).includes('قسم مستقل في قاعدة الموقع'), 'owner: unlinked → back to its section');
+  ok(await signInOn(p, 'secadmin', 'sec-pass-2') && await p.locator('[data-testid="needs-db"]').count() === 0, 'the panel opens in its section (no «needs a database» screen)');
+  await p.goto(B + '/settings#database'); await settingsReady(p); await p.waitForSelector('[data-testid="lab-db-card"]', { timeout: 15000 });
+  ok(await sc.locator('[data-provider]').count() === 4, 'the lab\'s Settings offer the same provider interfaces');
+  await sc.locator('[data-provider="postgres"]').click();
+  await sc.locator('input[aria-label="رابط قاعدة المختبر"]').fill(db2.url);
+  await sc.locator('button:has-text("حفظ ونقل اللوحة إليها")').click();
+  await p.waitForURL((u) => u.pathname === '/login', { timeout: 60000 }).catch(() => {});
+  ok(await signInOn(p, 'secadmin', 'sec-pass-2'), 'the lab linked its database from Settings and its admin signs in there');
   await addPatient(p, 'مريض القاعدة الثانية ' + TAG);
   ok((await db2.query(`select count(*)::int as n from patients`))[0].n === 1, 'working on the database it linked');
 
@@ -314,13 +310,15 @@ const settingsReady = (pg) => pg.waitForFunction(() => document.querySelectorAll
   ok(new URL(p.url()).pathname === '/login', 'after saving: sign in again');
   const u3 = await db3.query(`select username from app_users`);
   const p3 = await db3.query(`select count(*)::int as n from patients`);
-  ok(u3.length === 1 && u3[0].username === 'admin' && p3[0].n === 1, 'its accounts and patients came along');
-  ok(await signInOn(p, 'admin', 'lab-own-1'), 'the same admin signs in on the new database');
+  ok(u3.length === 1 && u3[0].username === 'secadmin' && p3[0].n === 1, 'its accounts and patients came along');
+  ok(await signInOn(p, 'secadmin', 'sec-pass-2'), 'the same admin signs in on the new database');
   await p.goto(B + '/settings#database'); await settingsReady(p); await p.waitForSelector('[data-testid="lab-db-card"]', { timeout: 15000 });
-  await sc.locator('button:has-text("إرجاع لقسم المختبر")').click();
-  ok(((await waitFor(() => sc.locator('[data-testid="lab-db-msg"]').innerText().catch(() => ''), 15000)) || '').includes('لا يمكن إرجاعها'), 'with the rule on, the lab cannot go back to the site\'s database');
   await o.goto(B + '/license'); await o.waitForSelector(`div[data-lab="${LAB}"]`, { timeout: 15000 });
   ok((await card.locator('[data-testid="admin-db"]').innerText()).includes('(من المختبر)'), 'owner card: «قاعدة خاصة (من المختبر)»');
+  await sc.locator('button:has-text("إرجاع لقسم المختبر")').click();
+  await p.waitForURL((u) => u.pathname === '/login', { timeout: 60000 }).catch(() => {});
+  await o.reload(); await o.waitForSelector(`div[data-lab="${LAB}"]`, { timeout: 15000 });
+  ok((await card.locator('[data-testid="admin-db"]').innerText()).includes('قسم في قاعدة الموقع'), 'with the rule off, the lab can go back to its section');
 
   await api({ op: 'prefs', prefs: {} }); // back to the defaults for the other files
   ok(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.join(' | ') : ''));

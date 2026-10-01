@@ -90,11 +90,13 @@ const A = 'مختبر أ ' + TAG, BB = 'مختبر ب ' + TAG;
   await a1.waitForSelector('[data-testid="sync-result"]', { timeout: 15000 });
   ok((await a1.getByTestId('sync-result').innerText()).includes('مختبر آخر') && !(await items(a1)).includes(SB), 'lab B\'s sync file is refused on lab A\'s computer');
 
-  // ── Lab C has no database of its own: told to link one ──
+  // ── Lab C has no database of its own: it syncs in its own section of the site's database (the
+  //    «needs a database» rule is disabled on the owner's request — lib/license/flags) ──
   const c1 = await computer(cc.code, 'c1');
   await c1.goto(B + '/sync/auto'); await c1.waitForSelector('[data-testid="company-sync"]', { timeout: 20000 });
   await c1.check('input[aria-label="المزامنة التلقائية"]');
-  ok(!!(await waitFor(async () => (await c1.getByTestId('company-sync-state').innerText().catch(() => '')).includes('لم يربط قاعدة بياناته'), 30000)), 'lab C (no database): told to link its own database');
+  ok(!!(await waitFor(async () => (await c1.getAttribute('[data-testid="company-sync"]', 'data-state')) === 'ok', 30000)), 'lab C (no database): syncs in its own section');
+  ok(!(await items(c1)).includes(SA1) && !(await items(c1)).includes(SB), 'lab C gets neither A\'s nor B\'s records');
   ok((await dbA.query(`select count(*)::int as n from lab_sync_records`))[0].n > 0 && (await dbB.query(`select count(*)::int as n from lab_sync_records`))[0].n > 0, 'A\'s and B\'s records are in their own databases');
 
   // ── Switched off: this computer stops, its data stays ──
