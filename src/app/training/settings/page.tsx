@@ -6,26 +6,48 @@ import { PinCard } from "@/components/local/PinGate";
 import { THEME_KEYS } from "@/lib/local/theme";
 import { LockGate } from "@/components/training/LockGate";
 import { useEffect, useRef, useState } from "react";
-import { Settings, ShieldCheck, Download, Upload, HardDrive, FileText, Loader2, Lock } from "lucide-react";
+import { Settings, ShieldCheck, Download, Upload, HardDrive, FileText, Loader2, Lock, Library, Copy } from "lucide-react";
 import { setLock, useEditLock } from "@/lib/training/lock";
-import { getSettings, saveSettings, exportBackup, importBackup, textUsage, type TrainingSettings } from "@/lib/training/store";
+import { getSettings, saveSettings, exportBackup, importBackup, textUsage, getTests, addMissingLibrary, type TrainingSettings } from "@/lib/training/store";
+import { LIBRARY_CODES } from "@/lib/training/library";
 import { ImagePicker } from "@/components/training/ImagePicker";
+import { addImage } from "@/lib/training/media";
+import { kvGet } from "@/lib/local/kv";
 import { SettingsLayout, notifySaved } from "@/components/SettingsLayout";
 
 const inp = "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
 const mb = (n: number) => `${(n / 1024 / 1024).toFixed(n > 10 * 1024 * 1024 ? 0 : 1)} MB`;
 
-/** Letterhead of the printed procedures and the general safety lines — each saves as it changes. */
+/** The lab station's name, details and logo on this device (for «نسخ من محطة المختبر»). */
+function labStation(): { labName: string; labSubtitle?: string; footer?: string; logo?: string } | null {
+  try {
+    const s = JSON.parse(kvGet("station.settings.v1") ?? "null");
+    return s?.labName?.trim() ? s : null;
+  } catch { return null; }
+}
+
+/** Letterhead of the printed procedures and guide, and the general safety lines — each saves as it changes. */
 function PrintCards() {
   const [s, setS] = useState<TrainingSettings | null>(null);
-  useEffect(() => { setS(getSettings()); }, []);
+  const [lab, setLab] = useState<ReturnType<typeof labStation>>(null);
+  const [copied, setCopied] = useState("");
+  useEffect(() => { setS(getSettings()); setLab(labStation()); }, []);
   if (!s) return null;
   const save = (patch: Partial<TrainingSettings>) => {
     const next = { ...getSettings(), ...patch };
     next.title = next.title.trim() || "المختبر";
     saveSettings(next); setS(next); notifySaved();
   };
-  const text = (k: "title" | "subtitle" | "footer" | "preparedBy", label: string, wide = false) => (
+  const copyLab = async () => {
+    if (!lab) return;
+    const patch: Partial<TrainingSettings> = { title: lab.labName.trim(), subtitle: lab.labSubtitle ?? "", contact: lab.footer ?? "" };
+    if (lab.logo?.startsWith("data:image/")) {
+      try { patch.logoImageId = await addImage(await (await fetch(lab.logo)).blob(), "شعار المختبر"); } catch { /* keep the current logo */ }
+    }
+    save(patch);
+    setCopied("نُسخ اسم المختبر ومعلوماته" + (patch.logoImageId ? " وشعاره." : "."));
+  };
+  const text = (k: "title" | "subtitle" | "footer" | "preparedBy" | "contact", label: string, wide = false) => (
     <label className={`text-sm font-medium ${wide ? "sm:col-span-2" : ""}`}>{label}
       <input value={s[k] ?? ""} onChange={(e) => setS({ ...s, [k]: e.target.value })} onBlur={(e) => save({ [k]: e.target.value.trim() })} className={`mt-1 ${inp}`} />
     </label>
@@ -33,11 +55,19 @@ function PrintCards() {
   return (
     <>
       <div className="rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
-        <div className="mb-1 flex items-center gap-2 text-sm font-semibold"><FileText className="size-4" /> ترويسة البروسيجر المطبوع (SOP)</div>
-        <p className="mb-3 text-xs text-muted">يُحفظ كل حقل عند الخروج منه.</p>
+        <div className="mb-1 flex flex-wrap items-center gap-2 text-sm font-semibold"><FileText className="size-4" /> ترويسة المطبوعات (الدليل والبروسيجر والشهادات)
+          {lab && (
+            <button type="button" onClick={copyLab} data-testid="training-copy-lab" className="ms-auto inline-flex items-center gap-1 rounded-lg border border-line px-2.5 py-1 text-xs font-normal hover:bg-canvas">
+              <Copy className="size-3.5" /> نسخ من محطة المختبر
+            </button>
+          )}
+        </div>
+        <p className="mb-3 text-xs text-muted">شعار المختبر واسمه ومعلوماته في رأس كل صفحة من الدليل المطبوع وغلافه والبروسيجرات. يُحفظ كل حقل عند الخروج منه.</p>
+        {copied && <p className="mb-2 text-xs text-brand-dark">{copied}</p>}
         <div className="grid gap-3 sm:grid-cols-2">
-          {text("title", "اسم الجهة")}
+          {text("title", "اسم المختبر / الجهة")}
           {text("subtitle", "العنوان الفرعي")}
+          {text("contact", "العنوان والهاتف", true)}
           {text("footer", "سطر التذييل", true)}
           {text("preparedBy", "أعدّه (يظهر في خانة التوقيع)")}
           <label className="text-sm font-medium">مدة المراجعة الافتراضية (بالأشهر)
@@ -135,6 +165,34 @@ function BackupCard() {
   );
 }
 
+/** «مكتبة الفحوصات»: every test of the lab station's list comes with the station; deleted ones can be
+ *  brought back (edited ones are never replaced). */
+function LibraryCard() {
+  const [count, setCount] = useState<number | null>(null);
+  const [msg, setMsg] = useState("");
+  useEffect(() => { setCount(getTests().length); }, []);
+  function restore() {
+    const n = addMissingLibrary();
+    setCount(getTests().length);
+    setMsg(n ? `أُضيف ${n} فحص من المكتبة.` : "كل فحوصات المكتبة موجودة.");
+    if (n) notifySaved();
+  }
+  return (
+    <div className="rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]" data-testid="library-card">
+      <div className="mb-1 flex items-center gap-2 text-sm font-semibold"><Library className="size-4" /> مكتبة الفحوصات</div>
+      <p className="mb-3 text-xs text-muted">
+        تأتي المحطة بكل فحوصات محطة المختبر ({LIBRARY_CODES().length} فحصاً، مع صورة الدم الكاملة) مشروحة: الغرض والطريقة والعينة والتحضير والخطوات
+        والملاحظات والقيم الطبيعية وأسباب الارتفاع والانخفاض. في المحطة الآن: <b className="tabular-nums">{count ?? "…"}</b> فحص.
+      </p>
+      <button onClick={restore} data-testid="library-restore" className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas">
+        <Library className="size-4" /> إضافة فحوصات المكتبة الناقصة
+      </button>
+      <p className="mt-1 text-[11px] text-muted">يُضيف ما حُذف فقط، ولا يغيّر فحصاً موجوداً أو عدّلته.</p>
+      {msg && <p className="mt-2 text-xs text-brand-dark" role="status">{msg}</p>}
+    </div>
+  );
+}
+
 export default function TrainingSettingsPage() {
   // Appearance is a personal choice, so it stays available in read-only mode;
   // everything else on this page needs the edit PIN.
@@ -144,14 +202,14 @@ export default function TrainingSettingsPage() {
       icon={<Settings className="size-6 text-brand" />}
       sections={[
         {
-          id: "print", label: "المطبوعات", hint: "ترويسة البروسيجر وتعليمات السلامة", icon: <FileText />,
+          id: "print", label: "المطبوعات", hint: "ترويسة الدليل والبروسيجر والسلامة", icon: <FileText />,
           content: <LockGate><div className="flex flex-col gap-4"><PrintCards /></div></LockGate>,
         },
         {
           id: "device", label: "الجهاز والبيانات", hint: "النسخ الاحتياطي والقفل والمزامنة", icon: <HardDrive />,
           content: (
             <>
-              <LockGate><div className="flex flex-col gap-4"><BackupCard /><LockCard /><SyncPanel /></div></LockGate>
+              <LockGate><div className="flex flex-col gap-4"><LibraryCard /><BackupCard /><LockCard /><SyncPanel /></div></LockGate>
             </>
           ),
         },

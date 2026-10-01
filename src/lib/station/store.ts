@@ -99,8 +99,8 @@ export interface StationDoctor {
   clinic?: string;
 }
 
-/** A stock item: a reagent / kit (one unit per linked test ordered) or a consumable such as a
- *  tube (`perVisit`: one unit per visit that has any of its tests). */
+/** A stock item: a reagent (one unit per linked test ordered, taken with the results) or a supply
+ *  the examiner issues by hand (`byHand`: tubes, syringes, gloves…). */
 export interface StockItem {
   id: string;
   name: string;
@@ -109,7 +109,10 @@ export interface StockItem {
   expiry?: string; // YYYY-MM-DD
   /** The lab station's tests that use this item. */
   testIds?: string[];
-  /** One unit per visit (tubes, containers, needles) instead of one per test. */
+  /** Issued by the examiner from «المخزن» (tubes, syringes, containers, gloves…), never taken with
+   *  the results: one tube or syringe may serve several tests. Its tests are shown for reference. */
+  byHand?: boolean;
+  /** Older «one per visit» supplies — read as `byHand`. */
   perVisit?: boolean;
   /** Older single link (kept readable). */
   linkedTestId?: string;
@@ -118,6 +121,8 @@ export interface StockItem {
   /** The package's barcode — «… ← الباركود». */
   barcode?: string;
 }
+/** A supply the examiner issues by hand (see StockItem.byHand). */
+export const isByHand = (s: StockItem): boolean => s.byHand === true || s.perVisit === true;
 /** The tests a stock item is linked to (old single link included). */
 export const stockTestIds = (s: StockItem): string[] =>
   Array.from(new Set([...(s.testIds ?? []), ...(s.linkedTestId ? [s.linkedTestId] : [])]));
@@ -181,6 +186,21 @@ export interface StationSettings {
   reportBarcode?: boolean;
   /** Few tests: a larger results table that fills more of the page (off by default). */
   reportFill?: boolean;
+  /** «ملء الصفحة» — more ways, each off by default and working while `reportFill` is on:
+   *  the table sized to the space measured on the sheet; */
+  fillSmart?: boolean;
+  /** larger on A4, smaller on A5 (the fixed steps); */
+  fillPaper?: boolean;
+  /** a «ملاحظات» box for handwriting in the space between the results and the signature; */
+  fillNotes?: boolean;
+  /** the lab's name and the patient's details larger too; */
+  fillHead?: boolean;
+  /** one or two tests: each result in a large card instead of the table; */
+  fillCard?: boolean;
+  /** the patient's previous result printed beside the new one when there is room; */
+  fillPrev?: boolean;
+  /** how far it may grow: light / medium / full (unset: as before). */
+  fillLevel?: "light" | "medium" | "full";
   /** A «واتساب» button beside it: the report as a PDF to share — on by default. */
   entryWhatsApp?: boolean;
   /** A «طباعة» button under the results entry box — on by default. */
@@ -612,18 +632,15 @@ export function saveStock(list: StockItem[], reason: MoveReason = "edit", ref?: 
   write(K_STOCK, list);
   logStockMoves(before, list, reason, ref);
 }
-/** Units each stock item gives to the tests newly ordered on a visit: a reagent one per linked
- *  test, a consumable (per visit) one when the visit has any of its tests — and none when the
- *  visit already had one of them (`already`: the visit's tests before this save). */
-export function stockUse(list: StockItem[], testIds: string[], already: string[]): Map<string, number> {
-  const added = new Set(testIds), before = new Set(already);
+/** Units each reagent gives to the tests newly ordered on a visit: one per linked test. Supplies
+ *  issued by hand (tubes, syringes…) are left to the examiner. */
+export function stockUse(list: StockItem[], testIds: string[]): Map<string, number> {
+  const added = new Set(testIds);
   const use = new Map<string, number>();
   for (const s of list) {
-    const ids = stockTestIds(s);
-    const n = ids.filter((id) => added.has(id)).length;
-    if (!n) continue;
-    const u = s.perVisit ? (ids.some((id) => before.has(id)) ? 0 : 1) : n;
-    if (u) use.set(s.id, u);
+    if (isByHand(s)) continue;
+    const n = stockTestIds(s).filter((id) => added.has(id)).length;
+    if (n) use.set(s.id, n);
   }
   return use;
 }
@@ -631,10 +648,10 @@ export function stockUse(list: StockItem[], testIds: string[], already: string[]
 export interface StockShort { name: string; qty: number; need: number }
 /** Use stock for the tests newly ordered on a visit (see stockUse). Returns what was not in stock
  *  (the count stops at 0, or goes below it when the lab allows negative stock). */
-export function deductStockForTests(testIds: string[], already: string[] = [], ref?: string): StockShort[] {
+export function deductStockForTests(testIds: string[], ref?: string): StockShort[] {
   if (testIds.length === 0) return [];
   const list = getStock();
-  const use = stockUse(list, testIds, already);
+  const use = stockUse(list, testIds);
   if (!use.size) return [];
   const short: StockShort[] = [];
   saveStock(list.map((s) => {
@@ -669,7 +686,7 @@ export function issueVisitStock(visitId: string, testIds: string[], before: stri
   const had = handled(visitId, before);
   const v = getVisit(visitId);
   const ref = v ? [v.patient.name, v.accession].filter(Boolean).join(" · ") : undefined;
-  const short = deductStockForTests(testIds.filter((id) => !had.includes(id)), had, ref);
+  const short = deductStockForTests(testIds.filter((id) => !had.includes(id)), ref);
   markUsed(visitId, testIds);
   return short;
 }
@@ -692,7 +709,7 @@ export function stockForVisit(visitId: string, testIds: string[], before: string
 export function visitStockToIssue(visitId: string | null, testIds: string[], before: string[] = []): { name: string; use: number; qty: number }[] {
   const list = getStock();
   const had = visitId ? handled(visitId, before) : [];
-  const use = stockUse(list, testIds.filter((id) => !had.includes(id)), had);
+  const use = stockUse(list, testIds.filter((id) => !had.includes(id)));
   return list.filter((s) => use.has(s.id)).map((s) => ({ name: s.name, use: use.get(s.id)!, qty: Number(s.qty) || 0 }));
 }
 
@@ -709,7 +726,7 @@ export function pendingStock(): PendingStock[] {
     if (v.created_at < since) continue;
     const had = used[v.id]?.ids ?? [];
     const ids = v.results.map((r) => r.testId);
-    const use = stockUse(list, ids.filter((id) => !had.includes(id)), had);
+    const use = stockUse(list, ids.filter((id) => !had.includes(id)));
     if (!use.size) continue;
     out.push({ visit: v, testIds: ids, items: list.filter((s) => use.has(s.id)).map((s) => ({ name: s.name, use: use.get(s.id)!, qty: Number(s.qty) || 0 })) });
   }
@@ -719,7 +736,7 @@ export function pendingStock(): PendingStock[] {
 /** Per test: the linked stock items that are out (0 or less) — for the entry screen's warning. */
 export function outOfStockByTest(testIds: string[]): Record<string, string[]> {
   const out: Record<string, string[]> = {};
-  const empty = getStock().filter((s) => (Number(s.qty) || 0) <= 0);
+  const empty = getStock().filter((s) => !isByHand(s) && (Number(s.qty) || 0) <= 0);
   for (const id of testIds) {
     const names = empty.filter((s) => stockTestIds(s).includes(id)).map((s) => s.name);
     if (names.length) out[id] = names;

@@ -29,11 +29,11 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   await p.click('[data-testid="purchase-new"]');
   await p.fill('input[aria-label="المورّد"]', 'مورّد المخزن');
   await p.fill('input[placeholder="الصنف"]', 'كاشف السكر');
-  const qty = p.locator('input[aria-label="الكمية"]'); const price = p.locator('input[aria-label="سعر الوحدة"]');
+  const qty = p.locator('input[aria-label="الكمية"]'); const price = p.locator('input[aria-label="السعر الإجمالي"]');
   await qty.fill(''); await qty.pressSequentially('٣');
-  await price.click(); await price.pressSequentially('٢٥٠٠٠'); await price.press('Tab');
-  ok(await price.inputValue() === '25,000', `price typed in Arabic digits shows as 25,000 (got ${await price.inputValue()})`);
-  ok((await p.locator('body').innerText()).includes('75,000'), 'line total 3 × 25,000 = 75,000');
+  await price.click(); await price.pressSequentially('٧٥٠٠٠'); await price.press('Tab');
+  ok(await price.inputValue() === '75,000', `total price typed in Arabic digits shows as 75,000 (got ${await price.inputValue()})`);
+  ok((await p.locator('[data-testid="line-unit"]').innerText()).includes('25,000'), 'the price of one shows under it: 75,000 ÷ 3 = 25,000');
   ok(await p.locator('span:has-text("مخزن")').count() >= 1, 'the line is marked as a stock item');
   await p.click('button:has-text("حفظ العملية")');
   ok(await settled(async () => ((await kv(p, 'station.stock.v1')) || []).find((s) => s.name === 'كاشف السكر')?.qty === 8), 'buying 3 adds them to the stock room (5 → 8)');
@@ -68,6 +68,18 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   await wa.waitForLoadState().catch(() => {});
   ok(wa.url().startsWith('https://wa.me/9647701234567'), `WhatsApp opened on the patient's number (${wa.url().slice(0, 40)})`);
   await wa.close();
+  // No phone number: WhatsApp opens to choose the contact, the PDF still saved.
+  const r = await ctx.newPage(); r.on('dialog', (d) => d.accept());
+  await r.goto(B + '/station'); await r.waitForSelector('label:has-text("الاسم الثلاثي") input', { timeout: 20000 });
+  await r.locator('label:has-text("الاسم الثلاثي") input').fill('مريض بلا رقم');
+  await r.fill('input[placeholder="ابحث عن فحص…"]', 'Hemoglobin'); await r.waitForTimeout(150);
+  await r.locator('div.grid button:has(span.flex-1)').first().click();
+  await r.fill('input[placeholder="ابحث عن فحص…"]', '');
+  await r.locator('input[data-result-idx]').first().fill('13');
+  const [dl2, wa2] = await Promise.all([r.waitForEvent('download', { timeout: 30000 }), ctx.waitForEvent('page', { timeout: 30000 }), r.click('[data-testid="entry-whatsapp"]')]);
+  await wa2.waitForLoadState().catch(() => {});
+  ok(wa2.url().startsWith('https://wa.me/?text=') && dl2.suggestedFilename().endsWith('.pdf'), `no number: WhatsApp opened to choose the patient (${wa2.url().slice(0, 30)}), PDF saved`);
+  await wa2.close(); await r.close();
   await p.locator('input[aria-label^="تمييز"]').first().check();
   ok(await p.locator('#report-sheet tr[data-hl="1"] mark').count() === 1, 'ticked result is highlighted on the report');
   await p.click('button[title="حفظ (Ctrl+S)"]');
@@ -96,7 +108,7 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   // ── Few tests: «ملء الصفحة» makes the results table larger ──
   const font = async () => Number(await p.locator('#report-sheet table[data-font]').first().getAttribute('data-font'));
   const before = await font();
-  await p.goto(B + '/station/settings#report'); await p.waitForTimeout(1200);
+  await p.goto(B + '/station/settings#fill'); await p.waitForTimeout(1200);
   await p.locator('label:has(span:text-is("ملء الصفحة عند قلة الفحوصات"))').locator('button[role=switch]').click();
   ok(await settled(async () => (await kv(p, 'station.settings.v1'))?.reportFill === true), 'fill-page option switched on');
   await p.goto(B + '/station'); await p.waitForSelector('label:has-text("الاسم الثلاثي") input');
@@ -104,6 +116,13 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   await p.locator('div.grid button:has(span.flex-1)').first().click();
   const after = await font();
   ok(after > before * 1.3, `one test: larger results table (${before}px → ${after}px)`);
+  // The same option as a button beside print / WhatsApp under the results.
+  const fillBtn = p.locator('[data-testid="entry-fill"]');
+  ok(await fillBtn.getAttribute('aria-pressed') === 'true', '«ملء الصفحة» button under the results shows it on');
+  await fillBtn.click();
+  ok(await settled(async () => (await kv(p, 'station.settings.v1'))?.reportFill === false) && (await font()) === before, 'the button switches it off: the table back to its size');
+  await fillBtn.click();
+  ok(await settled(async () => (await kv(p, 'station.settings.v1'))?.reportFill === true) && (await font()) === after, 'and on again (the same setting as in «إعدادات التقرير»)');
 
   // ── Urine: pus cells and red cells as a sign scale ──
   await p.fill('input[placeholder="ابحث عن فحص…"]', 'General Urine'); await p.waitForTimeout(150);

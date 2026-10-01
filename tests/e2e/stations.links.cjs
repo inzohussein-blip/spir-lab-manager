@@ -48,23 +48,25 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   ok(await p.locator('datalist#supplier-names option[value="مورّد الأجهزة"]').count() === 1, 'quality: procurement\'s suppliers offered for a device');
   ok(await settled(async () => ((await kv(p, 'qc.devices.v1')) || []).some((d) => d.vendor === 'مورّد الأجهزة' && d.vendorPhone)), 'the supplier\'s phone comes along');
 
-  // The stock room knows the lab's tests: common tubes and containers come linked to them (one per
-  // visit), and a reagent can serve several tests (one per test).
+  // The stock room knows the lab's tests: a reagent can serve several tests (one per test, taken with
+  // the results); tubes, syringes and other supplies are issued by the examiner (one may serve many tests).
   await p.goto(B + '/store/items'); await p.waitForSelector('[data-testid="stock-presets"]', { timeout: 20000 });
   await p.click('[data-testid="stock-presets"]');
   const edta = await settled(async () => ((await kv(p, 'station.stock.v1')) || []).find((s) => s.name.startsWith('أنبوب EDTA')));
-  ok(!!edta, 'common tubes and containers added to the stock room');
+  ok(!!edta, 'common supplies added to the stock room');
+  ok(((await kv(p, 'station.stock.v1')) || []).filter((s) => ['سرنجة سحب دم', 'قفازات'].includes(s.name) && s.byHand).length === 2, 'with the syringe and other materials (gloves…), issued by hand');
   const cat = await kv(p, 'station.tests.v1');
   const hb = cat.find((t) => t.code === 'HB').id, wbc = cat.find((t) => t.code === 'WBC').id;
   const stock = (await kv(p, 'station.stock.v1')).map((s) => (s.name.startsWith('أنبوب EDTA') ? { ...s, qty: 10 } : s));
-  ok(stock.find((s) => s.name.startsWith('أنبوب EDTA')).perVisit && stock.find((s) => s.name.startsWith('أنبوب EDTA')).testIds.includes(hb), 'EDTA tube linked to the blood count tests, one per visit');
+  ok(stock.find((s) => s.name.startsWith('أنبوب EDTA')).byHand && stock.find((s) => s.name.startsWith('أنبوب EDTA')).testIds.includes(hb), 'EDTA tube shown with the blood count tests, issued by the examiner');
   await kvPut(p, 'station.stock.v1', [...stock, { id: 'reagent-cbc', name: 'كاشف CBC', qty: 10, testIds: [hb, wbc] }]);
   await p.goto(B + '/station'); await p.waitForSelector('label:has-text("الاسم الثلاثي") input', { timeout: 20000 });
   await p.locator('label:has-text("الاسم الثلاثي") input').fill('مريض المخزن');
   for (const q of ['Hemoglobin', 'White Blood']) { await p.fill('input[placeholder="ابحث عن فحص…"]', q); await p.waitForTimeout(150); await p.locator('div.grid button:has(span.flex-1)').first().click(); }
   await p.click('button[title="حفظ (Ctrl+S)"]');
   const after = async () => { const s = (await kv(p, 'station.stock.v1')) || []; return [s.find((x) => x.name.startsWith('أنبوب EDTA'))?.qty, s.find((x) => x.id === 'reagent-cbc')?.qty]; };
-  ok(await settled(async () => JSON.stringify(await after()) === '[9,8]'), `a visit with Hb + WBC: one tube (10 → 9) and one reagent per test (10 → 8) — got ${JSON.stringify(await after())}`);
+  ok(await settled(async () => (await after())[1] === 8), `a visit with Hb + WBC: one reagent per test (10 → 8)`);
+  ok((await after())[0] === 10, `the tube is left to the examiner (still 10) — got ${JSON.stringify(await after())}`);
   await p.goto(B + '/store/inventory'); await p.waitForTimeout(1000);
   ok((await p.locator('li[data-stock="كاشف CBC"] [data-testid="stock-tests"]').innerText()).includes('2 فحص'), 'the stock room shows the linked tests');
 

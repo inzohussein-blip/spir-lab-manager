@@ -11,6 +11,8 @@
 import { kvGet, kvSet, kvBytes } from "@/lib/local/kv";
 import { clearOldDefault } from "@/lib/local/util";
 import { exportImages, importImages, exportImagesByIds, importImageIfMissing, type MediaExport } from "./media";
+import { libraryTests, LIB_TUBES, LIB_TOOLS } from "./library";
+import { GUIDE, CATEGORY_WHY, type GuideBlock, type GuideChapter } from "./guide";
 
 export interface TStep { id: string; text: string; imageId?: string; warn?: boolean }
 export interface TGalleryItem { id: string; imageId: string; caption: string }
@@ -85,6 +87,8 @@ export interface TrainingSettings {
   /** Printed in the SOP safety box when a test has none of its own. */
   defaultSafety: string;
   preparedBy?: string;
+  /** Address and phone, under the name on the printed guide's cover and pages. */
+  contact?: string;
   /** Default months until an SOP's next review (document control). */
   reviewMonths?: number;
   /** Optional read-only mode: editing needs a PIN (off by default). */
@@ -100,13 +104,40 @@ export const COMP_LEVELS: { level: CompLevel; label: string }[] = [
   { level: 3, label: "مستقل" },
 ];
 export interface QuizAttempt { at: number; score: number; total: number; category?: string }
+/** «شهادة انتهاء التدريب»: issued when the training period ends, whatever the competency record. */
+export interface TrainingCompletion {
+  end: string; // YYYY-MM-DD
+  program?: string;
+  hours?: string;
+  grade?: string;
+  supervisor?: string;
+  notes?: string;
+  /** Set on the first print, then kept. */
+  certNo?: string;
+}
+/** «كتاب توصية» for a trainee or a former employee. */
+export interface Recommendation {
+  kind: "trainee" | "employee";
+  position?: string;
+  from?: string;
+  to?: string;
+  addressee?: string;
+  text: string;
+  by?: string;
+  byTitle?: string;
+  date: string;
+}
 export interface Trainee {
   id: string;
   name: string;
+  /** A trainee (default) or an employee — e.g. a former employee who asks for a recommendation. */
+  role?: "trainee" | "employee";
   start?: string;
   notes?: string;
   comp: Record<string, { level: CompLevel; date: string; by?: string }>;
   quiz: QuizAttempt[];
+  completion?: TrainingCompletion;
+  recommendation?: Recommendation;
 }
 
 const K_TESTS = "training.tests.v1";
@@ -118,6 +149,10 @@ const K_FAVS = "training.favs.v1";
 const K_RECENT = "training.recent.v1";
 const K_TRAINEES = "training.trainees.v1";
 const K_QUIZ = "training.quiz.v1";
+/** Set once the full library (every test of the lab station's list) has been added. */
+const K_LIBRARY = "training.library.v1";
+/** «الدليل» as edited by the lab (null / missing = the built-in text). */
+const K_GUIDE = "training.guide.v1";
 
 export const today = () => new Date().toLocaleDateString("en-CA");
 /** YYYY-MM-DD `months` from now. */
@@ -149,15 +184,47 @@ export function uid(): string {
     : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-/** First run: load the starter library (tubes, tools, example tests). */
+/** A library test as a first version (document control), due for review in a year. */
+const firstVersion = (t: TrainingTest, next: string): TrainingTest =>
+  ({ ...t, version: 1, history: [{ version: 1, at: Date.now(), note: "إصدار أول" }], nextReview: next });
+
+/** First run: load the library (tubes, tools, every test of the lab station's list). Earlier
+ *  installs had five example tests: the rest of the library is added to them once (see
+ *  addMissingLibrary), without touching what is there. */
 function ensureSeed(): void {
-  if (read<boolean>(K_SEEDED, false)) return;
+  if (!read<boolean>(K_SEEDED, false)) {
+    const s = seedData();
+    write(K_TUBES, s.tubes);
+    write(K_TOOLS, s.tools);
+    const next = addMonths(12);
+    write(K_TESTS, [...s.tests, ...libraryTests()].map((t) => firstVersion(t, next)));
+    write(K_SEEDED, true);
+    write(K_LIBRARY, true);
+    return;
+  }
+  if (!read<boolean>(K_LIBRARY, false)) {
+    write(K_LIBRARY, true);
+    addMissingLibrary(false);
+  }
+}
+
+/** Add the library's tests (and their tubes and tools) that are not in the station — by id, so an
+ *  edited test is never replaced. `withFirst`: also the first five examples, if deleted
+ *  (Settings → «إضافة فحوصات المكتبة الناقصة»). Returns how many tests were added. */
+export function addMissingLibrary(withFirst = true): number {
+  const tests = read<TrainingTest[]>(K_TESTS, []);
+  const have = new Set(tests.map((t) => t.id));
   const s = seedData();
-  write(K_TUBES, s.tubes);
-  write(K_TOOLS, s.tools);
+  const tubes = read<Tube[]>(K_TUBES, []), tools = read<Tool[]>(K_TOOLS, []);
+  const tubeIds = new Set(tubes.map((t) => t.id)), toolIds = new Set(tools.map((t) => t.id));
+  const newTubes = s.tubes.filter((t) => !tubeIds.has(t.id));
+  const newTools = s.tools.filter((t) => !toolIds.has(t.id));
+  if (newTubes.length) write(K_TUBES, [...tubes, ...newTubes]);
+  if (newTools.length) write(K_TOOLS, [...tools, ...newTools]);
   const next = addMonths(12);
-  write(K_TESTS, s.tests.map((t) => ({ ...t, version: 1, history: [{ version: 1, at: Date.now(), note: "إصدار أول" }], nextReview: next })));
-  write(K_SEEDED, true);
+  const add = [...(withFirst ? s.tests : []), ...libraryTests()].filter((t) => !have.has(t.id)).map((t) => firstVersion(t, next));
+  if (add.length) write(K_TESTS, [...tests, ...add]);
+  return add.length;
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────
@@ -266,6 +333,10 @@ export function pushRecent(id: string): void { write(K_RECENT, [id, ...getRecent
 // ── Trainees (competency record) & quiz history ──────────────────────────────
 export function getTrainees(): Trainee[] { return read<Trainee[]>(K_TRAINEES, []); }
 export function saveTrainees(list: Trainee[]): void { write(K_TRAINEES, list); }
+/** Change one trainee's record (completion certificate, recommendation…). */
+export function updateTrainee(id: string, patch: Partial<Trainee>): void {
+  saveTrainees(getTrainees().map((t) => (t.id === id ? { ...t, ...patch } : t)));
+}
 /** Set (or clear with 0) a trainee's competency level for a test — dated today. */
 export function setCompetency(traineeId: string, testId: string, level: CompLevel | 0, by?: string): void {
   saveTrainees(getTrainees().map((tr) => {
@@ -316,6 +387,7 @@ export function imageUsage(imageId: string): string[] {
   for (const t of getTubes()) if (t.imageId === imageId) out.push(t.name);
   for (const t of getTools()) if (t.imageId === imageId) out.push(t.name);
   if (getSettings().logoImageId === imageId) out.push("شعار الطباعة");
+  if (guideEdited() && guideImages(getGuide()).includes(imageId)) out.push("الدليل");
   return out;
 }
 /** Drop every reference to a deleted image. */
@@ -330,6 +402,12 @@ export function removeImageRefs(imageId: string): void {
   write(K_TOOLS, getTools().map((t) => (t.imageId === imageId ? { ...t, imageId: undefined } : t)));
   const st = getSettings();
   if (st.logoImageId === imageId) write(K_SETTINGS, { ...st, logoImageId: undefined });
+  if (guideEdited()) {
+    const g = getGuide();
+    if (guideImages(g).includes(imageId)) {
+      saveGuide({ ...g, chapters: g.chapters.map((c) => ({ ...c, sections: c.sections.map((sec) => ({ ...sec, blocks: sec.blocks.filter((b) => !("img" in b && b.img === imageId)) })) })) });
+    }
+  }
 }
 
 // ── Tubes & tools ────────────────────────────────────────────────────────────
@@ -337,6 +415,29 @@ export function getTubes(): Tube[] { ensureSeed(); return read<Tube[]>(K_TUBES, 
 export function saveTubes(list: Tube[]): void { write(K_TUBES, list); }
 export function getTools(): Tool[] { ensureSeed(); return read<Tool[]>(K_TOOLS, []); }
 export function saveTools(list: Tool[]): void { write(K_TOOLS, list); }
+
+// ── «الدليل» (editable) ──────────────────────────────────────────────────────
+export interface GuideData {
+  chapters: GuideChapter[];
+  /** Why each category matters (the categories block); "" hides a category's line. */
+  why: Record<string, string>;
+  edited?: number;
+}
+const copy = <T,>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
+export const defaultGuide = (): GuideData => ({ chapters: copy(GUIDE), why: { ...CATEGORY_WHY } });
+/** The built-in chapter with this id (to bring back one chapter), if any. */
+export const defaultChapter = (id: string): GuideChapter | null => copy(GUIDE.find((c) => c.id === id) ?? null);
+export function getGuide(): GuideData {
+  const g = read<GuideData | null>(K_GUIDE, null);
+  if (!g || !Array.isArray(g.chapters)) return defaultGuide();
+  return { ...g, why: { ...CATEGORY_WHY, ...(g.why ?? {}) } };
+}
+export function guideEdited(): boolean { return !!read<GuideData | null>(K_GUIDE, null); }
+export function saveGuide(g: GuideData): boolean { return write(K_GUIDE, { ...g, edited: Date.now() }); }
+/** Back to the built-in guide (the lab's edits are dropped). */
+export function resetGuide(): void { write(K_GUIDE, null); }
+const guideImages = (g: GuideData): string[] =>
+  g.chapters.flatMap((c) => c.sections.flatMap((s) => s.blocks.flatMap((b: GuideBlock) => ("img" in b && b.img ? [b.img] : []))));
 
 // ── Settings ─────────────────────────────────────────────────────────────────
 export function getSettings(): TrainingSettings {
@@ -366,6 +467,8 @@ export interface TrainingBackup {
   trainees?: Trainee[];
   quiz?: QuizAttempt[];
   favs?: string[];
+  /** «الدليل» when the lab edited it. */
+  guide?: GuideData | null;
   images: MediaExport[];
 }
 export async function exportBackup(): Promise<TrainingBackup> {
@@ -373,6 +476,7 @@ export async function exportBackup(): Promise<TrainingBackup> {
     app: "spir-training", version: 1, exported_at: new Date().toISOString(),
     tests: getTests(), tubes: getTubes(), tools: getTools(), settings: getSettings(),
     trainees: getTrainees(), quiz: getQuizHistory(), favs: getFavs(),
+    guide: guideEdited() ? getGuide() : null,
     images: await exportImages(),
   };
 }
@@ -386,6 +490,7 @@ export async function importBackup(data: unknown): Promise<boolean> {
   if (b.trainees) write(K_TRAINEES, b.trainees);
   if (b.quiz) write(K_QUIZ, b.quiz);
   if (b.favs) write(K_FAVS, b.favs);
+  if (b.guide !== undefined) write(K_GUIDE, b.guide && Array.isArray(b.guide.chapters) ? b.guide : null);
   write(K_SEEDED, true);
   if (Array.isArray(b.images)) await importImages(b.images);
   return true;
@@ -527,7 +632,7 @@ function seedData(): { tubes: Tube[]; tools: Tool[]; tests: TrainingTest[] } {
 
   const tests: TrainingTest[] = [
     {
-      ...base, id: "x-fbs", name_ar: "سكر الدم الصائم", name_en: "Fasting Blood Sugar", abbr: "FBS", category: "الكيمياء السريرية",
+      ...base, id: "x-fbs", name_ar: "سكر الدم الصائم", name_en: "Fasting Blood Sugar", abbr: "FBS", category: "السكري",
       purpose: "تشخيص داء السكري ومتابعته، والكشف عن انخفاض السكر.",
       summary: "طريقة إنزيمية لونية (GOD-POD): يتأكسد الغلوكوز بإنزيم الغلوكوز أوكسيديز ويتكوّن لون تتناسب شدته مع تركيز السكر.",
       sampleType: "مصل أو بلازما", volume: "2–3 مل دم", patientPrep: "صيام 8–12 ساعة (الماء مسموح).",
@@ -591,7 +696,7 @@ function seedData(): { tubes: Tube[]; tools: Tool[]; tests: TrainingTest[] } {
       ],
     },
     {
-      ...base, id: "x-gue", name_ar: "فحص الإدرار العام", name_en: "General Urine Examination", abbr: "GUE", category: "الإدرار",
+      ...base, id: "x-gue", name_ar: "فحص الإدرار العام", name_en: "General Urine Examination", abbr: "GUE", category: "أدرار",
       purpose: "الكشف عن التهابات المجاري البولية وأمراض الكلى والسكري.",
       summary: "فحص فيزيائي (اللون ، الصفاء) + كيميائي بالشريط + مجهري للراسب.",
       sampleType: "إدرار", volume: "10–20 مل", patientPrep: "العينة الوسطى (Midstream) من أول إدرار صباحي، بعد تنظيف المنطقة.",
@@ -674,5 +779,5 @@ function seedData(): { tubes: Tube[]; tools: Tool[]; tests: TrainingTest[] } {
       links: [{ id: "x-alt", note: "يُطلبان معاً ضمن وظائف الكبد." }],
     },
   ];
-  return { tubes, tools, tests };
+  return { tubes: [...tubes, ...LIB_TUBES], tools: [...tools, ...LIB_TOOLS], tests };
 }

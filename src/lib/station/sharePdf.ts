@@ -1,10 +1,9 @@
 "use client";
 
 /**
- * «مشاركة واتساب»: the printed report as a PDF file, sent through the device's share sheet
- * (WhatsApp among the choices) — or, where a browser cannot share files, saved and WhatsApp opened
- * on the patient's number to attach it. Made on the device (no server, works offline): the sheet
- * is drawn to an image and cut into A4 / A5 pages of a small PDF.
+ * «مشاركة واتساب»: WhatsApp opened on the patient's number (or to choose the contact), and the printed
+ * report saved as a PDF file to attach there. Made on the device (no server, works offline): the
+ * sheet is drawn to an image and cut into A4 / A5 pages of a small PDF.
  */
 
 const PAGE_PT = { A4: [595.28, 841.89], A5: [419.53, 595.28] } as const;
@@ -74,18 +73,19 @@ export function waNumber(phone?: string): string {
   return d;
 }
 
-/** Share the PDF (WhatsApp among the device's choices); otherwise save it and open WhatsApp. */
-export async function sharePdf(pdf: Blob, fileName: string, opts: { phone?: string; text: string }): Promise<"shared" | "saved"> {
-  const file = new File([pdf], fileName, { type: "application/pdf" });
-  const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
-  if (nav.canShare?.({ files: [file] })) {
-    try { await nav.share({ files: [file], title: fileName, text: opts.text }); return "shared"; }
-    catch (e) { if ((e as DOMException)?.name === "AbortError") return "shared"; }
-  }
+/** WhatsApp's chat link: on the patient's number, or — with no number — WhatsApp itself to choose
+ *  the contact; the message is filled in either way. */
+export function waUrl(phone: string | undefined, text: string): string {
+  return `https://wa.me/${waNumber(phone)}?text=${encodeURIComponent(text)}`;
+}
+/** Open WhatsApp. Called straight from the click, before any waiting: a window opened later (after
+ *  the PDF is made) is taken for a pop-up and blocked by the browser. */
+export function openWhatsApp(phone: string | undefined, text: string): void {
+  window.open(waUrl(phone, text), "_blank", "noopener");
+}
+/** Save the PDF to the device (Downloads), to attach in the WhatsApp chat just opened. */
+export function savePdf(pdf: Blob, fileName: string): void {
   const a = document.createElement("a");
   a.href = URL.createObjectURL(pdf); a.download = fileName; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
-  const n = waNumber(opts.phone);
-  window.open(`https://wa.me/${n}?text=${encodeURIComponent(opts.text)}`, "_blank", "noopener");
-  return "saved";
 }

@@ -2,11 +2,12 @@
 
 import { LockGate } from "@/components/training/LockGate";
 import { useEffect, useMemo, useState } from "react";
-import { Users, Plus, Trash2, Printer, UserRound, Award } from "lucide-react";
+import { Users, Plus, Trash2, Printer, UserRound, Award, GraduationCap, FileSignature, Wand2, Save } from "lucide-react";
 import { Certificate } from "@/components/training/Certificate";
+import { CompletionCertificate, RecommendationLetter, suggestRecommendation, completionNo } from "@/components/training/Letters";
 import {
-  getTests, getTrainees, saveTrainees, setCompetency, getSettings, uid, today, COMP_LEVELS,
-  type TrainingTest, type Trainee, type CompLevel, type TrainingSettings,
+  getTests, getTrainees, saveTrainees, setCompetency, getSettings, uid, today, COMP_LEVELS, updateTrainee,
+  type TrainingTest, type Trainee, type CompLevel, type TrainingSettings, type TrainingCompletion, type Recommendation,
 } from "@/lib/training/store";
 import { SopLetterhead, SopPrintStyle, SopFooter, SOP_INK, exact } from "@/components/training/SopSheet";
 
@@ -24,6 +25,7 @@ function TraineesInner() {
   const [name, setName] = useState("");
   const [start, setStart] = useState(today());
   const [by, setBy] = useState("");
+  const [role, setRole] = useState<"trainee" | "employee">("trainee");
   const [settings, setSettings] = useState<TrainingSettings | null>(null);
 
   const reload = () => setList(getTrainees());
@@ -42,7 +44,7 @@ function TraineesInner() {
 
   function add() {
     if (!name.trim()) return;
-    const t: Trainee = { id: uid(), name: name.trim(), start: start || undefined, comp: {}, quiz: [] };
+    const t: Trainee = { id: uid(), name: name.trim(), start: start || undefined, comp: {}, quiz: [], ...(role === "employee" ? { role } : {}) };
     saveTrainees([...getTrainees(), t]);
     reload(); setSel(t.id); setName("");
   }
@@ -62,7 +64,7 @@ function TraineesInner() {
   const started = tr ? tests.filter((t) => tr.comp[t.id]).length : 0;
   const pct = tests.length ? Math.round((done / tests.length) * 100) : 0;
   // Certificate scopes: categories (or everything) the trainee is independent in.
-  const [printMode, setPrintMode] = useState<"record" | "cert">("record");
+  const [printMode, setPrintMode] = useState<"record" | "cert" | "done" | "rec">("record");
   const [certScope, setCertScope] = useState("");
   const scopes = tr ? [
     ...(tests.length && tests.every((t) => tr.comp[t.id]?.level === 3) ? [{ key: "__all", label: "كل الفحوصات", tests }] : []),
@@ -74,10 +76,13 @@ function TraineesInner() {
     window.addEventListener("afterprint", back);
     return () => window.removeEventListener("afterprint", back);
   }, []);
-  function printCert() {
-    setPrintMode("cert");
-    setTimeout(() => window.print(), 60);
+  /** Print one of the sheets, from the top of the page (a scrolled page loses its fixed footer). */
+  function printAs(mode: "record" | "cert" | "done" | "rec") {
+    setPrintMode(mode);
+    setTimeout(() => { const y = window.scrollY; window.scrollTo(0, 0); window.print(); window.scrollTo(0, y); }, 60);
   }
+  function printCert() { printAs("cert"); }
+  function saveTr(patch: Partial<Trainee>) { if (tr) { updateTrainee(tr.id, patch); reload(); } }
 
   const best = tr?.quiz.length ? Math.max(...tr.quiz.map((q) => Math.round((q.score / q.total) * 100))) : null;
 
@@ -91,7 +96,13 @@ function TraineesInner() {
           {/* Trainees list */}
           <div className="flex flex-col gap-3">
             <div className="rounded-2xl border border-line bg-surface p-4 shadow-[var(--shadow-card)]">
-              <div className="mb-2 text-sm font-semibold">متدرب جديد</div>
+              <div className="mb-2 text-sm font-semibold">متدرب أو موظف جديد</div>
+              <div className="mb-2 flex overflow-hidden rounded-lg border border-line text-xs" role="group" aria-label="الصفة">
+                {([["trainee", "متدرب"], ["employee", "موظف"]] as const).map(([k, l]) => (
+                  <button key={k} type="button" onClick={() => setRole(k)} aria-pressed={role === k}
+                    className={`flex-1 px-2 py-1.5 ${role === k ? "bg-brand font-semibold text-white" : "text-muted hover:bg-canvas"}`}>{l}</button>
+                ))}
+              </div>
               <input value={name} onChange={(e) => setName(e.target.value)} placeholder="الاسم" className={`mb-2 ${inp}`} />
               <label className="mb-2 block text-xs text-muted">تاريخ البدء<input type="date" value={start} onChange={(e) => setStart(e.target.value)} className={`mt-1 ${inp}`} /></label>
               <button onClick={add} className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white hover:bg-brand-dark"><Plus className="size-4" /> إضافة</button>
@@ -104,6 +115,7 @@ function TraineesInner() {
                   <button key={t.id} onClick={() => setSel(t.id)} className={`flex items-center gap-2 rounded-xl px-3 py-2 text-right text-sm ${sel === t.id ? "bg-brand-light font-semibold text-brand-dark" : "hover:bg-canvas"}`}>
                     <UserRound className="size-4 shrink-0" />
                     <span className="flex-1 truncate">{t.name}</span>
+                    {t.role === "employee" && <span className="rounded-full bg-canvas px-1.5 text-[10px] text-muted">موظف</span>}
                     <span className="text-[11px] tabular-nums text-muted">{d}/{tests.length}</span>
                   </button>
                 );
@@ -127,7 +139,7 @@ function TraineesInner() {
                   {best !== null && <div className="mt-1 text-xs text-muted">أفضل نتيجة اختبار: <b className="tabular-nums">{best}%</b> ({tr.quiz.length} محاولة)</div>}
                 </div>
                 <label className="text-xs text-muted">اسم المشرف (يُسجَّل مع كل تقييم)<input value={by} onChange={(e) => setBy(e.target.value)} className={`mt-1 ${inp} w-44`} /></label>
-                <button onClick={() => { setPrintMode("record"); setTimeout(() => window.print(), 60); }} className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas"><Printer className="size-4" /> طباعة السجل</button>
+                <button onClick={() => printAs("record")} className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas"><Printer className="size-4" /> طباعة السجل</button>
                 <button onClick={() => remove(tr)} title="حذف المتدرب" className="grid size-9 place-items-center rounded-lg border border-line text-red-600 hover:bg-red-50"><Trash2 className="size-4" /></button>
               </div>
 
@@ -148,6 +160,9 @@ function TraineesInner() {
                   <div className="flex-1 text-xs text-muted">تظهر شهادة الإتمام عندما يصبح المتدرب «مستقلاً» في كل فحوصات تصنيف واحد على الأقل.</div>
                 )}
               </div>
+
+              <CompletionCard key={`done-${tr.id}`} tr={tr} onSave={(c) => saveTr({ completion: c })} onPrint={(c) => { saveTr({ completion: c }); printAs("done"); }} />
+              <RecommendationCard key={`rec-${tr.id}`} tr={tr} lab={settings?.title ?? "المختبر"} onSave={(r) => saveTr({ recommendation: r })} onPrint={(r) => { saveTr({ recommendation: r }); printAs("rec"); }} />
 
               {groups.map(([g, items]) => (
                 <div key={g} className="rounded-2xl border border-line bg-surface p-4 shadow-[var(--shadow-card)]">
@@ -184,6 +199,9 @@ function TraineesInner() {
       {tr && settings && printMode === "cert" && scope && (
         <Certificate trainee={tr} settings={settings} scopeLabel={scope.label} tests={scope.tests} />
       )}
+
+      {tr && settings && printMode === "done" && tr.completion && <CompletionCertificate trainee={tr} settings={settings} c={tr.completion} />}
+      {tr && settings && printMode === "rec" && tr.recommendation && <RecommendationLetter trainee={tr} settings={settings} r={tr.recommendation} />}
 
       {/* Printed competency record */}
       {tr && settings && printMode === "record" && (
@@ -235,6 +253,82 @@ function TraineesInner() {
           <SopFooter text={settings.footer} />
         </div>
       )}
+    </div>
+  );
+}
+
+const GRADES = ["امتياز", "جيد جداً", "جيد", "متوسط", "مقبول"];
+
+/** «شهادة انتهاء التدريب»: the end of the training period, whatever the competency record. */
+function CompletionCard({ tr, onSave, onPrint }: { tr: Trainee; onSave: (c: TrainingCompletion) => void; onPrint: (c: TrainingCompletion) => void }) {
+  const [c, setC] = useState<TrainingCompletion>(() => tr.completion ?? { end: today() });
+  const set = (patch: Partial<TrainingCompletion>) => setC((x) => ({ ...x, ...patch }));
+  const final = (): TrainingCompletion => ({ ...c, certNo: c.certNo ?? completionNo(tr, c.end) });
+  return (
+    <div className="rounded-2xl border border-line bg-surface p-4 shadow-[var(--shadow-card)]" data-testid="completion-card">
+      <div className="mb-1 flex items-center gap-2 text-sm font-bold"><GraduationCap className="size-5 text-brand" /> شهادة انتهاء التدريب</div>
+      <p className="mb-3 text-xs text-muted">تُمنح عند انتهاء فترة التدريب، مستقلة عن سجل الكفاءة.{tr.completion?.certNo ? <> رقمها: <span dir="ltr">{tr.completion.certNo}</span></> : null}</p>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <label className="text-xs text-muted">تاريخ انتهاء التدريب<input type="date" value={c.end} onChange={(e) => set({ end: e.target.value })} aria-label="تاريخ انتهاء التدريب" className={`mt-1 ${inp}`} /></label>
+        <label className="text-xs text-muted sm:col-span-2">البرنامج / القسم<input value={c.program ?? ""} onChange={(e) => set({ program: e.target.value })} aria-label="البرنامج" placeholder="مثلاً: التحليلات المرضية العامة" className={`mt-1 ${inp}`} /></label>
+        <label className="text-xs text-muted">عدد الساعات (اختياري)<input value={c.hours ?? ""} onChange={(e) => set({ hours: e.target.value })} aria-label="عدد الساعات" inputMode="numeric" className={`mt-1 ${inp}`} /></label>
+        <label className="text-xs text-muted">التقدير
+          <select value={c.grade ?? ""} onChange={(e) => set({ grade: e.target.value || undefined })} aria-label="التقدير" className={`mt-1 ${inp}`}>
+            <option value="">— بلا تقدير —</option>
+            {GRADES.map((g) => <option key={g} value={g}>{g}</option>)}
+          </select>
+        </label>
+        <label className="text-xs text-muted">مشرف التدريب<input value={c.supervisor ?? ""} onChange={(e) => set({ supervisor: e.target.value })} aria-label="مشرف التدريب" className={`mt-1 ${inp}`} /></label>
+        <label className="text-xs text-muted sm:col-span-3">ملاحظة تُطبع على الشهادة (اختياري)<input value={c.notes ?? ""} onChange={(e) => set({ notes: e.target.value })} aria-label="ملاحظة الشهادة" className={`mt-1 ${inp}`} /></label>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button onClick={() => onSave(final())} className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas"><Save className="size-4" /> حفظ</button>
+        <button onClick={() => onPrint(final())} disabled={!c.end} data-testid="completion-print-btn" className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-50"><Printer className="size-4" /> طباعة الشهادة</button>
+      </div>
+    </div>
+  );
+}
+
+/** «كتاب توصية» for a trainee or a former employee. */
+function RecommendationCard({ tr, lab, onSave, onPrint }: { tr: Trainee; lab: string; onSave: (r: Recommendation) => void; onPrint: (r: Recommendation) => void }) {
+  const [r, setR] = useState<Recommendation>(() => tr.recommendation ?? {
+    kind: tr.role === "employee" ? "employee" : "trainee", from: tr.start, to: tr.completion?.end, text: "", date: today(),
+  });
+  const set = (patch: Partial<Recommendation>) => setR((x) => ({ ...x, ...patch }));
+  const suggest = () => set({ text: suggestRecommendation(tr, r, lab) });
+  return (
+    <div className="rounded-2xl border border-line bg-surface p-4 shadow-[var(--shadow-card)]" data-testid="recommendation-card">
+      <div className="mb-1 flex items-center gap-2 text-sm font-bold"><FileSignature className="size-5 text-brand" /> كتاب توصية</div>
+      <p className="mb-3 text-xs text-muted">للمتدرب أو للموظف السابق، يُطبع على ترويسة المحطة.</p>
+      <div className="mb-3 flex w-fit overflow-hidden rounded-lg border border-line text-sm" role="group" aria-label="التوصية لـ">
+        {([["trainee", "متدرب"], ["employee", "موظف سابق"]] as const).map(([k, l]) => (
+          <button key={k} type="button" onClick={() => set({ kind: k })} aria-pressed={r.kind === k}
+            className={`px-4 py-1.5 ${r.kind === k ? "bg-brand font-semibold text-white" : "text-muted hover:bg-canvas"}`}>{l}</button>
+        ))}
+      </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        {r.kind === "employee" && <label className="text-xs text-muted">المسمى الوظيفي<input value={r.position ?? ""} onChange={(e) => set({ position: e.target.value })} aria-label="المسمى الوظيفي" placeholder="مثلاً: محلل مختبر" className={`mt-1 ${inp}`} /></label>}
+        <label className="text-xs text-muted">من<input type="date" value={r.from ?? ""} onChange={(e) => set({ from: e.target.value || undefined })} aria-label="الفترة من" className={`mt-1 ${inp}`} /></label>
+        <label className="text-xs text-muted">إلى<input type="date" value={r.to ?? ""} onChange={(e) => set({ to: e.target.value || undefined })} aria-label="الفترة إلى" className={`mt-1 ${inp}`} /></label>
+        <label className="text-xs text-muted sm:col-span-3">موجّه إلى<input value={r.addressee ?? ""} onChange={(e) => set({ addressee: e.target.value })} aria-label="موجه إلى" placeholder="إلى من يهمه الأمر" className={`mt-1 ${inp}`} /></label>
+      </div>
+      <div className="mt-3">
+        <div className="mb-1 flex items-center justify-between text-xs text-muted">
+          <span>نص التوصية</span>
+          <button type="button" onClick={suggest} data-testid="recommendation-suggest" className="inline-flex items-center gap-1 text-brand hover:underline"><Wand2 className="size-3.5" /> نص مقترح</button>
+        </div>
+        <textarea rows={6} value={r.text} onChange={(e) => set({ text: e.target.value })} aria-label="نص التوصية" placeholder="اكتب التوصية، أو اضغط «نص مقترح» ثم عدّله…" className={`${inp} leading-relaxed`} />
+      </div>
+      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+        <label className="text-xs text-muted">اسم الموصي<input value={r.by ?? ""} onChange={(e) => set({ by: e.target.value })} aria-label="اسم الموصي" className={`mt-1 ${inp}`} /></label>
+        <label className="text-xs text-muted">منصبه<input value={r.byTitle ?? ""} onChange={(e) => set({ byTitle: e.target.value })} aria-label="منصب الموصي" placeholder="مدير المختبر" className={`mt-1 ${inp}`} /></label>
+        <label className="text-xs text-muted">تاريخ الكتاب<input type="date" value={r.date} onChange={(e) => set({ date: e.target.value })} aria-label="تاريخ الكتاب" className={`mt-1 ${inp}`} /></label>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button onClick={() => onSave(r)} className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas"><Save className="size-4" /> حفظ</button>
+        <button onClick={() => onPrint(r.text.trim() ? r : { ...r, text: suggestRecommendation(tr, r, lab) })} data-testid="recommendation-print-btn"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark"><Printer className="size-4" /> طباعة كتاب التوصية</button>
+      </div>
     </div>
   );
 }

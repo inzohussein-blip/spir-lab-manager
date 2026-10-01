@@ -10,6 +10,7 @@ import { ThemeCard } from "@/components/local/LocalTheme";
 import { SettingsLayout, notifySaved } from "@/components/SettingsLayout";
 import { THEME_KEYS } from "@/lib/local/theme";
 import { card } from "@/components/sync/parts";
+import { STATION_META } from "@/components/sync/ui";
 
 const field = "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
 
@@ -53,11 +54,21 @@ export default function SyncSettings() {
               <div className="mb-1 font-bold">ما يُشارك مع حواسيب المختبر</div>
               <p className="mb-3 text-xs text-muted">المحطة غير المختارة تبقى على هذا الحاسوب وحده: لا تُرسل بياناتها ولا تُستقبل، لا بالمزامنة التلقائية ولا بملف المزامنة.</p>
               <div className="grid gap-2 sm:grid-cols-2">
-                {SYNC_STATIONS.map(([prefix, label]) => (
-                  <label key={prefix} className="flex items-center gap-2 rounded-lg bg-canvas px-3 py-2 text-sm">
-                    <input type="checkbox" checked={!excluded.includes(prefix)} onChange={(e) => toggle(prefix, e.target.checked)} aria-label={`مشاركة ${label}`} /> {label}
-                  </label>
-                ))}
+                {SYNC_STATIONS.map(([prefix, label]) => {
+                  const m = STATION_META[prefix.slice(0, -1)];
+                  const Icon = m?.icon;
+                  const on = !excluded.includes(prefix);
+                  return (
+                    <label key={prefix} className={`flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2.5 text-sm ${on ? "border-brand/40 bg-brand-light/40" : "border-line bg-canvas"}`}>
+                      {Icon && <span className="grid size-8 shrink-0 place-items-center rounded-lg text-white" style={{ background: m.color, opacity: on ? 1 : 0.45 }}><Icon className="size-4" /></span>}
+                      <span className="min-w-0 flex-1">
+                        <span className="block">{label}</span>
+                        <span className="block text-[11px] text-muted">{on ? "تُشارك مع حواسيب المختبر" : "على هذا الحاسوب وحده"}</span>
+                      </span>
+                      <input type="checkbox" checked={on} onChange={(e) => toggle(prefix, e.target.checked)} aria-label={`مشاركة ${label}`} className="size-4 accent-[var(--color-brand)]" />
+                    </label>
+                  );
+                })}
               </div>
               {msg && <p className="mt-2 text-xs text-brand-dark" data-testid="sync-settings-msg">{msg}</p>}
             </section>

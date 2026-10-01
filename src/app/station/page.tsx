@@ -2,9 +2,9 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search, Printer, MessageCircle, Save, Check, Tag, ClipboardList, Beaker, Layers, Pencil, UserRound, StickyNote, Plus, X, RotateCcw, ListChecks, ChevronDown, AlertTriangle, PackageMinus, type LucideIcon } from "lucide-react";
+import { Search, Printer, MessageCircle, Maximize2, Save, Check, Tag, ClipboardList, Beaker, Layers, Pencil, UserRound, StickyNote, Plus, X, RotateCcw, ListChecks, ChevronDown, AlertTriangle, PackageMinus, type LucideIcon } from "lucide-react";
 import {
-  getTests, addVisit, updateVisit, getVisit, getSettings, getPanels, nextAccession, uid, rangeLabel, flagFor,
+  getTests, addVisit, updateVisit, getVisit, getSettings, saveSettings, getPanels, nextAccession, uid, rangeLabel, flagFor,
   getPatients, getPatient, upsertPatient, addPatientNote, stockForVisit, issueVisitStock, visitStockToIssue, outOfStockByTest, getDoctors, addDoctor,
   previousResults, resultDelta, localYmd, splitAge, joinAge, type AgeUnitPick,
   type StationTest, type Gender, type StationVisit, type StationSettings, type StationPanel, type StationPatient, type NoteEntry, type StationDoctor,
@@ -15,6 +15,7 @@ import { TubeLabels } from "@/components/station/TubeLabel";
 import { FormDialog, fillNormals } from "@/components/station/ReportForms";
 import { isFormCode, decodeForm, encodeForm, formProgress, formOptionsOf, hlCount, type FormCode } from "@/lib/station/templates";
 import { computeDerived } from "@/lib/station/derived";
+import { sheetPdf, savePdf, openWhatsApp, waNumber } from "@/lib/station/sharePdf";
 import { useToast } from "@/components/station/Toast";
 import { fmtDate } from "@/lib/utils";
 import { stockOptions } from "@/lib/local/links";
@@ -407,7 +408,13 @@ function StationEntryPage() {
     toast.show("تم الحفظ — جارٍ فتح نافذة الطباعة");
     // The new sample number's barcode must be on the sheet before the print window opens
     // (the library normally loaded with the page; never wait more than 3 s for it).
-    Promise.race([loadBarcode(), new Promise((r) => setTimeout(r, 3000))]).then(() => setTimeout(() => window.print(), 80));
+    // From the top of the page (see ReportSheet: a scrolled page printed its bottom group off the paper).
+    Promise.race([loadBarcode(), new Promise((r) => setTimeout(r, 3000))]).then(() => setTimeout(() => {
+      const y = window.scrollY;
+      window.scrollTo(0, 0);
+      window.print();
+      window.scrollTo(0, y);
+    }, 80));
   }
 
   /** «صرف المواد» (manual deduction): save the visit, then take its materials from the stock room. */
@@ -424,21 +431,29 @@ function StationEntryPage() {
     }
   }
 
-  /** «واتساب»: the sheet as a PDF, shared (or saved, with WhatsApp opened on the patient's number). */
+  /** «ملء الصفحة» beside the print button: the report setting of the same name, switched here. */
+  function toggleFill() {
+    const next = { ...getSettings(), reportFill: settings.reportFill !== true };
+    saveSettings(next); setSettings(next);
+    toast.show(next.reportFill ? "ملء الصفحة: يكبر الخط والجدول عند قلة الفحوص" : "أُوقف ملء الصفحة");
+  }
+
+  /** «واتساب»: WhatsApp opens at once on the patient's number (or, with no number, to choose the
+   *  contact), and the report is saved as a PDF to attach in that chat. */
   const [sharing, setSharing] = useState(false);
   async function onShare() {
+    if (sharing) return;
     const acc = readyToSend("المشاركة");
-    if (!acc || sharing) return;
+    if (!acc) return;
+    openWhatsApp(phone, `نتائج التحاليل — ${name.trim()}${settings.labName ? ` — ${settings.labName}` : ""}`);
     setSharing(true);
     try {
       await Promise.race([loadBarcode(), new Promise((r) => setTimeout(r, 3000))]);
       await new Promise((r) => setTimeout(r, 120)); // the new sample number drawn on the sheet
       const el = document.getElementById("report-sheet");
       if (!el) return;
-      const { sheetPdf, sharePdf } = await import("@/lib/station/sharePdf");
-      const pdf = await sheetPdf(el, paper);
-      const how = await sharePdf(pdf, `${acc}.pdf`, { phone, text: `نتائج التحاليل — ${name.trim()}${settings.labName ? ` — ${settings.labName}` : ""}` });
-      toast.show(how === "saved" ? "حُفظ ملف PDF — أرفقه في واتساب الذي فُتح" : "تمت المشاركة");
+      savePdf(await sheetPdf(el, paper), `${acc}.pdf`);
+      toast.show(waNumber(phone) ? "فُتح واتساب على رقم المريض — أرفق ملف PDF المحفوظ في المحادثة" : "لا رقم هاتف — اختر المريض في واتساب وأرفق ملف PDF المحفوظ");
     } catch {
       toast.show("تعذّر إنشاء ملف PDF — استعمل الطباعة", "warn");
     } finally {
@@ -872,13 +887,18 @@ function StationEntryPage() {
                 <div className="mt-3 flex gap-2">
                   {settings.entryPrintButton !== false && (
                     <button onClick={onPrint} data-testid="entry-print" title="طباعة (Ctrl+P)"
-                      className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-brand px-3.5 py-2.5 text-sm font-semibold text-white hover:bg-brand-dark">
+                      className="inline-flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-brand px-3 py-2.5 text-sm font-semibold text-white hover:bg-brand-dark">
                       <Printer className="size-4" /> طباعة {paper}
                     </button>
                   )}
+                  <button onClick={toggleFill} data-testid="entry-fill" aria-pressed={settings.reportFill === true}
+                    title="تكبير الخط والجدول ليملأ التقرير الورقة عند قلة الفحوص (نفس خيار «ملء الصفحة» في إعدادات التقرير)"
+                    className={`inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-lg border px-2.5 py-2.5 text-sm font-semibold ${settings.reportFill === true ? "border-brand bg-teal-50 text-brand-dark" : "border-line bg-surface text-muted hover:bg-canvas"}`}>
+                    <Maximize2 className="size-4" /> ملء الصفحة
+                  </button>
                   {settings.entryWhatsApp !== false && (
                     <button onClick={() => void onShare()} disabled={sharing} data-testid="entry-whatsapp" title="مشاركة التقرير PDF عبر واتساب"
-                      className={`inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#25D366] px-3 py-2.5 text-sm font-semibold text-white hover:bg-[#1ebe5b] disabled:opacity-60 ${settings.entryPrintButton === false ? "flex-1" : ""}`}>
+                      className={`inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-lg bg-[#25D366] px-2.5 py-2.5 text-sm font-semibold text-white hover:bg-[#1ebe5b] disabled:opacity-60 ${settings.entryPrintButton === false ? "flex-1" : ""}`}>
                       <MessageCircle className={`size-4 ${sharing ? "animate-pulse" : ""}`} /> واتساب
                     </button>
                   )}

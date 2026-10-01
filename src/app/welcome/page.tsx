@@ -2,7 +2,7 @@ import { OfflineReady } from "@/components/local/OfflineReady";
 import { ActivationGate } from "@/components/local/ActivationGate";
 import { ACTIVATION_SCRIPT } from "@/lib/local/activation";
 import Link from "next/link";
-import { Beaker, ShoppingCart, GraduationCap, ShieldCheck, Users, ArrowLeft, Phone, RefreshCw } from "lucide-react";
+import { Beaker, ShoppingCart, GraduationCap, ShieldCheck, Users, ArrowLeft, Phone, RefreshCw, Info } from "lucide-react";
 import { LicensedLink, AdminPanelCard } from "@/components/local/WelcomeLicense";
 import { WelcomeAccount } from "@/components/local/WelcomeAccount";
 import { WelcomeFooter } from "@/components/local/WelcomeFooter";
@@ -107,6 +107,18 @@ export default function WelcomePage() {
             <div className="mt-4 text-lg font-bold">محطة المزامنة</div>
             <p className="mt-1 flex-1 text-sm text-muted">مزامنة بيانات المحطات بين حواسيب المختبر نفسه: ملف مزامنة من حاسوب يُدخل في الآخر، أو مزامنة تلقائية عبر الإنترنت، فيُضاف الناقص ويؤخذ الأحدث.</p>
             <span className="mt-5 inline-flex items-center justify-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white group-hover:bg-violet-700">
+              الدخول <ArrowLeft className="size-4" />
+            </span>
+          </Link>
+          {/* About the app — open to everyone */}
+          <Link href="/about" data-testid="about-card" className="group flex flex-col rounded-2xl border-2 border-purple-300 bg-surface p-6 shadow-[var(--shadow-card)] transition-colors hover:border-purple-500">
+            <span className="absolute -mt-9 ms-auto inline-flex items-center rounded-full bg-purple-50 px-2 py-0.5 text-xs font-semibold text-purple-700">للجميع</span>
+            <span className="grid size-12 place-items-center rounded-xl bg-gradient-to-br from-purple-500 to-purple-700 text-white shadow-sm">
+              <Info className="size-6" />
+            </span>
+            <div className="mt-4 text-lg font-bold">عن التطبيق</div>
+            <p className="mt-1 flex-1 text-sm text-muted">شرح التطبيق وكل محطة وميزاتها بالتفصيل مع صور مبسّطة: البدء السريع، النصائح، الأسئلة الشائعة، البيانات والنسخ الاحتياطي، والدعم.</p>
+            <span className="mt-5 inline-flex items-center justify-center gap-1.5 rounded-lg bg-purple-600 px-4 py-2.5 text-sm font-semibold text-white group-hover:bg-purple-700">
               الدخول <ArrowLeft className="size-4" />
             </span>
           </Link>

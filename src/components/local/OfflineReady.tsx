@@ -9,7 +9,7 @@ import { CloudOff, CheckCircle2, RefreshCw, X } from "lucide-react";
  * from it. When online it also fetches newer versions in the background and offers
  * a reload. The admin panel is not involved — it keeps its own worker.
  */
-const SCOPES = ["/welcome", "/station", "/store", "/training", "/qc", "/roster"];
+const SCOPES = ["/welcome", "/station", "/store", "/training", "/qc", "/roster", "/sync", "/about"];
 const RECHECK_EVERY = 30 * 60 * 1000; // while a page stays open
 /** After a failed or unanswered attempt, try again sooner (then back to RECHECK_EVERY). */
 const RETRY_AFTER = [15_000, 60_000, 5 * 60_000];

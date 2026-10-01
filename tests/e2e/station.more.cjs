@@ -36,7 +36,7 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   await p.goto(B + '/station'); await p.waitForTimeout(1200); // the catalog exists once the station opened
   await p.goto(B + '/station/settings#lab'); await p.waitForSelector('[data-testid="settings-nav"]', { timeout: 20000 });
   const ids = await p.locator('[data-testid="settings-nav"] button[data-section]').evaluateAll((bs) => bs.map((x) => x.dataset.section));
-  ok(JSON.stringify(ids) === JSON.stringify(['lab', 'report', 'forms', 'entry', 'stock', 'tests', 'device', 'look']), `sections: ${ids.join(', ')}`);
+  ok(JSON.stringify(ids) === JSON.stringify(['lab', 'report', 'fill', 'forms', 'entry', 'stock', 'tests', 'device', 'look']), `sections: ${ids.join(', ')}`);
   ok(await p.locator('[data-sec="lab"] [data-testid="lab-identity"]').count() === 1 && await p.locator('[data-sec="lab"] [data-testid="lab-contact"]').count() === 1, '«المختبر»: name and logo, contact details');
   ok(await p.locator('[data-sec="look"] [data-testid="pin-card"]').count() === 1 && await p.locator('[data-sec="device"] [data-testid="pin-card"]').count() === 0, 'PIN under «الأمان والمظهر»');
   for (const st of ['qc', 'roster', 'training', 'store']) {
@@ -130,8 +130,14 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   const MAT = `كاشف ${urea.name_ar}`;
   ok(await settled(async () => ((await kv(p, 'station.stock.v1')) || []).some((x) => x.name === MAT && x.testIds?.includes(urea.id) && x.qty === 0)), 'one click: the test\'s material in the stock room (0, linked)');
   ok((await p.locator('tr[data-test="UREA"] [data-testid="test-materials"]').innerText()).includes(MAT), 'and shown beside the test');
-  await p.click('button[role=tab]:has-text("الأصناف")'); await p.locator('[data-testid="stock-presets"]').click();
-  ok(await settled(async () => (await p.locator('[data-testid="items-list"] tbody tr', { hasText: 'أنبوب' }).count()) >= 3), 'tubes and containers listed with the items');
+  await p.click('button[role=tab]:has-text("الأصناف والكتات")'); await p.locator('[data-testid="stock-presets"]').click();
+  ok(await settled(async () => (await p.locator('[data-section="supplies"] tbody tr', { hasText: 'أنبوب' }).count()) >= 2), 'tubes, syringe and containers listed under «المستلزمات»');
+  ok(await p.locator(`[data-section="reagents"] tr[data-item="${MAT}"]`).count() === 1, 'the test\'s material under «الكواشف»');
+  await p.click('[data-testid="supply-new"]');
+  await p.fill('[data-testid="item-form"] label:has-text("اسم الصنف") input', 'شريط لاصق');
+  ok(await p.locator('[data-testid="item-form"] button[aria-pressed="true"]:has-text("مستلزم")').count() === 1, '«مستلزم جديد» opens as a supply');
+  await p.click('[data-testid="item-form"] button[type=submit]');
+  ok(await settled(async () => ((await kv(p, 'station.stock.v1')) || []).some((x) => x.name === 'شريط لاصق' && x.byHand)), 'a supply saved (issued by hand)');
 
   // ── «المخزن»: add and issue by hand ──
   const ureaQty = async () => ((await kv(p, 'station.stock.v1')) || []).find((x) => x.name === MAT)?.qty;
