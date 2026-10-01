@@ -377,9 +377,34 @@ function AdminArt() {
   );
 }
 
+function AccountsArt() {
+  return (
+    <svg viewBox="0 0 400 170">
+      {/* money in (right) */}
+      <rect x={292} y={38} width={94} height={84} rx={12} fill={SURF} stroke={C.ok} strokeWidth={1.8} />
+      <T x={339} y={62} size={11}>الداخل</T>
+      <T x={339} y={82} size={8.5} fill={MUTED} weight={500}>دفعات الفواتير</T>
+      <T x={339} y={98} size={8.5} fill={MUTED} weight={500}>والطلبات المدفوعة</T>
+      <Arrow x1={288} y1={80} x2={252} y2={80} color={C.ok} />
+      {/* the drawer (middle) */}
+      <rect x={148} y={30} width={104} height={100} rx={14} fill={SURF} stroke={C.admin} strokeWidth={2} />
+      <rect x={160} y={78} width={80} height={34} rx={6} fill={C.admin} opacity={0.15} />
+      <rect x={188} y={92} width={24} height={5} rx={2.5} fill={C.admin} />
+      <circle cx={180} cy={58} r={9} fill={C.warn} /><circle cx={200} cy={54} r={9} fill={C.warn} opacity={0.85} /><circle cx={220} cy={58} r={9} fill={C.warn} opacity={0.7} />
+      <T x={200} y={148} size={11}>الصندوق — إغلاق اليوم</T>
+      {/* money out (left) */}
+      <Arrow x1={146} y1={80} x2={110} y2={80} color={C.bad} />
+      <rect x={14} y={38} width={94} height={84} rx={12} fill={SURF} stroke={C.bad} strokeWidth={1.8} />
+      <T x={61} y={62} size={11}>المصروف</T>
+      <T x={61} y={82} size={8.5} fill={MUTED} weight={500}>إيجار، كهرباء</T>
+      <T x={61} y={98} size={8.5} fill={MUTED} weight={500}>رواتب، مشتريات</T>
+    </svg>
+  );
+}
+
 const ARTS: Record<ArtName, () => React.JSX.Element> = {
   hub: Hub, flow: Flow, station: StationArt, report: ReportArt, store: StoreArt, training: TrainingArt, qc: QcArt,
-  roster: RosterArt, sync: SyncArt, offline: OfflineArt, backup: BackupArt, activation: ActivationArt, admin: AdminArt,
+  roster: RosterArt, sync: SyncArt, offline: OfflineArt, backup: BackupArt, activation: ActivationArt, admin: AdminArt, accounts: AccountsArt,
 };
 
 export function Art({ name, caption }: { name: ArtName; caption?: string }) {
