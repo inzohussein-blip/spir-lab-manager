@@ -15,7 +15,7 @@ const LAB2 = 'مختبر الجار ' + TAG;
 const LAB_T = 'مختبر تجريبي ' + TAG;
 const SAMPLE = 'محمد عبدالله السالم'; // in the site's old shared data (seed)
 const ROUTES = ['/', '/appointments', '/audit', '/calendar', '/insights', '/inventory', '/invoices', '/orders', '/orders/new',
-  '/orders-expenses', '/patients', '/patients/new', '/purchase-orders', '/quality', '/referrers', '/release', '/reorder', '/settings',
+  '/orders-expenses', '/cashbox', '/debts', '/referrers/commissions', '/patients', '/patients/new', '/purchase-orders', '/quality', '/referrers', '/release', '/reorder', '/settings',
   '/staff', '/stock-balance', '/suppliers', '/tests', '/tools', '/users', '/worklist'];
 
 // The page streams in: for a moment React keeps a hidden copy beside the shown one.

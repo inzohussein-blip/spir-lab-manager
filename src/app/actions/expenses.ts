@@ -17,6 +17,7 @@ export async function addExpense(formData: FormData): Promise<void> {
     ]
   );
   revalidatePath("/orders-expenses");
+  revalidatePath("/cashbox");
 }
 
 export async function addSupplier(formData: FormData): Promise<void> {

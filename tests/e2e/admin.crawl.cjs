@@ -2,7 +2,7 @@
 // list opens without a server error or a page error.
 const { B, ok, launch, done } = require('./lib.cjs');
 const routes = ['/', '/appointments', '/audit', '/calendar', '/insights', '/inventory', '/invoices', '/orders', '/orders/new',
-  '/orders-expenses', '/patients', '/patients/new', '/purchase-orders', '/quality', '/referrers', '/release', '/reorder', '/settings',
+  '/orders-expenses', '/cashbox', '/debts', '/referrers/commissions', '/patients', '/patients/new', '/purchase-orders', '/quality', '/referrers', '/release', '/reorder', '/settings',
   '/staff', '/stock-balance', '/suppliers', '/tests', '/tools', '/users', '/worklist'];
 // The page streams in: for a moment React keeps a hidden copy beside the shown one.
 const settingsReady = (pg) => pg.waitForFunction(() => document.querySelectorAll('[data-testid="settings-layout"]').length === 1 && !document.querySelector('[hidden] [data-testid="settings-layout"]'), null, { timeout: 15000 });

@@ -8,10 +8,12 @@ export async function addReferrer(formData: FormData): Promise<void> {
   const name = String(formData.get("name") || "").trim();
   if (!name) return;
   await query(
-    `insert into referrers (name, clinic, phone) values ($1, $2, $3)`,
-    [name, (formData.get("clinic") as string) || null, (formData.get("phone") as string) || null]
+    `insert into referrers (name, clinic, phone, commission_pct) values ($1, $2, $3, $4)`,
+    [name, (formData.get("clinic") as string) || null, (formData.get("phone") as string) || null,
+      Math.max(0, Math.min(100, Number(formData.get("commission_pct") || 0) || 0))]
   );
   revalidatePath("/referrers");
+  revalidatePath("/referrers/commissions");
 }
 
 export async function createAppointment(formData: FormData): Promise<void> {

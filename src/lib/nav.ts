@@ -21,6 +21,9 @@ import {
   Settings,
   ClipboardCheck,
   UsersRound,
+  Wallet,
+  HandCoins,
+  Percent,
   type LucideIcon,
 } from "lucide-react";
 
@@ -68,6 +71,8 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "المالية والمخزون",
     items: [
       { href: "/invoices", label: "الفواتير", icon: ReceiptText, roles: FIN },
+      { href: "/cashbox", label: "الصندوق اليومي", icon: Wallet, roles: FIN },
+      { href: "/debts", label: "الديون", icon: HandCoins, roles: FIN },
       { href: "/inventory", label: "المخزون والكواشف", icon: Boxes, roles: LAB },
       { href: "/reorder", label: "إعادة الطلب", icon: PackagePlus, roles: LAB },
       { href: "/stock-balance", label: "أرصدة المخزون", icon: Scale, roles: LAB },
@@ -86,6 +91,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/appointments", label: "المواعيد", icon: CalendarClock },
       { href: "/referrers", label: "الأطباء المُحيلون", icon: Stethoscope },
+      { href: "/referrers/commissions", label: "حصص الأطباء", icon: Percent, roles: FIN },
     ],
   },
   {
