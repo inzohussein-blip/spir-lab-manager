@@ -12,7 +12,7 @@ const LAB = 'مختبر الأجهزة ' + TAG;
   const errs = [];
   const o = await (await b.newContext({ viewport: { width: 1300, height: 950 }, extraHTTPHeaders: HDR, acceptDownloads: true })).newPage();
   o.on('dialog', (d) => d.accept());
-  await o.goto(B + '/licenses');
+  await o.goto(B + '/license');
   const api = (body) => o.evaluate(async (body) => (await fetch('/api/license/admin', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })).json(), body);
   ok((await api({ op: 'login', password: OWNER })).ok === true, 'owner signs in');
   const device = async () => {
@@ -27,7 +27,7 @@ const LAB = 'مختبر الأجهزة ' + TAG;
   };
 
   // ── Off by default ──
-  await o.goto(B + '/licenses#settings'); await o.reload(); await o.waitForSelector('[data-testid="extra-features"]', { timeout: 15000 });
+  await o.goto(B + '/license#settings'); await o.reload(); await o.waitForSelector('[data-testid="extra-features"]', { timeout: 15000 });
   const feat = (label) => o.locator(`input[aria-label="${label}"]`);
   ok(!(await feat('حساب واحد بعدة أجهزة').isChecked()) && !(await feat('التسجيل الذاتي').isChecked()) && !(await feat('سجل الأخطاء').isChecked()), 'extra features: off by default');
   ok(!(await o.locator('[data-testid="secret-features"]').getAttribute('open') !== null) && !(await feat('تصدير بيانات المختبر').isVisible()), 'secret feature: folded away');
@@ -49,7 +49,7 @@ const LAB = 'مختبر الأجهزة ' + TAG;
   ok(true, '«سجل الأخطاء» shows in the menu once on');
 
   // ── Several devices on one code ──
-  await o.goto(B + '/licenses#new'); await o.reload(); await o.waitForSelector('input[aria-label="عدد الأجهزة"]', { timeout: 15000 });
+  await o.goto(B + '/license#new'); await o.reload(); await o.waitForSelector('input[aria-label="عدد الأجهزة"]', { timeout: 15000 });
   ok(true, '«رمز جديد» asks for the number of devices');
   const c = await api({ op: 'create', lab: LAB, days: 30, modules: ['station', 'admin'], trial: true, maxDevices: 2 });
   ok(c.row.max_devices === 2, 'a code for 2 devices');
@@ -57,7 +57,7 @@ const LAB = 'مختبر الأجهزة ' + TAG;
   ok(await activate(d1, c.code), 'device 1 activates');
   ok(await activate(d2, c.code), 'device 2 activates with the same code');
   ok(!(await activate(d3, c.code)) && await d3.locator('text=مفعّل على جهاز آخر').count() === 1, 'device 3 is refused (2 allowed)');
-  await o.goto(B + '/licenses'); await o.waitForSelector(`div[data-lab="${LAB}"]`, { timeout: 15000 });
+  await o.goto(B + '/license'); await o.waitForSelector(`div[data-lab="${LAB}"]`, { timeout: 15000 });
   const card = o.locator(`div[data-lab="${LAB}"]`);
   ok((await card.innerText()).includes('2 / 2'), 'card: 2 / 2 devices');
   await card.locator('button:has-text("الدفع والجهاز والرسالة")').click();
@@ -83,7 +83,7 @@ const LAB = 'مختبر الأجهزة ' + TAG;
   ok(/^[2-9A-Z]{4}-[2-9A-Z]{4}-[2-9A-Z]{4}$/.test((await s1.locator('[data-testid="signup-code"]').innerText()).trim()), 'the lab gets its trial code');
   await s1.goto(B + '/welcome'); await s1.waitForTimeout(1500);
   ok(await s1.locator('div[role=dialog]:has-text("تفعيل المحطات")').count() === 0 && (await s1.locator('[data-testid="account-chip"]').innerText()).includes(SELF), 'this device is already activated with it');
-  await o.goto(B + '/licenses'); await o.waitForSelector(`div[data-lab="${SELF}"]`, { timeout: 15000 });
+  await o.goto(B + '/license'); await o.waitForSelector(`div[data-lab="${SELF}"]`, { timeout: 15000 });
   const sc = o.locator(`div[data-lab="${SELF}"]`);
   ok(await sc.locator('[data-testid="signup-badge"]').count() === 1 && (await sc.innerText()).includes('تجريبي'), 'owner list: «تسجيل ذاتي», trial');
 
@@ -91,7 +91,7 @@ const LAB = 'مختبر الأجهزة ' + TAG;
   await d1.goto(B + '/station'); await d1.waitForTimeout(800);
   await d1.evaluate(() => fetch('/api/errors', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path: '/station', message: 'خطأ تجريبي من المحطة' }) }));
   await d1.evaluate(() => setTimeout(() => { throw new Error('خطأ حقيقي في الصفحة'); }, 0)); await d1.waitForTimeout(1500);
-  await o.goto(B + '/licenses#errors'); await o.reload(); await o.waitForSelector('[data-testid="errors-list"]', { timeout: 15000 });
+  await o.goto(B + '/license#errors'); await o.reload(); await o.waitForSelector('[data-testid="errors-list"]', { timeout: 15000 });
   const elist = await o.locator('[data-testid="errors-list"]').innerText();
   ok(elist.includes('خطأ تجريبي من المحطة') && elist.includes('خطأ حقيقي في الصفحة') && elist.includes(LAB), 'errors from the lab\'s device are listed with its name');
   await o.click('button:has-text("مسح السجل")'); await o.waitForTimeout(800);
@@ -114,7 +114,7 @@ const LAB = 'مختبر الأجهزة ' + TAG;
   ok(await d1.locator('[data-testid="pager"]').count() === 0, 'a short list has no pager');
 
   // ── Hidden export of the lab's data ──
-  await o.goto(B + '/licenses#databases'); await o.reload(); await o.waitForSelector(`li[data-db-lab="${LAB}"]`, { timeout: 15000 });
+  await o.goto(B + '/license#databases'); await o.reload(); await o.waitForSelector(`li[data-db-lab="${LAB}"]`, { timeout: 15000 });
   await o.locator(`li[data-db-lab="${LAB}"] [data-testid="export-btn"]`).click();
   const em = o.locator('[data-testid="export-modal"]');
   await em.locator('input[aria-label="كلمة مرور المالك"]').fill('wrong-password');

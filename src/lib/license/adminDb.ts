@@ -6,7 +6,7 @@ import { isPostgresUrl } from "@/lib/sync/protocol";
 import { getAdminDb, getSyncConfig, licenseLabName, noteLicenseEvent, recordAdminDbCheck, setAdminDb } from "./server";
 
 /**
- * Setting a lab's own database for its full admin panel — shared by the owner (/licenses) and the
+ * Setting a lab's own database for its full admin panel — shared by the owner (/license) and the
  * lab's admin (Settings). The database is opened and its tables made before it is saved, and it
  * must end up with an admin account, or nobody could sign in to the panel afterwards.
  */

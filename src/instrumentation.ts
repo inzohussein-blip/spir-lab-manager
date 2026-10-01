@@ -1,6 +1,6 @@
 /**
  * Server errors (a page or an action that failed) go to the owner's «سجل الأخطاء» while it is on
- * in /licenses → الإعدادات العامة. Only on the Node.js server; never affects the request.
+ * in /license → الإعدادات العامة. Only on the Node.js server; never affects the request.
  */
 export async function onRequestError(
   err: unknown,

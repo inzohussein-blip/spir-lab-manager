@@ -31,12 +31,12 @@ const settingsReady = (pg) => pg.waitForFunction(() => document.querySelectorAll
   const errs = [];
   const o = await (await b.newContext({ viewport: { width: 1300, height: 950 }, extraHTTPHeaders: HDR })).newPage();
   o.on('dialog', (d) => d.accept());
-  await o.goto(B + '/licenses');
+  await o.goto(B + '/license');
   const api = (body) => o.evaluate(async (body) => (await fetch('/api/license/admin', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })).json(), body);
   ok((await api({ op: 'login', password: OWNER })).ok === true, 'owner signs in');
 
   // ── The owner's general settings ──
-  await o.goto(B + '/licenses#settings'); await o.reload(); await o.waitForSelector('[data-testid="prefs-card"]', { timeout: 15000 });
+  await o.goto(B + '/license#settings'); await o.reload(); await o.waitForSelector('[data-testid="prefs-card"]', { timeout: 15000 });
   ok(await o.locator('input[aria-label="سطر التواصل"]').count() === 1, 'settings section: holds the contact line too');
   const prefs = o.locator('[data-testid="prefs-card"]');
   const needsOwn = prefs.locator('input[aria-label="لوحة الإدارة تحتاج قاعدة خاصة"]');
@@ -47,7 +47,7 @@ const settingsReady = (pg) => pg.waitForFunction(() => document.querySelectorAll
   await needsOwn.uncheck(); // first: every lab in its own section of the site's database
   await prefs.locator('button:has-text("حفظ الإعدادات")').click();
   await waitFor(async () => (await prefs.locator('[data-testid="prefs-msg"]').innerText().catch(() => '')).includes('حُفظت'), 10000);
-  await o.goto(B + '/licenses#new'); await o.reload(); await o.waitForSelector('text=إنشاء الرمز', { timeout: 15000 });
+  await o.goto(B + '/license#new'); await o.reload(); await o.waitForSelector('text=إنشاء الرمز', { timeout: 15000 });
   ok(await o.locator('form select').first().inputValue() === '90', 'a new code starts with the default period (3 months)');
   ok(await o.locator('form button[aria-pressed="true"]:has-text("لوحة الإدارة الكاملة")').count() === 1, 'and with the default stations (admin panel on)');
   ok(await o.locator('button:has-text("رمز تجريبي 10")').count() === 1, 'trial length from the settings (10 days)');
@@ -115,7 +115,7 @@ const settingsReady = (pg) => pg.waitForFunction(() => document.querySelectorAll
   ok(!(await signInOn(p2, 'secadmin', 'sec-pass-1')), 'lab 1\'s account does not open lab 2\'s panel');
 
   // Old shared data → the lab that used it.
-  await o.goto(B + '/licenses#databases'); await o.reload(); await o.waitForSelector('[data-testid="db-list"]', { timeout: 15000 });
+  await o.goto(B + '/license#databases'); await o.reload(); await o.waitForSelector('[data-testid="db-list"]', { timeout: 15000 });
   const item = o.locator(`li[data-db-lab="${LAB}"]`);
   ok((await item.locator('[data-testid="db-state"]').innerText()).includes('قسم مستقل في قاعدة الموقع'), 'databases section: lab 1 in its own section of the site\'s database');
   await item.locator('button:has-text("البيانات القديمة")').click();
@@ -136,7 +136,7 @@ const settingsReady = (pg) => pg.waitForFunction(() => document.querySelectorAll
   ok(!(await signInOn(p, 'secadmin', 'sec-pass-1')) && await signInOn(p, 'secadmin', 'sec-pass-2'), 'only the new password opens lab 1\'s panel');
 
   // ── Rule on: a paid code needs a database of its own; a trial code keeps its section ──
-  await o.goto(B + '/licenses#settings'); await o.reload(); await o.waitForSelector('[data-testid="prefs-card"]', { timeout: 15000 });
+  await o.goto(B + '/license#settings'); await o.reload(); await o.waitForSelector('[data-testid="prefs-card"]', { timeout: 15000 });
   await needsOwn.check();
   await prefs.locator('button:has-text("حفظ الإعدادات")').click();
   await waitFor(async () => (await prefs.locator('[data-testid="prefs-msg"]').innerText().catch(() => '')).includes('حُفظت'), 10000);
@@ -145,12 +145,12 @@ const settingsReady = (pg) => pg.waitForFunction(() => document.querySelectorAll
   ok(await p.locator('[data-testid="needs-db"]').count() === 1, 'lab 1 (paid, no database): the panel asks for a database of its own');
   const { p: pt } = await device(ct.code);
   ok(await firstRun(pt, 'trialadmin', 'trial-pass-1') && !(await lists(pt, P1)), 'the trial code still works in its own section');
-  await o.goto(B + '/licenses#databases'); await o.reload(); await o.waitForSelector('[data-testid="db-list"]', { timeout: 15000 });
+  await o.goto(B + '/license#databases'); await o.reload(); await o.waitForSelector('[data-testid="db-list"]', { timeout: 15000 });
   ok((await item.locator('[data-testid="db-state"]').innerText()).includes('بانتظار قاعدة خاصة'), 'databases section: lab 1 «بانتظار قاعدة خاصة»');
   ok(Number(await o.locator('[data-testid="db-waiting-count"]').innerText()) >= 2, 'summary counts the codes waiting for a database');
 
   // ── Owner links lab 1's own database: one interface per provider ──
-  await o.goto(B + '/licenses'); await o.waitForSelector(`div[data-lab="${LAB}"]`, { timeout: 15000 });
+  await o.goto(B + '/license'); await o.waitForSelector(`div[data-lab="${LAB}"]`, { timeout: 15000 });
   const card = o.locator(`div[data-lab="${LAB}"]`);
   ok(await card.locator('[data-testid="lab-db"]').count() === 0, 'card: no station-sync column (station sync off)');
   ok((await card.locator('[data-testid="admin-db"]').innerText()).includes('بانتظار قاعدة خاصة'), 'card: waiting for a database');
@@ -223,7 +223,7 @@ const settingsReady = (pg) => pg.waitForFunction(() => document.querySelectorAll
   ok((await p.content()).length > 0 && errs.length === 0, 'report check with the lab\'s code opens');
 
   // ── «قواعد البيانات»: a tab per provider, checks, password, tests, a database that stops answering ──
-  await o.goto(B + '/licenses#databases'); await o.reload(); await o.waitForSelector('[data-testid="db-list"]', { timeout: 15000 });
+  await o.goto(B + '/license#databases'); await o.reload(); await o.waitForSelector('[data-testid="db-list"]', { timeout: 15000 });
   ok(await o.locator('[data-provider-tab]').count() === 5, 'databases section: tabs — all, Neon, Supabase, Railway, other PostgreSQL');
   for (const [t, word] of [['neon', 'console.neon.tech'], ['supabase', 'Transaction pooler'], ['railway', 'DATABASE_PUBLIC_URL']]) {
     await o.click(`[data-provider-tab="${t}"]`);
@@ -274,7 +274,7 @@ const settingsReady = (pg) => pg.waitForFunction(() => document.querySelectorAll
   await su.query(`select pg_terminate_backend(pid) from pg_stat_activity where datname = $1`, [dbName]);
   await p.goto(B + '/patients');
   ok(!!(await waitFor(() => p.locator('[data-testid="lab-db-down"], [data-testid="lab-db-problem"]').count(), 20000)), 'database down mid-use: «قاعدة بيانات المختبر لا تستجيب»');
-  await o.goto(B + '/licenses#databases'); await o.reload(); await o.waitForSelector('[data-testid="db-list"]', { timeout: 15000 });
+  await o.goto(B + '/license#databases'); await o.reload(); await o.waitForSelector('[data-testid="db-list"]', { timeout: 15000 });
   ok(((await waitFor(async () => { const t = await item.locator('[data-testid="db-check"]').innerText(); return t.includes('لا تستجيب') && t; }, 30000)) || '').length > 0, 'owner\'s list: the database is marked as not answering');
   ok((await o.locator('[data-testid="badge-databases"]').innerText()) === '1' && (await o.locator('[data-testid="db-down-count"]').innerText()) === '1', 'side menu and summary count it');
   await su.query(`alter database ${dbName} allow_connections true`); await su.end();
@@ -318,7 +318,7 @@ const settingsReady = (pg) => pg.waitForFunction(() => document.querySelectorAll
   await p.goto(B + '/settings#database'); await settingsReady(p); await p.waitForSelector('[data-testid="lab-db-card"]', { timeout: 15000 });
   await sc.locator('button:has-text("إرجاع لقسم المختبر")').click();
   ok(((await waitFor(() => sc.locator('[data-testid="lab-db-msg"]').innerText().catch(() => ''), 15000)) || '').includes('لا يمكن إرجاعها'), 'with the rule on, the lab cannot go back to the site\'s database');
-  await o.goto(B + '/licenses'); await o.waitForSelector(`div[data-lab="${LAB}"]`, { timeout: 15000 });
+  await o.goto(B + '/license'); await o.waitForSelector(`div[data-lab="${LAB}"]`, { timeout: 15000 });
   ok((await card.locator('[data-testid="admin-db"]').innerText()).includes('(من المختبر)'), 'owner card: «قاعدة خاصة (من المختبر)»');
 
   await api({ op: 'prefs', prefs: {} }); // back to the defaults for the other files

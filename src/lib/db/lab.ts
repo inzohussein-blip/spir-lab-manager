@@ -13,7 +13,7 @@ import { mainIsEmbedded, mainTx, type Db, type TxConn } from "./index";
  * Where each lab's full admin panel keeps its data.
  *
  * The device's admin-panel cookie names its lab code, and every request from that lab works on:
- *  • the lab's own PostgreSQL, when one is linked (by the owner in /licenses or by the lab); or
+ *  • the lab's own PostgreSQL, when one is linked (by the owner in /license or by the lab); or
  *  • its own section of the site's database — a PostgreSQL schema of its own ("lab_<code>"), so no
  *    lab ever reads or writes another lab's records; or
  *  • nothing, when the owner requires a database of its own for paid codes and this one has none

@@ -17,8 +17,8 @@ export async function proxy(req: NextRequest) {
   // the standalone Training station — all browser-storage only, no database.
   // Whole path segments only, so e.g. "/stations-x" or "/storeroom" stay protected.
   const under = (base: string) => pathname === base || pathname.startsWith(base + "/");
-  // /licenses is the owner's code manager (its own password, no lab login).
-  const isPublic = ["/welcome", "/verify", "/station", "/store", "/training", "/qc", "/roster", "/sync", "/about", "/licenses", "/signup"].some(under);
+  // /license is the owner's code manager (its own password, no lab login).
+  const isPublic = ["/welcome", "/verify", "/station", "/store", "/training", "/qc", "/roster", "/sync", "/about", "/license", "/signup"].some(under);
 
   if (isPublic) {
     const res = NextResponse.next();

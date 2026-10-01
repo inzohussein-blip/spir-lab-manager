@@ -10,7 +10,7 @@ import { logAudit } from "@/lib/audit";
 
 /**
  * The lab's admin sets its own database for the full admin panel (Settings). Only on a device
- * whose lab code includes the panel, and not over a database the owner set in /licenses.
+ * whose lab code includes the panel, and not over a database the owner set in /license.
  */
 async function allowed(): Promise<{ lid: string; userId: string } | { error: string }> {
   const u = await getCurrentUser();

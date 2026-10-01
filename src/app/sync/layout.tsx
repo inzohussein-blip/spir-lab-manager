@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { OfflineReady } from "@/components/local/OfflineReady";
 import { ActivationGate } from "@/components/local/ActivationGate";
+import { PinGate } from "@/components/local/PinGate";
 import { LocalDataGate } from "@/components/local/LocalDataGate";
 import { ACTIVATION_SCRIPT } from "@/lib/local/activation";
 import { LocalThemeApplier } from "@/components/local/LocalTheme";
@@ -15,6 +16,7 @@ export default function SyncLayout({ children }: { children: ReactNode }) {
     <div className="sync min-h-screen md:flex">
       <script dangerouslySetInnerHTML={{ __html: ACTIVATION_SCRIPT }} />
       <ActivationGate />
+      <PinGate station="sync" title="محطة المزامنة" />
       <script dangerouslySetInnerHTML={{ __html: themeScript(THEME_KEYS.sync) }} />
       <LocalThemeApplier storageKey={THEME_KEYS.sync} />
       <LocalDataGate>

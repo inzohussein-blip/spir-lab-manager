@@ -15,7 +15,7 @@ const A = 'مختبر أ ' + TAG, BB = 'مختبر ب ' + TAG;
   const b = await launch();
   const errs = [];
   const o = await (await b.newContext({ extraHTTPHeaders: HDR })).newPage();
-  await o.goto(B + '/licenses');
+  await o.goto(B + '/license');
   const api = (body) => o.evaluate(async (body) => (await fetch('/api/license/admin', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })).json(), body);
   ok((await api({ op: 'login', password: OWNER })).ok === true, 'owner signs in');
   // Two computers on one code need «حساب واحد بعدة أجهزة» (put back as it was at the end).

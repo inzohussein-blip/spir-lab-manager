@@ -12,7 +12,7 @@ import { checkSavedAdminDb, cleanFirstAdmin, exportLabData, importShared, linkAd
 import { forgetAdminDb } from "@/lib/db/lab";
 import { passwordMatches, startOwnerSession, endOwnerSession, isOwner, ipOf } from "@/lib/license/owner";
 
-/** Owner endpoints for the code manager (/licenses). */
+/** Owner endpoints for the code manager (/license). */
 export const dynamic = "force-dynamic";
 const json = (b: unknown, status = 200) => NextResponse.json(b, { status, headers: { "cache-control": "no-store" } });
 

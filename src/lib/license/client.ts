@@ -6,7 +6,7 @@
 import { ACT_KEY, ACTIVATION_SCRIPT } from "@/lib/local/activation";
 import type { LicenseModule, LicensePayload } from "./modules";
 import type { DeviceSync } from "@/lib/sync/protocol";
-import { applyPinOp, type PinOp } from "@/lib/local/pin";
+import { applyPinOp, applyPinPolicy, type PinOp, type PinPolicy } from "@/lib/local/pin";
 
 const DEVICE_KEY = "local.device.v1";
 const LIC_KEY = "local.license.v1";
@@ -17,7 +17,7 @@ const CONTACT_KEY = "local.license.contact";
 const SIGNUP_KEY = "local.license.signup";
 
 const DAY = 86_400_000;
-/** This app's version (set at build, next.config): sent with every check, shown in /licenses. */
+/** This app's version (set at build, next.config): sent with every check, shown in /license. */
 export const APP_VERSION = process.env.LAB_VERSION ?? "";
 /** The errors after which the server really refuses this device (anything else: try again later). */
 const REFUSED = new Set(["not_found", "other_device", "stopped", "expired"]);
@@ -141,9 +141,10 @@ export async function evaluate(module?: LicenseModule): Promise<LicenseState> {
   return { kind: "need" };
 }
 
-function store(d: { token: string; pub: JsonWebKey; now?: number; message?: string; sync?: DeviceSync | null; pin?: PinOp | null }) {
+function store(d: { token: string; pub: JsonWebKey; now?: number; message?: string; sync?: DeviceSync | null; pin?: PinOp | null; pins?: PinPolicy | null }) {
   write(LIC_KEY, JSON.stringify({ token: d.token, pub: d.pub, checkedAt: Date.now(), message: d.message || "", version: APP_VERSION, sync: d.sync ?? null } satisfies Stored));
-  applyPinOp(d.pin); // the owner's «رمز دخول المحطات» change, once
+  applyPinOp(d.pin); // the owner's old «رمز دخول المحطات» change, once
+  applyPinPolicy(d.pins); // the owner's «رموز الدخول (PIN)»: hidden or shown, and each station's PINs
   write(ACT_KEY, "activated");
   if (d.now) write(SEEN_KEY, String(d.now)); // the server's clock resets a wrongly set one
 }
@@ -197,7 +198,7 @@ export function licenseCheckedAt(): number | null {
   return s?.checkedAt ?? null;
 }
 
-/** The lab's database this code is linked to (set in /licenses, or by the lab from its settings). */
+/** The lab's database this code is linked to (set in /license, or by the lab from its settings). */
 export function licenseSync(): DeviceSync | null {
   const s = readJson<Stored>(LIC_KEY);
   return s && !s.blocked ? s.sync ?? null : null;

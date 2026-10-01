@@ -15,7 +15,7 @@
 /**
  * Off by default: the lab's database belongs to the full admin panel (lib/db/lab.ts), and the
  * stations stay on the device only. NEXT_PUBLIC_STATION_SYNC=1 at build time switches the
- * stations' sync back on (its window in the stations' settings and in /licenses).
+ * stations' sync back on (its window in the stations' settings and in /license).
  */
 export const STATION_SYNC = process.env.NEXT_PUBLIC_STATION_SYNC === "1";
 

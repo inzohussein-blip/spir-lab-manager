@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Settings, Monitor, Share2, Network, History, Palette } from "lucide-react";
+import { Settings, Monitor, Share2, Network, History, ShieldCheck } from "lucide-react";
 import { clearSyncLog, setDeviceName, syncLog, thisDevice } from "@/lib/local/fileSync";
 import { SYNC_EXCLUDE_KEY, SYNC_STATIONS, STATION_SYNC, companySyncOn, syncExcluded } from "@/lib/sync/protocol";
 import { CompanySyncCard } from "@/components/local/CompanySyncCard";
 import { SyncPanel } from "@/components/local/SyncPanel";
 import { ThemeCard } from "@/components/local/LocalTheme";
+import { PinCard } from "@/components/local/PinGate";
 import { SettingsLayout, notifySaved } from "@/components/SettingsLayout";
 import { THEME_KEYS } from "@/lib/local/theme";
 import { card } from "@/components/sync/parts";
@@ -91,8 +92,13 @@ export default function SyncSettings() {
           ),
         },
         {
-          id: "look", label: "المظهر", hint: "فاتح أو داكن", icon: <Palette />,
-          content: <ThemeCard storageKey={THEME_KEYS.sync} />,
+          id: "look", label: "الأمان والمظهر", hint: "رمز الدخول والألوان", icon: <ShieldCheck />,
+          content: (
+            <>
+              <PinCard station="sync" />
+              <ThemeCard storageKey={THEME_KEYS.sync} />
+            </>
+          ),
         },
       ]}
     />

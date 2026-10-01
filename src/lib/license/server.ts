@@ -16,7 +16,7 @@ export { licenseDbUrl, durableStorage, passwordSet, licensingEnabled, licenseSto
  *
  * A device gets a license signed with an ES256 key kept in the database, sealed with AUTH_SECRET;
  * the stations verify it offline and refresh it from the server when online (extension, station changes, stop).
- * Switched on by setting LICENSE_ADMIN_PASSWORD (the owner's password for /licenses).
+ * Switched on by setting LICENSE_ADMIN_PASSWORD (the owner's password for /license).
  */
 
 // TLS is set below (always verified); the URL's own sslmode (Neon adds "require") would only
@@ -95,11 +95,22 @@ export interface LicenseRow {
   source: string;
   /** The owner's last «رمز دخول المحطات» change, applied by the devices at their next check. */
   pin: PinOp | null;
+  /** The owner's «رموز الدخول (PIN)» for this code (null: never set). */
+  pinPolicy: PinPolicy | null;
 }
 /** A PIN set (hash) or removed (null) by the owner for one station or all of them. The devices
  *  apply each op once (by id); the PIN itself is never stored, only its hash. */
 export interface PinOp { id: string; hash: string | null; scope: LicenseModule | "all"; at: number }
 /** Same hash as the stations (lib/local/pin): sha256 of a fixed prefix and the digits. */
+/** The stations a PIN can guard (lib/local/pin PinStation): the local stations, sync and about. */
+export const PIN_STATIONS = ["station", "purchasing", "training", "qc", "roster", "sync", "about"] as const;
+export type PinStation = (typeof PIN_STATIONS)[number];
+export interface PinEntry { hash: string; label: string }
+/** The owner's «رموز الدخول» for a code: the feature hidden or shown, and per station its PINs
+ *  (the first is the main one; null: removed). A device applies a station again only when its rev
+ *  changes. Only hashes are kept, never the PINs. */
+export interface PinPolicy { id: string; at: number; hidden: boolean; stations: Partial<Record<PinStation, { rev: string; pins: PinEntry[] | null; at: number }>> }
+export const PIN_MAX_ENTRIES = 10;
 export const pinHash = (pin: string) => createHash("sha256").update(`spir-station-pin:${pin.trim()}`).digest("hex");
 export interface ExtraDevice { device_id: string; label: string; activated_at: number; last_seen_at: number | null; app_version: string }
 export interface AdminDbInfo { host: string; by: "owner" | "lab"; at: number; provider?: ProviderId }
@@ -138,6 +149,7 @@ function ensureTables() {
       "admin_db_check_at bigint", "admin_db_ok boolean", "admin_db_error text not null default ''", // 0022
       "max_devices integer not null default 1", "source text not null default ''", // 0024
       "station_pin text not null default ''", // 0025
+      "pin_policy text not null default ''", // 0027
     ]) await query(`alter table station_licenses add column if not exists ${col}`);
     await query(`create table if not exists license_events (
       id text primary key, license_id text not null, at bigint not null, kind text not null, detail text not null default '')`);
@@ -168,7 +180,7 @@ async function setConfig(key: string, value: string) {
   await query(`insert into license_config (key, value) values ($1, $2) on conflict (key) do update set value = excluded.value`, [key, value]);
 }
 
-// ── The owner's settings («الإعدادات العامة» in /licenses) ─────────────────────────
+// ── The owner's settings («الإعدادات العامة» in /license) ─────────────────────────
 export interface OwnerPrefs {
   /** What a new code starts with in «رمز جديد». */
   defaultDays: number;
@@ -392,17 +404,19 @@ type Raw = Omit<LicenseRow, "modules" | "activated_at" | "expires_at" | "last_se
   modules: string; activated_at: string | number | null; expires_at: string | number | null; last_seen_at: string | number | null; created_at: string | number;
   paid_at: string | number | null; paid: boolean | string; is_trial: boolean | string; app_version: string | null; sync_info?: string | null; admin_db_info?: string | null;
   admin_db_check_at?: string | number | null; admin_db_ok?: boolean | string | null; admin_db_error?: string | null;
-  max_devices?: string | number | null; source?: string | null; station_pin?: string | null;
+  max_devices?: string | number | null; source?: string | null; station_pin?: string | null; pin_policy?: string | null;
   sync_last_at?: string | number | null; sync_pending?: string | number | null; sync_error?: string | null; sync_reported_at?: string | number | null;
 };
 const COLS = `id, lab_name, note, code_hint, duration_days, modules, status, device_id, device_label,
   activated_at, expires_at, last_seen_at, created_at, price, paid, paid_at, message, device_name, is_trial, app_version, sync_info,
-  sync_last_at, sync_pending, sync_error, sync_reported_at, admin_db_info, admin_db_check_at, admin_db_ok, admin_db_error, max_devices, source, station_pin`;
+  sync_last_at, sync_pending, sync_error, sync_reported_at, admin_db_info, admin_db_check_at, admin_db_ok, admin_db_error, max_devices, source, station_pin, pin_policy`;
 const bool = (v: boolean | string) => v === true || v === "t" || v === "true";
 const num = (v: string | number | null) => (v == null ? null : Number(v));
-function toRow({ sync_info, admin_db_info, admin_db_check_at, admin_db_ok, admin_db_error, max_devices, source, station_pin, ...r }: Raw, devices: ExtraDevice[] = []): LicenseRow {
+function toRow({ sync_info, admin_db_info, admin_db_check_at, admin_db_ok, admin_db_error, max_devices, source, station_pin, pin_policy, ...r }: Raw, devices: ExtraDevice[] = []): LicenseRow {
   let pin: PinOp | null = null;
   try { pin = station_pin ? (JSON.parse(station_pin) as PinOp) : null; } catch { /* none */ }
+  let pinPolicy: PinPolicy | null = null;
+  try { pinPolicy = pin_policy ? (JSON.parse(pin_policy) as PinPolicy) : null; } catch { /* none */ }
   let mods: unknown = [];
   try { mods = JSON.parse(r.modules); } catch { /* keep empty */ }
   let sync: SyncInfo | null = null;
@@ -410,7 +424,7 @@ function toRow({ sync_info, admin_db_info, admin_db_check_at, admin_db_ok, admin
   let admin_db: AdminDbInfo | null = null;
   try { admin_db = admin_db_info ? (JSON.parse(admin_db_info) as AdminDbInfo) : null; } catch { /* none */ }
   return {
-    ...r, sync, admin_db, pin,
+    ...r, sync, admin_db, pin, pinPolicy,
     max_devices: Math.max(1, Number(max_devices ?? 1) || 1), devices, source: source ?? "",
     admin_db_check: admin_db && admin_db_check_at != null ? { at: Number(admin_db_check_at), ok: bool(admin_db_ok ?? false), error: admin_db_error ?? "" } : null, duration_days: Number(r.duration_days), modules: cleanModules(mods),
     activated_at: num(r.activated_at), expires_at: num(r.expires_at), last_seen_at: num(r.last_seen_at), created_at: Number(r.created_at),
@@ -498,9 +512,11 @@ export type LicenseAction =
   | { action: "device_name"; name: string }
   | { action: "max_devices"; n: number }
   | { action: "remove_device"; device: string }
-  | { action: "pin"; pin: string; scope: string };
+  | { action: "pin"; pin: string; scope: string }
+  | { action: "pin_hidden"; hidden: boolean }
+  | { action: "pin_station"; station: string; entries: { label?: string; pin?: string; keep?: string }[] | null };
 
-/** Owner actions from /licenses. Returns the new code for "new_code". */
+/** Owner actions from /license. Returns the new code for "new_code". */
 export async function updateLicense(id: string, a: LicenseAction): Promise<{ row: LicenseRow | null; code?: string }> {
   const cur = await getLicense(id);
   if (!cur) return { row: null };
@@ -545,6 +561,40 @@ export async function updateLicense(id: string, a: LicenseAction): Promise<{ row
       const text = String(a.text ?? "").trim().slice(0, 300);
       await query(`update station_licenses set message = $2 where id = $1`, [id, text]);
       await logEvent(id, "message", text || "—");
+      break;
+    }
+    case "pin_hidden": {
+      const hidden = a.hidden === true;
+      const cur0 = cur.pinPolicy ?? { id: "", at: 0, hidden: false, stations: {} };
+      if (cur0.hidden === hidden && cur.pinPolicy) break;
+      const next: PinPolicy = { ...cur0, id: randomUUID(), at: Date.now(), hidden };
+      await query(`update station_licenses set pin_policy = $2 where id = $1`, [id, JSON.stringify(next)]);
+      await logEvent(id, "pin", hidden ? "إخفاء خاصية رمز الدخول" : "إظهار خاصية رمز الدخول");
+      break;
+    }
+    case "pin_station": {
+      const st = PIN_STATIONS.find((x) => x === a.station);
+      if (!st) break;
+      const cur0 = cur.pinPolicy ?? { id: "", at: 0, hidden: false, stations: {} };
+      const old = cur0.stations[st]?.pins ?? [];
+      let pins: PinEntry[] | null = null;
+      if (Array.isArray(a.entries)) {
+        pins = [];
+        for (const e of a.entries.slice(0, PIN_MAX_ENTRIES)) {
+          const label = String(e?.label ?? "").trim().slice(0, 40);
+          const pin = String(e?.pin ?? "").trim();
+          // A PIN kept as it was is sent by its hash (the owner never sees the PIN itself).
+          const kept = typeof e?.keep === "string" ? old.find((o) => o.hash === e.keep) : undefined;
+          if (pin) { if (!/^\d{4,8}$/.test(pin)) return { row: cur }; pins.push({ hash: pinHash(pin), label }); }
+          else if (kept) pins.push({ hash: kept.hash, label });
+        }
+        if (new Set(pins.map((x) => x.hash)).size !== pins.length) return { row: cur };
+        if (!pins.length) pins = null;
+      }
+      const next: PinPolicy = { ...cur0, id: randomUUID(), at: Date.now(), stations: { ...cur0.stations, [st]: { rev: randomUUID(), pins, at: Date.now() } } };
+      await query(`update station_licenses set pin_policy = $2 where id = $1`, [id, JSON.stringify(next)]);
+      const name = st === "sync" ? "محطة المزامنة" : st === "about" ? "عن التطبيق" : moduleLabel(st);
+      await logEvent(id, "pin", pins ? `رموز الدخول — ${name}: ${pins.length === 1 ? "رمز واحد" : `${pins.length} رموز`}` : `إزالة رمز الدخول — ${name}`);
       break;
     }
     case "pin": {
@@ -875,7 +925,7 @@ export async function exportCodes(): Promise<CodesBackup> {
 const LIC_COLS = ["id", "code_hash", "code_hint", "lab_name", "note", "duration_days", "modules", "status", "device_id", "device_label",
   "activated_at", "expires_at", "last_seen_at", "created_at", "price", "paid", "paid_at", "message", "device_name", "is_trial", "app_version",
   "sync_config", "sync_info", "sync_last_at", "sync_pending", "sync_error", "sync_reported_at", "admin_db", "admin_db_info",
-  "admin_db_check_at", "admin_db_ok", "admin_db_error", "max_devices", "source", "station_pin"] as const;
+  "admin_db_check_at", "admin_db_ok", "admin_db_error", "max_devices", "source", "station_pin", "pin_policy"] as const;
 /** Merge a backup in: codes are added or updated by id (nothing is deleted); history is added once. */
 export async function importCodes(data: unknown): Promise<{ licenses: number; events: number }> {
   const b = data as Partial<CodesBackup>;
@@ -888,7 +938,7 @@ export async function importCodes(data: unknown): Promise<{ licenses: number; ev
       const v = r[c];
       if (c === "paid" || c === "is_trial") return v === true || v === "t" || v === "true";
       if (c === "modules") return typeof v === "string" ? v : JSON.stringify(cleanModules(v));
-      return v ?? (["note", "code_hint", "price", "message", "device_name", "app_version", "sync_config", "sync_info", "sync_error", "admin_db", "admin_db_info", "admin_db_error", "source", "station_pin"].includes(c) ? "" : c === "sync_pending" ? 0 : c === "max_devices" ? 1 : c === "status" ? "active" : null);
+      return v ?? (["note", "code_hint", "price", "message", "device_name", "app_version", "sync_config", "sync_info", "sync_error", "admin_db", "admin_db_info", "admin_db_error", "source", "station_pin", "pin_policy"].includes(c) ? "" : c === "sync_pending" ? 0 : c === "max_devices" ? 1 : c === "status" ? "active" : null);
     });
     await query(
       `insert into station_licenses (${LIC_COLS.join(", ")}) values (${LIC_COLS.map((_, i) => `$${i + 1}`).join(", ")})

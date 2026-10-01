@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Lock, KeyRound, RefreshCw, LockKeyhole, ShieldCheck } from "lucide-react";
+import { Lock, KeyRound, RefreshCw, LockKeyhole, ShieldCheck, EyeOff } from "lucide-react";
 import { usePin, tryPin, setPin, lockNow, cleanPin, validPin, type PinStation } from "@/lib/local/pin";
 import { refreshLicense } from "@/lib/license/client";
 import { notifySaved } from "@/components/SettingsLayout";
@@ -45,7 +45,7 @@ export function PinGate({ station, title }: { station: PinStation; title: string
             <button type="button" onClick={() => setHelp("open")} className="font-semibold text-brand-dark hover:underline">نسيت الرمز؟</button>
           ) : (
             <div className="flex flex-col items-center gap-2">
-              <p>اطلب من المزوّد تعيين رمز جديد (أو إزالته) من صفحة الرموز، ثم اضغط «تحديث» والجهاز متصل بالإنترنت.</p>
+              <p>اطلب من المزوّد تعيين رمز جديد (أو إزالته) من «رموز الدخول» في صفحة الترخيص، ثم اضغط «تحديث» والجهاز متصل بالإنترنت.</p>
               <button type="button" onClick={fromProvider} disabled={help === "busy"} className="inline-flex items-center gap-1 rounded-lg border border-line px-3 py-1.5 font-semibold text-ink hover:bg-canvas disabled:opacity-60">
                 <RefreshCw className={`size-3.5 ${help === "busy" ? "animate-spin" : ""}`} /> تحديث من المزوّد
               </button>
@@ -62,12 +62,18 @@ const inp = "w-full rounded-lg border border-line bg-surface px-3 py-2 text-cent
 
 /** Settings card: switch the station's PIN on, change it, lock now, or switch it off. */
 export function PinCard({ station }: { station: PinStation }) {
-  const { ready, on } = usePin(station);
+  const { ready, on, hidden, extra } = usePin(station);
   const [editing, setEditing] = useState(false);
   const [a, setA] = useState("");
   const [b, setB] = useState("");
   const [err, setErr] = useState("");
   if (!ready) return null;
+  if (hidden) return (
+    <div data-testid="pin-card-hidden" className="rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
+      <div className="mb-1 flex items-center gap-2 text-sm font-semibold"><EyeOff className="size-4" /> رمز الدخول (PIN)</div>
+      <p className="text-xs text-muted">أوقف المزوّد خاصية رمز الدخول لهذا المختبر، فلا يُطلب رمز عند فتح المحطات. تعود رموزك كما كانت إذا أعادها.</p>
+    </div>
+  );
 
   function save() {
     if (!validPin(a)) { setErr("الرمز من 4 إلى 8 أرقام."); return; }
@@ -88,8 +94,9 @@ export function PinCard({ station }: { station: PinStation }) {
         {on && <span className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2 py-0.5 text-xs font-medium text-brand-dark"><ShieldCheck className="size-3" /> مفعّل</span>}
       </div>
       <p className="mb-3 text-xs text-muted">
-        يُطلب عند فتح هذه المحطة على هذا الجهاز (مرة لكل نافذة). إذا نُسي، يعيّنه المزوّد أو يزيله من صفحة الرموز ثم «نسيت الرمز؟ ← تحديث من المزوّد» في شاشة الدخول.
+        رمز خاص بهذه المحطة وحدها، يُطلب عند فتحها على هذا الجهاز (مرة لكل نافذة). إذا نُسي، يعيّنه المزوّد أو يزيله من «رموز الدخول» في صفحة الترخيص ثم «نسيت الرمز؟ ← تحديث من المزوّد» في شاشة الدخول.
       </p>
+      {extra > 0 && <p data-testid="pin-extra" className="mb-3 text-xs text-brand-dark">ومعه {extra} {extra === 1 ? "رمز آخر" : "رموز أخرى"} من المزوّد يُقبل أيٌّ منها.{" "}إيقاف الرمز يزيلها كلها.</p>}
       {editing ? (
         <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto_auto]">
           <input type="password" inputMode="numeric" autoComplete="new-password" dir="ltr" value={a} onChange={(e) => { setA(cleanPin(e.target.value)); setErr(""); }} placeholder="الرمز الجديد" aria-label="الرمز الجديد" className={inp} />

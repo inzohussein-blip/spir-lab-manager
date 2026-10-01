@@ -1,4 +1,4 @@
-// Lab database through PostgreSQL, linked by the owner in /licenses (and by a lab from its own
+// Lab database through PostgreSQL, linked by the owner in /license (and by a lab from its own
 // settings): the connection string stays sealed on the server, the lab's devices share visits
 // through it, and only a device holding the lab's code is served.
 const { B, OWNER, ok, launch, done, kv } = require('./lib.cjs');
@@ -15,7 +15,7 @@ const LAB = 'مختبر المزامنة ' + Date.now().toString(36);
   const errs = [];
   const o = await (await b.newContext({ viewport: { width: 1300, height: 950 }, extraHTTPHeaders: HDR })).newPage();
   o.on('dialog', (d) => d.accept());
-  await o.goto(B + '/licenses');
+  await o.goto(B + '/license');
   const api = (body) => o.evaluate(async (body) => (await fetch('/api/license/admin', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })).json(), body);
   ok((await api({ op: 'login', password: OWNER })).ok === true, 'owner signs in');
   const c1 = await api({ op: 'create', lab: `${LAB} — الاستقبال`, days: 30 });
@@ -23,7 +23,7 @@ const LAB = 'مختبر المزامنة ' + Date.now().toString(36);
   ok(!!c1.code && !!c2.code, 'two codes for the lab\'s two devices');
 
   // ── Owner links the first code (wrong details are explained), then the second to the same database ──
-  await o.goto(B + '/licenses'); await o.waitForSelector(`div[data-lab="${LAB} — الاستقبال"]`, { timeout: 15000 });
+  await o.goto(B + '/license'); await o.waitForSelector(`div[data-lab="${LAB} — الاستقبال"]`, { timeout: 15000 });
   const card1 = o.locator(`div[data-lab="${LAB} — الاستقبال"]`), card2 = o.locator(`div[data-lab="${LAB} — المختبر"]`);
   ok((await card1.locator('[data-testid="lab-db"]').innerText()).includes('على الجهاز فقط'), 'a new code: data on the device only');
   await card1.locator('button[aria-label="قاعدة بيانات المختبر"]').click();
@@ -119,7 +119,7 @@ const LAB = 'مختبر المزامنة ' + Date.now().toString(36);
   await settings(d1.p);
   await d1.p.click('button:has-text("إلغاء الربط")');
   ok(((await waitFor(() => d1.p.locator('[data-testid="sync-msg"]').innerText(), 10000)) || '').includes('صفحة الرموز'), 'device: the owner\'s link cannot be removed here');
-  await o.goto(B + '/licenses'); await o.waitForSelector(`div[data-lab="${LAB} — المختبر"]`, { timeout: 15000 });
+  await o.goto(B + '/license'); await o.waitForSelector(`div[data-lab="${LAB} — المختبر"]`, { timeout: 15000 });
   await card2.locator('button[aria-label="قاعدة بيانات المختبر"]').click();
   await modal.locator('button:has-text("بدون")').click();
   await modal.locator('button:has-text("إلغاء الربط")').click();

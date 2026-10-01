@@ -8,6 +8,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { StationsOverview, ALWAYS_STATIONS } from "./stations";
+import { PinSection, type PinPolicyView } from "./pins";
 import { LICENSE_MODULES, DEFAULT_MODULES, moduleLabel, type LicenseModule } from "@/lib/license/modules";
 import { STATION_SYNC, SUPABASE_SQL } from "@/lib/sync/protocol";
 import { SYNC_ERRORS } from "@/components/local/SyncPanel";
@@ -38,6 +39,8 @@ interface Row {
   source: string;
   /** The last «رمز دخول المحطات» change (applied by the devices at their next check). */
   pin: { id: string; hash: string | null; scope: LicenseModule | "all"; at: number } | null;
+  /** The owner's «رموز الدخول (PIN)» for this code (hashes and names only). */
+  pinPolicy: PinPolicyView | null;
 }
 interface Ev { license_id: string; at: number; kind: string; detail: string }
 interface Storage { source: "license-db" | "app-db" | "embedded"; ok: boolean; codes?: number; roundTripMs?: number; error?: string; keySealed?: boolean }
@@ -84,16 +87,17 @@ const EVENT_LABEL: Record<string, string> = {
   resumed: "إعادة تفعيل", device_reset: "فك ربط الجهاز", modules: "تغيير المحطات", renamed: "تعديل الاسم",
   paid: "تسجيل الدفع", unpaid: "إلغاء الدفع", message: "رسالة للمختبر", new_code: "رمز جديد", sync: "قاعدة بيانات المختبر",
   admin_db: "قاعدة لوحة الإدارة", device_added: "جهاز إضافي", device_removed: "إزالة جهاز", max_devices: "عدد الأجهزة",
-  data_export: "تصدير البيانات", pin: "رمز دخول المحطات",
+  data_export: "تصدير البيانات", pin: "رموز الدخول",
 };
 const eventDetail = (e: Ev) => (e.kind === "modules" ? e.detail.split(",").filter(Boolean).map(moduleLabel).join("، ") || "لا شيء" : e.detail);
 
-type Section = "codes" | "new" | "stations" | "databases" | "settings" | "errors" | "security" | "backup" | "system";
+type Section = "codes" | "new" | "stations" | "pin" | "databases" | "settings" | "errors" | "security" | "backup" | "system";
 const SECTIONS: { title: string; items: { id: Section; label: string; hint: string; icon: LucideIcon }[] }[] = [
   { title: "الرموز", items: [
     { id: "codes", label: "الرموز", hint: "المختبرات وأجهزتها", icon: KeyRound },
     { id: "new", label: "رمز جديد", hint: "إنشاء رمز أو رمز تجريبي", icon: Plus },
     { id: "stations", label: "المحطات", hint: "كل المحطات واستعمالها", icon: LayoutGrid },
+    { id: "pin", label: "رموز الدخول (PIN)", hint: "إخفاء وإظهار وتعيين لكل عميل", icon: Lock },
     { id: "databases", label: "قواعد البيانات", hint: "قاعدة لوحة الإدارة لكل عميل", icon: HardDrive },
   ] },
   { title: "الإعدادات", items: [
@@ -231,6 +235,8 @@ export default function LicensesPage() {
   const [adminDbFor, setAdminDbFor] = useState<{ row: Row; provider?: ProviderId } | null>(null);
   const [resetFor, setResetFor] = useState<Row | null>(null);
   const [exportFor, setExportFor] = useState<Row | null>(null);
+  const [pinFocus, setPinFocus] = useState<string | null>(null);
+  const pinFocused = useCallback(() => setPinFocus(null), []);
   // The page's sections (like the lab station's pages), kept in the address (#codes, #new…) so a reload stays.
   const [section, setSection] = useState<Section>(() => (typeof window !== "undefined" ? sectionOf(window.location.hash) : "codes"));
   const [menu, setMenu] = useState(false);
@@ -474,7 +480,9 @@ export default function LicensesPage() {
                     {r.source === "signup" && <span data-testid="signup-badge" className="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-700">تسجيل ذاتي</span>}
                     {r.price.trim() && <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${r.paid ? "bg-teal-50 text-brand-dark" : "bg-amber-50 text-amber-700"}`}>{r.paid ? "مدفوع" : "غير مدفوع"} · <span className="tabular-nums">{r.price}</span></span>}
                     {r.message && <span title={r.message} className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-xs text-sky-700"><MessageSquare className="size-3" /> رسالة</span>}
-                    {r.pin?.hash && <span data-testid="pin-badge" title="عيّنتَ رمز دخول للمحطات" className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700"><Lock className="size-3" /> PIN</span>}
+                    {r.pinPolicy?.hidden
+                      ? <span data-testid="pin-badge" title="خاصية رمز الدخول مخفية عن هذا المختبر" className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500 line-through"><Lock className="size-3" /> PIN</span>
+                      : (r.pin?.hash || Object.values(r.pinPolicy?.stations ?? {}).some((x) => x?.pins?.length)) && <span data-testid="pin-badge" title="عيّنتَ رموز دخول للمحطات" className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700"><Lock className="size-3" /> PIN</span>}
                   </div>
                   {r.note && <div className="mt-0.5 text-xs text-muted">{r.note}</div>}
                   </div>
@@ -491,10 +499,7 @@ export default function LicensesPage() {
                   {/* Less frequent actions: one size of square icon buttons, named by their tooltip */}
                   {r.device_id && <IconBtn label="نقل لجهاز جديد" onClick={() => change(r, { action: "reset_device" }, "فك ربط الجهاز؟ يستطيع المختبر بعدها إدخال نفس الرمز على جهاز جديد، والمدة تستمر كما هي.")}><MonitorSmartphone className="size-4" /></IconBtn>}
                   {STATION_SYNC && <IconBtn label="قاعدة بيانات المختبر" onClick={() => setDbFor(r)}><Database className="size-4" /></IconBtn>}
-                  <IconBtn label="رمز دخول المحطات (PIN)" onClick={() => {
-                    setOpen((s) => new Set(s).add(r.id));
-                    setTimeout(() => document.querySelector(`[data-lab="${CSS.escape(r.lab_name)}"] [data-testid="pin-owner"] input`)?.scrollIntoView({ block: "center" }), 80);
-                  }}><Lock className="size-4" /></IconBtn>
+                  <IconBtn label="رموز الدخول (PIN)" onClick={() => { setPinFocus(r.id); go("pin"); }}><Lock className="size-4" /></IconBtn>
                   <IconBtn label="رمز جديد" onClick={() => change(r, { action: "new_code" }, "إنشاء رمز جديد لهذا المختبر؟ الرمز القديم لا يعمل بعدها لتفعيل جهاز، والجهاز الحالي يستمر.")}><KeyRound className="size-4" /></IconBtn>
                   <IconBtn label="تعديل الاسم" onClick={() => { const lab = window.prompt("اسم المختبر:", r.lab_name); if (lab == null) return; const note = window.prompt("ملاحظة:", r.note) ?? r.note; change(r, { action: "rename", lab, note }); }}><Pencil className="size-4" /></IconBtn>
                   {r.status === "active"
@@ -536,7 +541,7 @@ export default function LicensesPage() {
                 aria-expanded={isOpen} className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-brand-dark hover:underline">
                 <ChevronDown className={`size-3.5 transition-transform ${isOpen ? "rotate-180" : ""}`} /> الدفع والجهاز والرسالة والسجل ({evs.length})
               </button>
-              {isOpen && <Details r={r} evs={evs} multi={prefs.multiDevice} onChange={(c) => change(r, c)} />}
+              {isOpen && <Details r={r} evs={evs} multi={prefs.multiDevice} onChange={(c) => change(r, c)} onPins={() => { setPinFocus(r.id); go("pin"); }} />}
             </div>
           );
         })}
@@ -554,6 +559,13 @@ export default function LicensesPage() {
         <>
           <SectionTitle icon={<LayoutGrid className="size-6" />} title="المحطات" desc="كل محطات المنظومة: ما يُفعَّل لكل رمز، وما يأتي مع كل رمز، وما هو مفتوح للجميع — مع عدد الرموز التي تستعمل كل محطة." />
           <StationsOverview rows={all} now={now} defaults={prefs.defaultModules} onSettings={() => go("settings")} />
+        </>
+      )}
+
+      {section === "pin" && (
+        <>
+          <SectionTitle icon={<Lock className="size-6" />} title="رموز الدخول (PIN)" desc="لكل عميل: إخفاء خاصية رمز الدخول أو إظهارها، وتعيين رمز كل محطة أو تغييره أو إزالته — وعدة رموز للمحطة نفسها من هنا فقط." />
+          <PinSection rows={all} focus={pinFocus} onFocused={pinFocused} change={(r, c, t) => change(r as Row, c, t)} />
         </>
       )}
 
@@ -713,39 +725,22 @@ export default function LicensesPage() {
   );
 }
 
-/** «رمز دخول المحطات»: set a new PIN (a lab that forgot its own) or remove it; the devices apply it at their next check. */
-function PinOwner({ r, onChange }: { r: Row; onChange: (c: Record<string, unknown>) => void }) {
-  const stations = LICENSE_MODULES.filter((m) => m.id !== "admin" && r.modules.includes(m.id));
-  const [scope, setScope] = useState<string>("all");
-  const [pin, setPin] = useState("");
-  const ok = /^\d{4,8}$/.test(pin);
-  const scopeLabel = (s: string) => (s === "all" ? "كل المحطات" : moduleLabel(s));
+/** The code's PINs in short, with the way to «رموز الدخول (PIN)» where they are set. */
+function PinOwner({ r, onPins }: { r: Row; onPins: () => void }) {
+  const n = Object.values(r.pinPolicy?.stations ?? {}).reduce((k, x) => k + (x?.pins?.length ?? 0), 0);
   return (
     <div className="md:col-span-2" data-testid="pin-owner">
-      <div className="mb-1 flex items-center gap-1 text-xs font-semibold"><Lock className="size-3.5" /> رمز دخول المحطات (PIN)</div>
-      <p className="mb-1 text-[11px] text-muted">لمختبر نسي رمزه: عيّن رمزاً جديداً أو أزِله. يُطبَّق عند اتصال الجهاز التالي، أو فوراً بـ«نسيت الرمز؟ ← تحديث من المزوّد» في شاشة الدخول.</p>
-      <div className="flex flex-wrap gap-2">
-        <select value={scope} onChange={(e) => setScope(e.target.value)} aria-label="المحطة" className={`${inp} w-auto`}>
-          <option value="all">كل المحطات</option>
-          {stations.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
-        </select>
-        <input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 8))} inputMode="numeric" dir="ltr" placeholder="4–8 أرقام"
-          aria-label="رمز الدخول الجديد" className={`${inp} w-32 text-center tracking-widest`} />
-        <button onClick={() => { onChange({ action: "pin", pin, scope }); setPin(""); }} disabled={!ok} className="rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-dark disabled:opacity-40">تعيين الرمز</button>
-        <button onClick={() => { if (window.confirm(`إزالة رمز الدخول من ${scopeLabel(scope)}؟`)) onChange({ action: "pin", pin: "", scope }); }} className="rounded-lg border border-line px-3 py-1.5 text-xs hover:bg-surface">إزالة الرمز</button>
+      <div className="mb-1 flex items-center gap-1 text-xs font-semibold"><Lock className="size-3.5" /> رموز الدخول (PIN)</div>
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <span className="text-muted">{r.pinPolicy?.hidden ? "الخاصية مخفية عن هذا المختبر" : n ? `${n} ${n === 1 ? "رمز" : "رموز"} عيّنتها لمحطاته` : "لم تُعيَّن رموز من هنا"}</span>
+        <button onClick={onPins} className="rounded-lg border border-line px-3 py-1.5 font-semibold text-brand-dark hover:bg-surface">فتح رموز الدخول</button>
       </div>
-      {r.pin && (
-        <div className="mt-1 text-[11px] text-muted">
-          آخر تغيير: {r.pin.hash ? "رمز جديد" : "إزالة الرمز"} — {scopeLabel(r.pin.scope)} — {fmtTime(r.pin.at)}
-          {r.last_seen_at != null && r.last_seen_at >= r.pin.at ? " — وصل الجهاز" : " — بانتظار اتصال الجهاز"}
-        </div>
-      )}
     </div>
   );
 }
 
 /** Payment, device name, message to the lab and the code's history. */
-function Details({ r, evs, multi, onChange }: { r: Row; evs: Ev[]; multi: boolean; onChange: (c: Record<string, unknown>) => void }) {
+function Details({ r, evs, multi, onChange, onPins }: { r: Row; evs: Ev[]; multi: boolean; onChange: (c: Record<string, unknown>) => void; onPins: () => void }) {
   const [maxDev, setMaxDev] = useState(r.max_devices);
   const [price, setPrice] = useState(r.price);
   const [paid, setPaid] = useState(r.paid);
@@ -802,7 +797,7 @@ function Details({ r, evs, multi, onChange }: { r: Row; evs: Ev[]; multi: boolea
           {r.message && <button onClick={() => onChange({ action: "message", text: "" })} className="rounded-lg border border-line px-3 py-1.5 text-xs hover:bg-surface">إزالة</button>}
         </div>
       </div>
-      <PinOwner r={r} onChange={onChange} />
+      <PinOwner r={r} onPins={onPins} />
       <div className="md:col-span-2">
         <div className="mb-1 flex items-center gap-1 text-xs font-semibold"><History className="size-3.5" /> السجل</div>
         {evs.length === 0 ? <p className="text-xs text-muted">لا أحداث بعد.</p> : (

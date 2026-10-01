@@ -7,7 +7,7 @@ const LAB = 'مختبر بدون إنترنت ' + Date.now().toString(36); // ow
   const b = await launch();
   const errs = [];
   const q = await (await b.newContext({ extraHTTPHeaders: HDR })).newPage();
-  await q.goto(B + '/licenses');
+  await q.goto(B + '/license');
   const api = (body) => q.evaluate(async (body) => (await fetch('/api/license/admin', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })).json(), body);
   const login = await api({ op: 'login', password: OWNER });
   ok(login.ok === true, 'owner signs in (API)');
@@ -23,7 +23,7 @@ const LAB = 'مختبر بدون إنترنت ' + Date.now().toString(36); // ow
   const g1 = await q.evaluate(async () => (await fetch('/api/license/admin')).json());
   const row1 = g1.licenses.find((r) => r.lab_name === LAB);
   ok(!!g1.version && row1 && row1.app_version === g1.version, `device version reported (${row1 && row1.app_version} / site ${g1.version})`);
-  await q.goto(B + '/licenses'); await q.waitForSelector('[data-testid="app-version"]', { timeout: 15000 });
+  await q.goto(B + '/license'); await q.waitForSelector('[data-testid="app-version"]', { timeout: 15000 });
   const box = await q.locator(`div[data-lab="${LAB}"] [data-testid="app-version"]`).innerText();
   ok(box.includes('✓') && box.includes(g1.version), `code manager shows the device version as current (${box.replace(/\n/g, ' ')})`);
   await d.goto(B + '/welcome'); await d.waitForTimeout(800);

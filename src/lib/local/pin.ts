@@ -3,22 +3,39 @@
 import { useEffect, useState } from "react";
 
 /**
- * «رمز الدخول» (PIN) for the local stations: none at first; each station can switch one on in
- * its settings, and the owner can set or remove it from /licenses (for a lab that forgot it) —
+ * «رمز الدخول» (PIN) for the local stations: none at first; every station can switch its own on
+ * in its settings. From /license («رموز الدخول») the owner can, per lab code, hide the feature,
+ * set / change / remove a station's PIN — and give one station several PINs (only from there) —
  * the device applies that at its next check with the server. Kept on this device only
  * (localStorage, never synced); an unlock lasts for the browser tab. A guard for a shared
  * computer, not strong security.
  */
 
-export type PinStation = "station" | "purchasing" | "training" | "qc" | "roster";
-/** The owner's change, as the server sends it (see lib/license/server PinOp). */
+export type PinStation = "station" | "purchasing" | "training" | "qc" | "roster" | "sync" | "about";
+/** The owner's old single change (kept for codes set before «رموز الدخول»; see lib/license/server PinOp). */
 export interface PinOp { id: string; hash: string | null; scope: PinStation | "admin" | "all"; at: number }
+/** One PIN the owner gave a station: its hash and a name («الصباحي», «المدير»…). */
+export interface PinEntry { hash: string; label: string }
+/** The owner's PIN settings for a code (lib/license/server PinPolicy): a station is applied again
+ *  only when its rev changes, so the lab's own change in its settings is kept until then. */
+export interface PinPolicy { id: string; at: number; hidden: boolean; stations: Partial<Record<PinStation, { rev: string; pins: PinEntry[] | null }>> }
 
 const K = "local.pin.v1";
 const UNLOCK = "local.pin.unlocked";
 export const PIN_EVENT = "local-pin";
-const STATIONS: PinStation[] = ["station", "purchasing", "training", "qc", "roster"];
-interface Stored { pins: Partial<Record<PinStation, string>>; applied?: string }
+export const PIN_STATIONS: PinStation[] = ["station", "purchasing", "training", "qc", "roster", "sync", "about"];
+const STATIONS = PIN_STATIONS;
+interface Stored {
+  /** Each station's main PIN (set here, or the owner's first). */
+  pins: Partial<Record<PinStation, string>>;
+  /** More PINs for a station, from the owner only. */
+  extra?: Partial<Record<PinStation, string[]>>;
+  /** The owner's rev last applied per station. */
+  revs?: Partial<Record<PinStation, string>>;
+  /** The owner hid the feature for this lab: no PIN asked, nothing to set. */
+  hidden?: boolean;
+  applied?: string;
+}
 
 // ── SHA-256 (plain JS: the same answer on http and https, and the same as the server's) ──────────
 const K256 = new Uint32Array([
@@ -74,17 +91,24 @@ function unlocked(): PinStation[] {
 function setUnlocked(list: PinStation[]) { try { sessionStorage.setItem(UNLOCK, JSON.stringify(Array.from(new Set(list)))); } catch { /* ignore */ } }
 function notify() { if (typeof window !== "undefined") window.dispatchEvent(new Event(PIN_EVENT)); }
 
-export const pinOn = (st: PinStation) => !!read().pins[st];
+const extras = (s: Stored, st: PinStation) => s.extra?.[st] ?? [];
+export const pinHidden = () => !!read().hidden;
+export const pinOn = (st: PinStation) => { const s = read(); return !s.hidden && (!!s.pins[st] || extras(s, st).length > 0); };
 export const isLocked = (st: PinStation) => pinOn(st) && !unlocked().includes(st);
+/** How many more PINs the owner gave this station. */
+export const pinExtraCount = (st: PinStation) => extras(read(), st).length;
 
-/** Switch the PIN on / change it (pin), or off (null). Whoever sets it stays unlocked. */
+/** Switch the PIN on / change it (pin), or off (null: the owner's extra PINs go too).
+ *  Whoever sets it stays unlocked. */
 export function setPin(st: PinStation, pin: string | null): void {
   const s = read();
-  if (pin) { s.pins[st] = hashPin(pin); setUnlocked([...unlocked(), st]); } else delete s.pins[st];
+  if (pin) { s.pins[st] = hashPin(pin); setUnlocked([...unlocked(), st]); }
+  else { delete s.pins[st]; if (s.extra) delete s.extra[st]; }
   write(s);
 }
 export function tryPin(st: PinStation, pin: string): boolean {
-  const ok = read().pins[st] === hashPin(pin);
+  const s = read(), h = hashPin(pin);
+  const ok = s.pins[st] === h || extras(s, st).includes(h);
   if (ok) { setUnlocked([...unlocked(), st]); notify(); }
   return ok;
 }
@@ -93,7 +117,7 @@ export function lockNow(st: PinStation): void {
   notify();
 }
 
-/** Apply the owner's change from /licenses once (called when the license is refreshed). */
+/** Apply the owner's old single change from /license once (codes set before «رموز الدخول»). */
 export function applyPinOp(op: PinOp | null | undefined): void {
   if (!op || typeof op.id !== "string") return;
   const s = read();
@@ -106,11 +130,37 @@ export function applyPinOp(op: PinOp | null | undefined): void {
   write(s);
 }
 
-/** { ready, on, locked } for a station — re-renders on every change. */
+/** Apply the owner's «رموز الدخول» (called when the license is refreshed): hidden or shown, and
+ *  each station whose rev changed — its PINs replaced (the first is the main one), or removed. */
+export function applyPinPolicy(p: PinPolicy | null | undefined): void {
+  if (!p || typeof p !== "object" || typeof p.stations !== "object" || !p.stations) return;
+  const s = read();
+  const revs = { ...(s.revs ?? {}) };
+  const extra = { ...(s.extra ?? {}) };
+  const relock: PinStation[] = [];
+  let changed = !!s.hidden !== !!p.hidden;
+  s.hidden = !!p.hidden;
+  for (const st of STATIONS) {
+    const e = p.stations[st];
+    if (!e || typeof e.rev !== "string" || revs[st] === e.rev) continue;
+    const hashes = Array.isArray(e.pins) ? e.pins.map((x) => x?.hash).filter((h): h is string => typeof h === "string" && /^[0-9a-f]{64}$/.test(h)) : [];
+    if (hashes.length) { s.pins[st] = hashes[0]; extra[st] = hashes.slice(1); relock.push(st); }
+    else { delete s.pins[st]; delete extra[st]; }
+    revs[st] = e.rev;
+    changed = true;
+  }
+  if (!changed) return;
+  s.revs = revs; s.extra = extra;
+  // A new PIN from the owner must be typed once, even in a tab that was open.
+  if (relock.length) setUnlocked(unlocked().filter((x) => !relock.includes(x)));
+  write(s);
+}
+
+/** { ready, on, locked, hidden, extra } for a station — re-renders on every change. */
 export function usePin(st: PinStation) {
-  const [state, setState] = useState({ ready: false, on: false, locked: false });
+  const [state, setState] = useState({ ready: false, on: false, locked: false, hidden: false, extra: 0 });
   useEffect(() => {
-    const upd = () => setState({ ready: true, on: pinOn(st), locked: isLocked(st) });
+    const upd = () => setState({ ready: true, on: pinOn(st), locked: isLocked(st), hidden: pinHidden(), extra: pinExtraCount(st) });
     upd();
     window.addEventListener(PIN_EVENT, upd);
     window.addEventListener("storage", upd);
