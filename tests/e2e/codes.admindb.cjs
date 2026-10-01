@@ -282,7 +282,8 @@ const settingsReady = (pg) => pg.waitForFunction(() => document.querySelectorAll
   ok(await p.locator('[data-testid="lab-db-down"], [data-testid="lab-db-problem"]').count() === 0, 'back up: the panel works again');
   await item.locator('button:has-text("فحص")').click();
   await waitFor(async () => (await item.locator('[data-testid="db-check"]').innerText()).includes('تعمل'), 20000);
-  ok(await o.locator('[data-testid="badge-databases"]').count() === 0, 'checked again: no longer counted');
+  // The «تعمل» line shows at once; the side menu counts again once the list reloads.
+  ok(!!(await waitFor(async () => (await o.locator('[data-testid="badge-databases"]').count()) === 0, 15000)), 'checked again: no longer counted');
   errs.length = 0; // the error page above is expected
 
   // ── Owner unlinks it: the panel closes again (rule on), and the lab links a database itself ──
