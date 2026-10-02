@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { OfflineReady } from "@/components/local/OfflineReady";
+import { ACTIVATION_SCRIPT } from "@/lib/local/activation";
 import { PinGate } from "@/components/local/PinGate";
 import { LocalThemeApplier } from "@/components/local/LocalTheme";
 import { THEME_KEYS, themeScript } from "@/lib/local/theme";
@@ -12,6 +13,8 @@ export const metadata = { title: "عن التطبيق" };
 export default function AboutLayout({ children }: { children: ReactNode }) {
   return (
     <div className="about min-h-screen md:flex">
+      {/* No lab code is asked here; marks a new browser as new (see app/doctor/layout). */}
+      <script dangerouslySetInnerHTML={{ __html: ACTIVATION_SCRIPT }} />
       <PinGate station="about" title="عن التطبيق" />
       <script dangerouslySetInnerHTML={{ __html: themeScript(THEME_KEYS.about) }} />
       <LocalThemeApplier storageKey={THEME_KEYS.about} />

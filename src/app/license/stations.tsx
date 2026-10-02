@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  Beaker, ShoppingCart, GraduationCap, ShieldCheck, Users, LayoutDashboard, RefreshCw, Info, ExternalLink, Lock, Globe, KeyRound, MessagesSquare,
+  Beaker, ShoppingCart, GraduationCap, ShieldCheck, Users, LayoutDashboard, RefreshCw, Info, Lock, Globe, KeyRound, MessagesSquare,
   type LucideIcon,
 } from "lucide-react";
 import { LICENSE_MODULES, type LicenseModule } from "@/lib/license/modules";
@@ -78,7 +78,6 @@ export function StationsOverview({ rows, now, defaults, onSettings }: { rows: Co
                     <span>اتصل اليوم: <b className="tabular-nums text-ink">{online(m.id)}</b></span>
                   </div>
                   <Bar n={n} of={live.length} color={meta.color} />
-                  <a href={m.path} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-brand-dark hover:underline">فتح المحطة <ExternalLink className="size-3.5" /></a>
                 </div>
               </div>
             );
@@ -109,7 +108,6 @@ export function StationsOverview({ rows, now, defaults, onSettings }: { rows: Co
                 </div>
                 <div className="mt-auto flex items-center justify-between pt-3 text-xs text-muted">
                   <span>{a.scope === "all" ? "لا تحتاج رمزاً" : <>متاحة في <b className="font-mono tabular-nums text-ink">{live.length}</b> رمز فعّال</>}</span>
-                  <a href={a.path} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-semibold text-brand-dark hover:underline">فتح <ExternalLink className="size-3.5" /></a>
                 </div>
               </div>
             );

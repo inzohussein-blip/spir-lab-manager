@@ -79,7 +79,7 @@ function CodeForm({ onDone, cta = "تفعيل" }: { onDone: () => void; cta?: st
           ليس لديك رمز؟ سجّل مختبرك وجرّب مجاناً
         </a>
       )}
-      {cta === "تفعيل" && (
+      {cta === "تفعيل" && typeof location !== "undefined" && location.pathname === "/welcome" && (
         <a href="/doctor" data-testid="doctor-window-link" className="mt-2 block text-center text-xs text-muted hover:text-brand-dark hover:underline">
           طبيب ومعك «رمز الطبيب»؟ افتح نافذة الأطباء
         </a>

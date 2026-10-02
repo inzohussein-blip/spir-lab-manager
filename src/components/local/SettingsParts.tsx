@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import Link from "next/link";
 import { Boxes } from "lucide-react";
 import { notifySaved } from "@/components/SettingsLayout";
 import { stockOptions, setStockOptions, type StockOptions } from "@/lib/local/links";
@@ -59,7 +58,7 @@ export function StockOptionsCard({ from }: { from: "station" | "purchasing" }) {
   const set = (patch: StockOptions) => { setStockOptions(patch); setO((cur) => ({ ...cur, ...patch })); notifySaved(); };
   return (
     <SettingCard title="الحسم من المخزن" icon={<Boxes />} testid="stock-options"
-      desc={<>خيار واحد للمخزن كله: يظهر نفسه في إعدادات محطة المختبر وإعدادات المخزن والمشتريات.{from === "station" && <> الأصناف وربطها بالفحوصات في <Link href="/store/items" className="text-brand-dark underline">المخزن والمشتريات ← الأصناف</Link>.</>}</>}>
+      desc={<>خيار واحد للمخزن كله: يظهر نفسه في إعدادات محطة المختبر وإعدادات المخزن والمشتريات.{from === "station" && <> الأصناف وربطها بالفحوصات في «المخزن والمشتريات ← الأصناف» (تُفتح من الصفحة الرئيسية).</>}</>}>
       <div data-testid="stock-mode">
         <div className="text-sm font-medium">حسم المواد عند إدخال النتائج</div>
         <div className="mt-2 grid gap-2 sm:grid-cols-2">
