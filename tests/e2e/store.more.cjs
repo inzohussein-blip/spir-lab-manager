@@ -107,6 +107,7 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   await due.locator('button:has-text("دفعة")').click();
   await p.fill('input[aria-label="مبلغ الدفعة"]', '2000'); await p.click('button:has-text("تسجيل")');
   ok(await settled(async () => (await p.locator('[data-testid="purchase-due"]').first().innerText()).includes('4,000')), 'a further payment of 2,000: 4,000 owed');
+  await settled(async () => ((await firstPur())?.payments || []).length === 2); // on disk before the page changes
   await p.goto(B + '/store/suppliers'); await p.waitForSelector('tr[data-supplier="مورّد الكواشف"]', { timeout: 20000 });
   ok((await p.locator('tr[data-supplier="مورّد الكواشف"] [data-testid="supplier-due"]').innerText()).includes('4,000'), 'the supplier\'s balance: 4,000');
   await p.click('button[aria-label="كشف حساب مورّد الكواشف"]');
