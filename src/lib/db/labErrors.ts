@@ -1,4 +1,4 @@
-/** Messages for the full admin panel's own database (shared by /licenses and the panel's Settings). */
+/** Messages for the full admin panel's own database (shared by /license and the panel's Settings). */
 export const ADMIN_DB_ERRORS: Record<string, string> = {
   bad_url: "رابط الاتصال غير صحيح — يبدأ بـ postgresql://",
   bad_config: "رابط الاتصال غير صحيح — يبدأ بـ postgresql://",

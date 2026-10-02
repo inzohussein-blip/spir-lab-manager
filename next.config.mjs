@@ -42,6 +42,10 @@ const nextConfig = {
   outputFileTracingIncludes: {
     "/**": ["./supabase/migrations/**", "./supabase/seed.sql"],
   },
+  // The code manager's address is /license; the old /licenses still leads there.
+  async redirects() {
+    return [{ source: "/licenses", destination: "/license", permanent: false }];
+  },
   // Basic protection for every page: no framing by other sites (e.g. the code manager inside a
   // trap page), no guessing of file types, and only the site's address sent on outgoing links.
   async headers() {

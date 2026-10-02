@@ -6,7 +6,8 @@ import {
   Monitor, FileDown, Network, History, AlertTriangle, ArrowLeft, RefreshCw, CheckCircle2, Upload, Download, Copy, Check, Lock,
 } from "lucide-react";
 import { recordCounts, sameNameRecords, setDeviceName, syncLog, thisDevice } from "@/lib/local/fileSync";
-import { companySyncOn, syncExcluded, SYNC_STATIONS } from "@/lib/sync/protocol";
+import { companySyncOn, syncExcluded, syncMasterOn, SYNC_STATIONS } from "@/lib/sync/protocol";
+import { PausedNotice } from "@/components/sync/PausedNotice";
 import { card, when, daysSince } from "@/components/sync/parts";
 import { STATION_META, StationTile } from "@/components/sync/ui";
 import { cn } from "@/lib/utils";
@@ -22,6 +23,7 @@ export default function SyncOverview() {
   const [log] = useState(syncLog);
   const [auto] = useState(companySyncOn);
   const [excluded] = useState(syncExcluded);
+  const [paused] = useState(() => !syncMasterOn());
 
   const total = useMemo(() => Object.values(counts).reduce((s, n) => s + n, 0), [counts]);
   const lastIn = log.find((e) => e.dir === "in");
@@ -42,6 +44,7 @@ export default function SyncOverview() {
 
   return (
     <div className="flex max-w-5xl flex-col gap-5">
+      {paused && <PausedNotice />}
       {/* The state at a glance */}
       <section className={cn("relative overflow-hidden rounded-3xl p-6 text-white shadow-[var(--shadow-card)]",
         state.tone === "ok" ? "bg-gradient-to-l from-violet-600 to-indigo-600" : "bg-gradient-to-l from-amber-500 to-orange-600")} data-testid={stale ? "sync-reminder" : "sync-hero"}>

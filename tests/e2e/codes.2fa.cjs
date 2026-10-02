@@ -1,4 +1,4 @@
-// Two-step sign-in for /licenses: set up with an authenticator code, sign in with it, codes used once, turn off.
+// Two-step sign-in for /license: set up with an authenticator code, sign in with it, codes used once, turn off.
 const { B, OWNER, ok, launch, done } = require('./lib.cjs');
 const { createHmac } = require('node:crypto');
 
@@ -25,7 +25,7 @@ const HDR = { 'x-forwarded-for': '10.20.30.40' };
   const newOwnerPage = async () => {
     const p = await (await b.newContext({ viewport: { width: 1300, height: 950 }, extraHTTPHeaders: HDR })).newPage();
     p.on('pageerror', (e) => errs.push(e.message.slice(0, 120))); p.on('dialog', (d) => d.accept());
-    await p.goto(B + '/licenses'); await p.waitForSelector('input[aria-label="كلمة المرور"]', { timeout: 15000 });
+    await p.goto(B + '/license'); await p.waitForSelector('input[aria-label="كلمة المرور"]', { timeout: 15000 });
     await p.fill('input[aria-label="كلمة المرور"]', OWNER); await p.click('button:has-text("دخول")');
     return p;
   };
@@ -63,7 +63,7 @@ const HDR = { 'x-forwarded-for': '10.20.30.40' };
   // Turn off (needs a code that was not used yet).
   const q = await (await b.newContext({ extraHTTPHeaders: HDR })).newPage();
   const api = (body) => q.evaluate(async (body) => (await fetch('/api/license/admin', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })).json(), body);
-  await q.goto(B + '/licenses');
+  await q.goto(B + '/license');
   ok((await api({ op: 'login', password: OWNER })).error === 'need_code', 'API: password alone → need_code');
   await p.locator('[data-testid="two-factor"] input[aria-label="رمز التحقق"]').fill(used);
   await p.click('[data-testid="two-factor"] button:has-text("إيقاف")'); await p.waitForTimeout(900);

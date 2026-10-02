@@ -4,7 +4,7 @@ import { ipOf } from "@/lib/license/owner";
 
 /**
  * «التسجيل الذاتي»: a lab registers itself and gets a trial code at once (only while the owner has
- * it on in /licenses → الإعدادات العامة). The code shows in the owner's list as «تسجيل ذاتي».
+ * it on in /license → الإعدادات العامة). The code shows in the owner's list as «تسجيل ذاتي».
  */
 export const dynamic = "force-dynamic";
 const json = (b: unknown, status = 200) => NextResponse.json(b, { status, headers: { "cache-control": "no-store" } });

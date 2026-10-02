@@ -3,7 +3,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { SignJWT, jwtVerify } from "jose";
 
-/** The owner's sign-in for the code manager (/licenses), with LICENSE_ADMIN_PASSWORD. */
+/** The owner's sign-in for the code manager (/license), with LICENSE_ADMIN_PASSWORD. */
 const COOKIE = "lab_lic_owner";
 const DEV_KEY = "dev-insecure-key-change-me-in-production-00000000";
 const password = () => (process.env.LICENSE_ADMIN_PASSWORD ?? "").trim();

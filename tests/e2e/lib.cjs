@@ -2,7 +2,7 @@
  * Shared helpers for the browser tests (run by tests/e2e/run.cjs and in CI).
  *  - E2E_BASE: site address (default http://localhost:3456)
  *  - CHROME_PATH: a Chromium to use instead of Playwright's own download
- *  - E2E_OWNER_PASSWORD: owner password of /licenses in the "codes" run
+ *  - E2E_OWNER_PASSWORD: owner password of /license in the "codes" run
  */
 const os = require("node:os");
 const path = require("node:path");

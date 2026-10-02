@@ -13,7 +13,7 @@
 
 const META_CACHE = "local-meta";
 const PREFIX = "local-app-";
-const BASES = ["/welcome", "/station", "/store", "/training", "/qc", "/roster", "/sync", "/about"];
+const BASES = ["/welcome", "/station", "/store", "/training", "/qc", "/roster", "/connect", "/sync", "/about"];
 const ROUTES = [
   "/welcome",
   "/station", "/station/inventory", "/station/records", "/station/settings", "/station/tests", "/station/visits", "/station/trash", "/station/page/_",
@@ -22,9 +22,10 @@ const ROUTES = [
   "/training/quiz", "/training/settings", "/training/tools", "/training/trainees", "/training/tubes", "/training/test/_",
   "/qc", "/qc/analytes", "/qc/chart", "/qc/devices", "/qc/entry", "/qc/settings", "/qc/temps",
   "/roster", "/roster/attendance", "/roster/leaves", "/roster/payroll", "/roster/schedule", "/roster/settings", "/roster/staff",
+  "/connect", "/connect/room", "/connect/public", "/connect/labs", "/connect/direct", "/connect/file", "/connect/settings",
   "/sync", "/sync/file", "/sync/auto", "/sync/log", "/sync/settings",
   "/about", "/about/start", "/about/station", "/about/report", "/about/store", "/about/training", "/about/qc", "/about/roster",
-  "/about/sync", "/about/admin", "/about/data", "/about/tips", "/about/faq", "/about/support", "/about/settings",
+  "/about/connect", "/about/sync", "/about/admin", "/about/data", "/about/tips", "/about/faq", "/about/support", "/about/settings",
 ];
 // Pages with an id in the URL are client pages: one saved copy serves every id.
 const TEMPLATES = [["/training/test/", "/training/test/_"], ["/station/page/", "/station/page/_"]];

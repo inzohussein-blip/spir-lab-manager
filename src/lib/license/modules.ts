@@ -5,13 +5,14 @@ export const LICENSE_MODULES = [
   { id: "training", label: "محطة التدريب والمعلومات", path: "/training" },
   { id: "qc", label: "محطة الجودة والأجهزة", path: "/qc" },
   { id: "roster", label: "محطة الكادر والدوام", path: "/roster" },
+  { id: "connect", label: "محطة التواصل", path: "/connect" },
   { id: "admin", label: "لوحة الإدارة الكاملة", path: "/" },
 ] as const;
 
 export type LicenseModule = (typeof LICENSE_MODULES)[number]["id"];
 export const MODULE_IDS = LICENSE_MODULES.map((m) => m.id) as LicenseModule[];
 /** A new code gets the local stations; the full admin panel is switched on per code. */
-export const DEFAULT_MODULES: LicenseModule[] = ["station", "purchasing", "training", "qc", "roster"];
+export const DEFAULT_MODULES: LicenseModule[] = ["station", "purchasing", "training", "qc", "roster", "connect"];
 export const moduleLabel = (id: string) => LICENSE_MODULES.find((m) => m.id === id)?.label ?? id;
 export const cleanModules = (v: unknown): LicenseModule[] =>
   Array.isArray(v) ? MODULE_IDS.filter((id) => v.includes(id)) : [...DEFAULT_MODULES];

@@ -5,7 +5,7 @@ const routes = ['/welcome', '/station', '/station/inventory', '/store/inventory'
   '/training', '/training/cards', '/training/edit', '/training/exam', '/training/guide', '/training/manual', '/training/map', '/training/media', '/training/quiz',
   '/training/settings', '/training/tools', '/training/trainees', '/training/tubes', '/training/test/FIRST',
   '/qc', '/qc/analytes', '/qc/chart', '/qc/devices', '/qc/entry', '/qc/settings', '/qc/temps',
-  '/roster', '/roster/attendance', '/roster/leaves', '/roster/payroll', '/roster/schedule', '/roster/settings', '/roster/staff', '/sync', '/sync/file', '/sync/auto', '/sync/log', '/sync/settings', '/about', '/about/station', '/about/report', '/about/qc', '/about/roster', '/about/faq', '/about/settings', '/licenses'];
+  '/roster', '/roster/attendance', '/roster/leaves', '/roster/payroll', '/roster/schedule', '/roster/settings', '/roster/staff', '/connect', '/connect/room', '/connect/public', '/connect/labs', '/connect/direct', '/connect/file', '/connect/settings', '/sync', '/sync/file', '/sync/auto', '/sync/log', '/sync/settings', '/about', '/about/station', '/about/report', '/about/qc', '/about/roster', '/about/connect', '/about/faq', '/about/settings', '/license'];
 (async () => {
   const b = await launch();
   for (const [w, h, theme] of [[1440, 900, 'light'], [390, 844, 'light'], [1440, 900, 'dark']]) {
@@ -31,6 +31,10 @@ const routes = ['/welcome', '/station', '/station/inventory', '/store/inventory'
     ok(bad === 0, `${routes.length} pages at ${w}px ${theme}: no errors, no sideways scroll`);
     await ctx.close();
   }
+  // The code manager's address is /license; the old /licenses still leads there.
+  const rp = await (await b.newContext()).newPage();
+  await rp.goto(B + '/licenses'); await rp.waitForTimeout(300);
+  ok(new URL(rp.url()).pathname === '/license', `/licenses leads to /license (${new URL(rp.url()).pathname})`);
   await b.close();
   done();
 })().catch((e) => { console.error(e); process.exit(1); });

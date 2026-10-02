@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { licensingEnabled, reportSyncStatus } from "@/lib/license/server";
 
-/** A device tells how its sync with the lab's database is going (shown on its code in /licenses). */
+/** A device tells how its sync with the lab's database is going (shown on its code in /license). */
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {

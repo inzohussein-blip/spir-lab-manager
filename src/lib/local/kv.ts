@@ -19,7 +19,9 @@
 
 const DB_NAME = "lab-local";
 const STORE = "kv";
-const PREFIXES = ["station.", "purchasing.", "training.", "qc.", "roster."];
+const PREFIXES = ["station.", "purchasing.", "training.", "qc.", "roster.", "connect."];
+/** «محطة التواصل»: its keys and messages stay on this computer (never synced, by network or file). */
+const LOCAL_ONLY = ["connect."];
 /** Kept in localStorage: read by the inline script that sets the theme before the page paints. */
 const isTheme = (k: string) => k.endsWith(".theme.v1");
 const isData = (k: string) => PREFIXES.some((p) => k.startsWith(p)) && !isTheme(k);
@@ -29,7 +31,7 @@ const DEVICE_ONLY = new Set(["training.unlocked", "station.backupAt.v1", "statio
   // «محطة المزامنة»: this computer's record clock, name and sync log.
   "station.syncClock.v1", "station.syncDevice.v1", "station.syncLog.v1"]);
 /** Keys the lab's devices share through the lab's database (lib/sync). */
-export const isSyncedKey = (k: string) => isData(k) && !DEVICE_ONLY.has(k);
+export const isSyncedKey = (k: string) => isData(k) && !DEVICE_ONLY.has(k) && !LOCAL_ONLY.some((p) => k.startsWith(p));
 
 /** Who changed a value: this page ("local"), or another tab / the lab's database ("external"). */
 export type KvOrigin = "local" | "external";

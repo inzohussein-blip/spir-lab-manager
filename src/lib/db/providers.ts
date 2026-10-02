@@ -1,6 +1,6 @@
 /**
  * Where a lab's database can live, with the steps to get its connection string, and advice on a
- * string before it is saved (shared by /licenses and the admin panel's Settings; no server APIs).
+ * string before it is saved (shared by /license and the admin panel's Settings; no server APIs).
  */
 
 export type ProviderId = "neon" | "supabase" | "railway" | "postgres";

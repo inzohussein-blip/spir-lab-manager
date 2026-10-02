@@ -39,10 +39,24 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   ok(JSON.stringify(ids) === JSON.stringify(['lab', 'report', 'fill', 'forms', 'entry', 'stock', 'tests', 'device', 'look']), `sections: ${ids.join(', ')}`);
   ok(await p.locator('[data-sec="lab"] [data-testid="lab-identity"]').count() === 1 && await p.locator('[data-sec="lab"] [data-testid="lab-contact"]').count() === 1, '«المختبر»: name and logo, contact details');
   ok(await p.locator('[data-sec="look"] [data-testid="pin-card"]').count() === 1 && await p.locator('[data-sec="device"] [data-testid="pin-card"]').count() === 0, 'PIN under «الأمان والمظهر»');
-  for (const st of ['qc', 'roster', 'training', 'store']) {
+  for (const st of ['qc', 'roster', 'training', 'store', 'connect', 'sync']) {
     await p.goto(B + `/${st}/settings#look`); await p.waitForSelector('[data-sec="look"] [data-testid="pin-card"]', { timeout: 20000 });
   }
-  ok(true, 'every station: «الأمان والمظهر» with the PIN');
+  ok(true, 'every station: «الأمان والمظهر» with the PIN (with the sync station)');
+  // «عن التطبيق» too, with its own PIN: it asks for it, and the other stations do not.
+  await p.goto(B + '/about/settings'); await p.waitForSelector('[data-testid="pin-card"]', { timeout: 20000 });
+  await p.click('[data-testid="pin-card"] button:has-text("تفعيل رمز الدخول")');
+  await p.fill('input[aria-label="الرمز الجديد"]', '4321'); await p.fill('input[aria-label="تأكيد الرمز"]', '4321'); await p.click('button:has-text("حفظ الرمز")');
+  const ap = await p.context().newPage();
+  await ap.goto(B + '/about'); await ap.waitForSelector('[data-testid="pin-gate"]', { timeout: 20000 });
+  await ap.goto(B + '/station'); await ap.waitForTimeout(1500);
+  ok(await ap.locator('[data-testid="pin-gate"]').count() === 0, '«عن التطبيق» has its own PIN; the lab station is not locked by it');
+  await ap.goto(B + '/about'); await ap.waitForSelector('[data-testid="pin-gate"]', { timeout: 20000 });
+  await ap.fill('input[aria-label="رمز الدخول"]', '4321'); await ap.click('[data-testid="pin-gate"] button:has-text("دخول")');
+  ok(await ap.locator('[data-testid="pin-gate"]').count() === 0, '«عن التطبيق» opens with its PIN');
+  await ap.close();
+  await p.goto(B + '/about/settings'); await p.waitForSelector('[data-testid="pin-card"]', { timeout: 20000 });
+  await p.click('[data-testid="pin-card"] button:has-text("إيقاف الرمز")'); await p.waitForTimeout(300);
 
   // ── The sample barcode on the report: shown by default, can be hidden ──
   await p.goto(B + '/station/settings#report'); await p.waitForSelector('[data-testid="settings-preview"] .report-pbc', { timeout: 20000 });

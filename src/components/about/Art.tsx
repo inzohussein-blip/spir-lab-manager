@@ -7,7 +7,7 @@ import type { ArtName } from "@/lib/about/content";
  */
 
 const C = {
-  station: "#0d9488", store: "#d97706", training: "#4f46e5", qc: "#e11d48", roster: "#0284c7", sync: "#7c3aed",
+  station: "#0d9488", store: "#d97706", training: "#4f46e5", qc: "#e11d48", roster: "#0284c7", connect: "#059669", sync: "#7c3aed",
   ok: "#16a34a", warn: "#f59e0b", bad: "#dc2626", admin: "#5a2a82",
 };
 const SURF = "var(--color-surface)";
@@ -315,6 +315,34 @@ function SyncArt() {
   );
 }
 
+function ConnectArt() {
+  return (
+    <svg viewBox="0 0 400 180">
+      {/* the lab's two computers, talking inside the lab */}
+      <Laptop x={300} y={30} w={80} color={C.connect} label="الاستقبال" />
+      <Laptop x={300} y={110} w={80} color={C.connect} label="المختبر" />
+      <path d="M296,62 q-26,30 0,60" stroke={C.connect} strokeWidth={2} fill="none" strokeDasharray="4 4" />
+      <T x={262} y={96} size={9} fill={C.connect}>داخلي</T>
+      {/* a sealed message to another lab */}
+      <Arrow x1={240} y1={140} x2={140} y2={140} color={C.connect} />
+      <g transform="translate(190 120)">
+        <rect x={-12} y={-4} width={24} height={18} rx={4} fill={C.connect} />
+        <path d="M-7,-4 v-5 a7,7 0 0 1 14,0 v5" stroke={C.connect} strokeWidth={2.5} fill="none" />
+      </g>
+      <T x={190} y={160} size={9} fill={MUTED} weight={500}>مشفّرة: مباشرة أو بملف أو بالبريد</T>
+      <Laptop x={20} y={110} w={90} label="مختبر آخر" />
+      {/* the public chat */}
+      <g transform="translate(70 50)">
+        <circle r={26} fill={SURF} stroke={C.connect} strokeWidth={2} />
+        <ellipse rx={11} ry={26} fill="none" stroke={C.connect} strokeWidth={1.5} />
+        <line x1={-26} y1={0} x2={26} y2={0} stroke={C.connect} strokeWidth={1.5} />
+      </g>
+      <T x={150} y={45} size={10} fill={C.connect}>المحادثة العامة</T>
+      <T x={150} y={60} size={8.5} fill={MUTED} weight={500}>كل المختبرات</T>
+    </svg>
+  );
+}
+
 function OfflineArt() {
   return (
     <svg viewBox="0 0 400 170">
@@ -404,7 +432,7 @@ function AccountsArt() {
 
 const ARTS: Record<ArtName, () => React.JSX.Element> = {
   hub: Hub, flow: Flow, station: StationArt, report: ReportArt, store: StoreArt, training: TrainingArt, qc: QcArt,
-  roster: RosterArt, sync: SyncArt, offline: OfflineArt, backup: BackupArt, activation: ActivationArt, admin: AdminArt, accounts: AccountsArt,
+  roster: RosterArt, connect: ConnectArt, sync: SyncArt, offline: OfflineArt, backup: BackupArt, activation: ActivationArt, admin: AdminArt, accounts: AccountsArt,
 };
 
 export function Art({ name, caption }: { name: ArtName; caption?: string }) {

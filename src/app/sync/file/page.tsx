@@ -1,5 +1,7 @@
 "use client";
 
+import { syncMasterOn } from "@/lib/sync/protocol";
+import { PausedNotice } from "@/components/sync/PausedNotice";
 import { useRef, useState } from "react";
 import { Download, Upload, FileSearch, FileDown, Send, Inbox, CheckCircle2, Check, Loader2, AlertTriangle } from "lucide-react";
 import { exportSync, importSync, isSyncFile, setDeviceName, syncFileName, thisDevice, type ImportResult, type SyncFile } from "@/lib/local/fileSync";
@@ -9,6 +11,7 @@ import { PageHead, StationTile, Figure } from "@/components/sync/ui";
 const ERR: Record<string, string> = {
   not_sync: "هذا الملف ليس ملف مزامنة (اختر الملف الذي صدّرته «محطة المزامنة» في الحاسوب الآخر).",
   same_device: "هذا الملف من هذا الحاسوب نفسه — أدخل ملفاً من حاسوب آخر.",
+  paused: "المزامنة موقوفة على هذا الحاسوب (الحماية) — شغّلها من «الإعدادات ← الحماية» أولاً.",
   bad_json: "تعذّرت قراءة الملف.",
   other_company: "هذا الملف من حاسوب مختبر آخر (أو حاسوب غير مفعّل برمز مختبرك) — لا يُدخل هنا.",
 };
@@ -53,10 +56,13 @@ export default function SyncFilePage() {
 
   const [drag, setDrag] = useState(false);
   const [sent, setSent] = useState(false);
+  const [paused] = useState(() => !syncMasterOn());
 
   return (
     <div className="flex max-w-5xl flex-col gap-5">
       <PageHead icon={<FileDown />} title="المزامنة بملف" sub="بلا إنترنت: صدّر «ملف المزامنة» من حاسوب وأدخله في الآخر (فلاشة، مجلد مشترك، واتساب)، ثم بالعكس." />
+
+      {paused && <PausedNotice />}
 
       {/* The three steps */}
       <ol className="grid gap-2 sm:grid-cols-3">
@@ -77,7 +83,7 @@ export default function SyncFilePage() {
             <input value={name} onChange={(e) => setName(e.target.value)} onBlur={() => setDeviceName(name)} aria-label="اسم الحاسوب" placeholder="مثلاً: حاسوب الاستقبال"
               className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand" />
           </label>
-          <button type="button" onClick={() => void download().then(() => setSent(true))} className={`${btn} mt-auto w-full bg-brand py-3 text-white hover:bg-brand-dark`} data-testid="sync-export">
+          <button type="button" disabled={paused} onClick={() => void download().then(() => setSent(true))} className={`${btn} mt-auto w-full disabled:opacity-50 bg-brand py-3 text-white hover:bg-brand-dark`} data-testid="sync-export">
             <Download className="size-4" /> تصدير ملف المزامنة
           </button>
           {sent && <p className="mt-2 flex items-center gap-1.5 text-xs text-green-700"><CheckCircle2 className="size-3.5" /> صُدّر الملف — انقله إلى الحاسوب الآخر وأدخله هناك.</p>}
@@ -87,7 +93,7 @@ export default function SyncFilePage() {
         <section className={card}>
           <div className="mb-1 flex items-center gap-2 font-bold"><Inbox className="size-4 text-brand" /> استقبال من حاسوب آخر</div>
           <p className="mb-3 text-xs text-muted">اختر الملف أو اسحبه إلى هنا. تراه قبل إدخاله.</p>
-          <button type="button" disabled={busy} onClick={() => file.current?.click()} data-testid="sync-drop"
+          <button type="button" disabled={busy || paused} onClick={() => file.current?.click()} data-testid="sync-drop"
             onDragOver={(e) => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)}
             onDrop={(e) => { e.preventDefault(); setDrag(false); const f = e.dataTransfer.files?.[0]; if (f) void read(f); }}
             className={`flex w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed px-4 py-7 text-sm transition-colors disabled:opacity-60 ${drag ? "border-brand bg-brand-light" : "border-line hover:border-brand hover:bg-canvas"}`}>

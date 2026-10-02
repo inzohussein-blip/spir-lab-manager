@@ -3,13 +3,14 @@
 import { useEffect, useState } from "react";
 import { Settings, Type, Lock } from "lucide-react";
 import { ThemeCard } from "@/components/local/LocalTheme";
+import { PinCard } from "@/components/local/PinGate";
 import { THEME_KEYS } from "@/lib/local/theme";
 import { TEXT_SIZES, readTextSize, saveTextSize, type TextSizeId } from "@/components/about/TextSize";
 import { cn } from "@/lib/utils";
 
 const card = "rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]";
 
-/** Very simple settings: the look and the text size. The text itself is fixed. */
+/** Very simple settings: the PIN, the look and the text size. The text itself is fixed. */
 export default function AboutSettings() {
   const [size, setSize] = useState<TextSizeId>("normal");
   useEffect(() => { setSize(readTextSize()); }, []);
@@ -17,6 +18,8 @@ export default function AboutSettings() {
   return (
     <div className="mx-auto grid max-w-2xl gap-5">
       <h1 className="flex items-center gap-2 text-2xl font-bold"><Settings className="size-6 text-brand" /> الإعدادات</h1>
+
+      <PinCard station="about" />
 
       <ThemeCard storageKey={THEME_KEYS.about} note="فاتح أو غامق، أو تلقائي حسب إعداد الجهاز. يخص هذه المحطة فقط." />
 

@@ -46,7 +46,8 @@ export default async function RootLayout({
     pathname.startsWith("/training") ||
     pathname.startsWith("/qc") ||
     pathname.startsWith("/roster") ||
-    pathname.startsWith("/licenses");
+    pathname.startsWith("/connect") ||
+    pathname.startsWith("/license");
   const isLogin = pathname === "/login" || pathname.startsWith("/login/");
   // The lab's own database (when its code has one) must answer before the panel can open.
   const dbProblem = !isBare || isLogin ? await labDbProblem() : null;

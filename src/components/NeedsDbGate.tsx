@@ -7,8 +7,10 @@ import { adminDbError } from "@/lib/db/labErrors";
 import type { ProviderId } from "@/lib/db/providers";
 import { ConnInput, ProviderGuide, ProviderPicker } from "@/components/DbProviders";
 
-/** A paid code without a database of its own: the panel stays closed until one is linked — by
- *  the owner in /licenses, or here by the lab (then it creates its first admin). */
+/** ⚠️ Disabled on the owner's request (NEEDS_DB_GATE in lib/license/flags): kept, never shown, not
+ *  to be switched on again unless the owner asks.
+ *  A paid code without a database of its own: the panel stays closed until one is linked — by
+ *  the owner in /license, or here by the lab (then it creates its first admin). */
 export function NeedsDbGate() {
   const [provider, setProvider] = useState<ProviderId>("neon");
   const [conn, setConn] = useState("");

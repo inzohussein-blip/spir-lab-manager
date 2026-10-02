@@ -15,7 +15,7 @@
  */
 
 import { kvFlush, kvGet, kvSet, kvRemove, kvSyncedEntries as kvAllSynced, isSyncedKey as kvIsSynced, onKvChange, KV_REMOTE_EVENT } from "@/lib/local/kv";
-import { sharedStation } from "@/lib/sync/protocol";
+import { sharedStation, syncMasterOn } from "@/lib/sync/protocol";
 import { todayYmd } from "@/lib/local/util";
 
 // Stations this computer keeps to itself («محطة المزامنة ← الإعدادات») stay out of the files both ways.
@@ -138,6 +138,7 @@ async function companyOf(): Promise<string> {
 }
 
 export async function exportSync(): Promise<SyncFile> {
+  if (!syncMasterOn()) throw new Error("paused"); // «إيقاف المزامنة»: no file leaves this computer
   saveClock(true);
   const c = loadClock();
   const colls: SyncFile["colls"] = {};
@@ -184,6 +185,7 @@ export function sameNameRecords(): { patients: string[]; stock: string[]; tests:
 /** Bring another computer's sync file in (see the top of this file for the rule). */
 export async function importSync(raw: unknown): Promise<ImportResult> {
   if (!isSyncFile(raw)) return { ok: false, added: 0, updated: 0, removed: 0, kept: 0, error: "not_sync" };
+  if (!syncMasterOn()) return { ok: false, added: 0, updated: 0, removed: 0, kept: 0, error: "paused" };
   const me = thisDevice();
   if (raw.device?.id === me.id) return { ok: false, added: 0, updated: 0, removed: 0, kept: 0, error: "same_device" };
   // Another lab's computer: its records never come in here.

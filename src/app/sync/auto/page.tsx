@@ -6,6 +6,7 @@ import { CompanySyncCard } from "@/components/local/CompanySyncCard";
 import { SyncPanel } from "@/components/local/SyncPanel";
 import { card } from "@/components/sync/parts";
 import { PageHead } from "@/components/sync/ui";
+import { PausedBanner } from "@/components/sync/PausedNotice";
 
 const FACTS = [
   { icon: <Clock className="size-4" />, t: "كل 30 ثانية وبعد كل تعديل" },
@@ -17,6 +18,7 @@ const FACTS = [
 export default function SyncAutoPage() {
   return (
     <div className="flex max-w-4xl flex-col gap-5">
+      <PausedBanner />
       <PageHead icon={<Network />} title="المزامنة التلقائية" sub="حواسيب المختبر تتبادل تعديلاتها وحدها، عبر الإنترنت أو عبر شبكة المختبر المحلية." />
       <ul className="grid gap-2 sm:grid-cols-3">
         {FACTS.map((f) => (

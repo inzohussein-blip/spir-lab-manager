@@ -11,7 +11,7 @@ const DAY = 86400000;
   };
   // ── owner ──
   const { p: o } = await newDev();
-  await o.goto(B + '/licenses'); await o.waitForTimeout(600);
+  await o.goto(B + '/license'); await o.waitForTimeout(600);
   await o.fill('input[aria-label="كلمة المرور"]', 'wrong'); await o.click('button:has-text("دخول")'); await o.waitForSelector('text=كلمة المرور غير صحيحة', { timeout: 20000 }).catch(() => {});
   ok(await o.locator('text=كلمة المرور غير صحيحة').count() === 1, 'owner: wrong password refused');
   await o.fill('input[aria-label="كلمة المرور"]', OWNER); await o.click('button:has-text("دخول")'); await o.waitForSelector('h1:has-text("إدارة الرموز")', { timeout: 15000 }).catch(() => {});
