@@ -1,7 +1,7 @@
 // «عن التطبيق»: a station that explains the app and each station with simplified pictures —
 // a sidebar like the others, fixed text (nothing to edit), and very simple settings.
 const { B, ok, launch, done, resetLocal } = require('./lib.cjs');
-const SLUGS = ['', 'start', 'station', 'report', 'store', 'training', 'qc', 'roster', 'sync', 'admin', 'data', 'tips', 'faq', 'support'];
+const SLUGS = ['', 'start', 'station', 'report', 'store', 'training', 'qc', 'roster', 'connect', 'sync', 'admin', 'data', 'tips', 'faq', 'support'];
 (async () => {
   const b = await launch();
   const p = await (await b.newContext({ viewport: { width: 1440, height: 950 } })).newPage();
