@@ -19,16 +19,26 @@ const routes = ['/welcome', '/station', '/station/inventory', '/store/inventory'
     await p.goto(B + '/training'); await p.waitForTimeout(800);
     const first = ((await kv(p, 'training.tests.v1')) || [{ id: 'x' }])[0].id;
     let bad = 0;
+    const crossed = [];
     for (const r0 of routes) {
       const r = r0.replace('FIRST', first);
       errs.length = 0;
       let status = 0;
       try { status = (await p.goto(B + r, { waitUntil: 'networkidle' })).status(); } catch (e) { errs.push('NAV ' + e.message.slice(0, 100)); }
       await p.waitForTimeout(250);
+      // No page leads into another station — only back to the welcome page; «نافذة الأطباء» leads nowhere else.
+      if (w === 1440 && theme === 'light') {
+        const own = new URL(p.url()).pathname.split('/')[1];
+        const hrefs = await p.locator('a[href]').evaluateAll((as) => as.map((a) => a.getAttribute('href')));
+        const away = hrefs.filter((h) => h && h.startsWith('/') && !h.startsWith('//') && !h.startsWith('/api/') && !/\.[a-z0-9]+$/i.test(h.split(/[?#]/)[0]))
+          .filter((h) => { const root = h.split(/[/?#]/)[1]; return own === 'doctor' ? root !== 'doctor' : own !== 'welcome' && root !== own && root !== 'welcome'; });
+        if (away.length) crossed.push(`${r} → ${[...new Set(away)].join(', ')}`);
+      }
       const ov = await p.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
       if (errs.length || ov > 2 || status >= 400) { bad++; console.log(`  [${w} ${theme}] ${r} status=${status} overflowX=${ov} ${errs.join(' || ')}`); }
     }
     ok(bad === 0, `${routes.length} pages at ${w}px ${theme}: no errors, no sideways scroll`);
+    if (w === 1440 && theme === 'light') ok(crossed.length === 0, `no page links into another station (only to the welcome page; the doctors' window to none)${crossed.length ? ': ' + crossed.join(' | ') : ''}`);
     await ctx.close();
   }
   // The code manager's address is /license; the old /licenses still leads there.

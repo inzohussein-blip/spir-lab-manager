@@ -11,9 +11,9 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   await p.goto(B + '/welcome'); await resetLocal(p, { 'local.activation.v1': 'legacy' });
   const settled = async (fn, ms = 5000) => { const end = Date.now() + ms; while (Date.now() < end) { if (await fn()) return true; await p.waitForTimeout(150); } return false; };
 
-  // ── The stock room lives in procurement; the old address leads there ──
-  await p.goto(B + '/station/inventory'); await p.waitForURL('**/store/inventory', { timeout: 20000 });
-  ok(true, 'old /station/inventory opens the stock room in procurement');
+  // ── The stock room lives in procurement; its old address leads to the welcome page ──
+  await p.goto(B + '/station/inventory'); await p.waitForURL('**/welcome', { timeout: 20000 });
+  ok(true, 'old /station/inventory leads to the welcome page');
   await p.goto(B + '/store/items'); await p.waitForSelector('[data-testid="item-new"]', { timeout: 20000 });
   await p.click('[data-testid="item-new"]');
   await p.fill('[data-testid="item-form"] label:has-text("اسم الصنف") input', 'كاشف السكر');

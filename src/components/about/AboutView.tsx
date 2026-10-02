@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, Lightbulb, TriangleAlert, ExternalLink, ChevronDown } from "lucide-react";
+import { ArrowLeft, Lightbulb, TriangleAlert, Home, ChevronDown } from "lucide-react";
 import { ABOUT, aboutHref, aboutPage, type AboutBlock, type AboutPage } from "@/lib/about/content";
 import { Art } from "./Art";
 
@@ -106,8 +106,9 @@ export function AboutView({ page }: { page: AboutPage }) {
             <p className="mt-1.5 text-muted">{page.lead}</p>
           </div>
           {page.open && (
-            <Link href={page.open} className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold text-white" style={{ background: page.color }} data-testid="about-open">
-              فتح المحطة <ExternalLink className="size-4" />
+            // Every page leads back to the welcome page; the station opens from its card there.
+            <Link href="/welcome" className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold text-white" style={{ background: page.color }} data-testid="about-open">
+              <Home className="size-4" /> تُفتح من الصفحة الرئيسية
             </Link>
           )}
         </div>

@@ -60,6 +60,8 @@ const TAG = Date.now().toString(36);
   ok(await until(async () => (await d.locator('[data-testid="add-lab-msg"]').innerText()).includes('1 نتيجة')), 'the doctor adds the lab and gets the result');
   await d.goto(B + '/welcome'); await d.waitForSelector('input[aria-label="رمز المختبر"]', { timeout: 45000 });
   ok(await d.locator('[data-testid="doctor-window-link"]').count() === 1, 'the activation window leads a doctor to his window');
+  await d.goto(B + '/station'); await d.waitForSelector('input[aria-label="رمز المختبر"]', { timeout: 45000 });
+  ok(await d.locator('[data-testid="doctor-window-link"]').count() === 0, '…from the welcome page only (a station leads nowhere else)');
   // «عن التطبيق» first, then the stations: still asked for a lab code (its offline copy is not older data).
   const v = await computer(null, 'visitor');
   await v.goto(B + '/about'); await v.waitForTimeout(1500);

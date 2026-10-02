@@ -32,7 +32,7 @@ const SLUGS = ['', 'start', 'station', 'report', 'store', 'training', 'qc', 'ros
   await p.goto(B + '/about/qc');
   const qc = await p.locator('main').innerText();
   ok(qc.includes('Westgard') && qc.includes('Levey-Jennings') && (await p.locator('main [data-art="qc"]').count()) === 1, 'a station in detail (quality: Westgard, the chart and its picture)');
-  ok((await p.locator('[data-testid="about-open"]').getAttribute('href')) === '/qc', '«فتح المحطة» goes to the station');
+  ok((await p.locator('[data-testid="about-open"]').getAttribute('href')) === '/welcome', 'the station\'s button leads to the welcome page (not into the station)');
   await p.click('[data-testid="about-next"]'); await p.waitForURL(/\/about\/roster$/);
   ok(true, 'the next page follows');
   await p.goto(B + '/about/faq');
