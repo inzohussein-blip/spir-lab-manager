@@ -5,7 +5,7 @@ const routes = ['/welcome', '/station', '/station/inventory', '/store/inventory'
   '/training', '/training/cards', '/training/edit', '/training/exam', '/training/guide', '/training/manual', '/training/map', '/training/media', '/training/quiz',
   '/training/settings', '/training/tools', '/training/trainees', '/training/tubes', '/training/test/FIRST',
   '/qc', '/qc/analytes', '/qc/chart', '/qc/devices', '/qc/entry', '/qc/settings', '/qc/temps',
-  '/roster', '/roster/attendance', '/roster/leaves', '/roster/payroll', '/roster/schedule', '/roster/settings', '/roster/staff', '/sync', '/sync/file', '/sync/auto', '/sync/log', '/sync/settings', '/about', '/about/station', '/about/report', '/about/qc', '/about/roster', '/about/faq', '/about/settings', '/license'];
+  '/roster', '/roster/attendance', '/roster/leaves', '/roster/payroll', '/roster/schedule', '/roster/settings', '/roster/staff', '/connect', '/connect/room', '/connect/public', '/connect/labs', '/connect/direct', '/connect/file', '/connect/settings', '/sync', '/sync/file', '/sync/auto', '/sync/log', '/sync/settings', '/about', '/about/station', '/about/report', '/about/qc', '/about/roster', '/about/connect', '/about/faq', '/about/settings', '/license'];
 (async () => {
   const b = await launch();
   for (const [w, h, theme] of [[1440, 900, 'light'], [390, 844, 'light'], [1440, 900, 'dark']]) {

@@ -10,7 +10,7 @@ import { licenseProof, deviceId } from "@/lib/license/client";
 import { sealRoom, openRoom, sealFor, openFrom, addressOf } from "./crypto";
 import {
   getSettings, identity, myCard, myAddress, contactById, contactByPub, addContact, addMessages, messages, newOutgoing, setStatus,
-  readCursors, writeCursors, pruneOld, CONNECT_EVENT, type Msg,
+  readCursors, writeCursors, pruneOld, removeMessages, CONNECT_EVENT, type Msg,
 } from "./store";
 import { directSend, isConnected } from "./direct";
 
@@ -77,7 +77,12 @@ export function sendRoom(text: string, urgent = false): Msg {
   void flushRoom();
   return m;
 }
-async function flushRoom() {
+/** One send at a time (the poller and a new message may both start one). */
+function once(fn: () => Promise<void>): () => Promise<void> {
+  let running: Promise<void> | null = null;
+  return () => (running ??= fn().finally(() => { running = null; }));
+}
+const flushRoom = once(async () => {
   const s = getSettings();
   if (!s.room) return;
   for (const m of messages().filter((x) => x.conv === "room" && x.dir === "out" && x.status === "pending")) {
@@ -87,7 +92,7 @@ async function flushRoom() {
     setStatus([m.id], "sent", { sid: Number(r.id) });
   }
   if (net.roomError) setNet({ roomError: "" });
-}
+});
 async function pollRoom() {
   const s = getSettings();
   if (!s.room) { if (net.online.length) setNet({ online: [] }); return; }
@@ -101,6 +106,7 @@ async function pollRoom() {
     for (const row of rows) {
       const p = openRoom<RoomPayload>(s.room.key, row.box);
       if (!p || typeof p.text !== "string" || have.has(String(p.mid))) continue;
+      have.add(String(p.mid));
       add.push({ id: String(p.mid), conv: "room", at: row.at, dir: "in", from: String(p.from ?? "حاسوب").slice(0, 40), text: p.text.slice(0, 4000), via: "room", sid: row.id, ...(p.urgent ? { urgent: true } : {}) });
     }
     addMessages(add);
@@ -126,6 +132,7 @@ async function pollPublic() {
   if (!r.ok) { setNet({ publicError: String(r.error ?? "") }); return; }
   const rows = (r.rows as { id: number; at: number; name: string; lab: boolean; text: string; mine: boolean }[]) ?? [];
   addMessages(rows.map((x) => ({ id: `p${x.id}`, conv: "public", at: x.at, dir: x.mine ? "out" : "in", from: x.name, text: x.text, via: "public", sid: x.id, labName: x.lab, ...(x.mine ? { status: "sent" as const } : {}) })));
+  removeMessages(((r.gone as number[]) ?? []).map((id) => `p${id}`));
   const max = rows.reduce((n, x) => Math.max(n, x.id), c.public);
   if (max !== c.public) writeCursors({ ...readCursors(), public: max });
   if (net.publicError) setNet({ publicError: "" });
@@ -143,7 +150,15 @@ export function sendToContact(contactId: string, text: string, urgent = false): 
   return m;
 }
 /** Send what waits for a lab (called when a direct connection opens, and by the poller). */
-export async function flushContact(contactId: string) {
+const flushing = new Map<string, Promise<void>>();
+export function flushContact(contactId: string): Promise<void> {
+  const cur = flushing.get(contactId);
+  if (cur) return cur;
+  const p = flushOne(contactId).finally(() => flushing.delete(contactId));
+  flushing.set(contactId, p);
+  return p;
+}
+async function flushOne(contactId: string) {
   const c = contactById(contactId);
   if (!c) return;
   const waiting = messages().filter((m) => m.conv === `c:${contactId}` && m.dir === "out" && m.status === "pending");

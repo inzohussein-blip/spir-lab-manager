@@ -169,6 +169,7 @@ export async function publicPoll(lid: string, since: unknown) {
   return {
     ok: true,
     rows: rows.map((r) => ({ id: Number(r.id), at: Number(r.at), name: r.name, lab: r.lab === true || r.lab === "t" || r.lab === "true", text: r.text, mine: r.lid === lid })),
+    gone: await goneIds(),
   };
 }
 /** For the owner: the messages with the lab behind each name. */
@@ -183,7 +184,14 @@ export async function publicForOwner() {
     blocked: blocked.map((id) => ({ lid: id, labName: names.find((n) => n.id === id)?.lab_name ?? "" })),
   };
 }
+/** Deleted by the owner: the labs that already have it remove it too (the latest 500). */
+async function goneIds(): Promise<number[]> {
+  try { const v = JSON.parse((await licenseConfig.get("connect_public_gone")) || "[]"); return Array.isArray(v) ? v.map(Number).filter((n) => n > 0) : []; } catch { return []; }
+}
 export async function publicDelete(id: unknown) {
+  const n = Number(id) || 0;
+  if (!n) return;
   await ensureConnectTables();
-  await query(`delete from connect_public where id = $1`, [Number(id) || 0]);
+  await query(`delete from connect_public where id = $1`, [n]);
+  await licenseConfig.set("connect_public_gone", JSON.stringify([...(await goneIds()).filter((x) => x !== n), n].slice(-500)));
 }

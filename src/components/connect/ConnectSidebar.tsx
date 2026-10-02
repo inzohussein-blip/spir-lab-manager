@@ -30,9 +30,9 @@ export function ConnectSidebar() {
     void rev;
     const labs = contacts().reduce((n, c) => n + unread(`c:${c.id}`), 0);
     return {
-      "/connect/room": { n: unread("room"), tone: "danger", testid: "badge-room" },
-      "/connect/public": { n: unread("public"), tone: "info", testid: "badge-public" },
-      "/connect/labs": { n: labs, tone: "danger", testid: "badge-labs" },
+      "/connect/room": { n: unread("room"), tone: "danger", testid: "menu-unread-room" },
+      "/connect/public": { n: unread("public"), tone: "info", testid: "menu-unread-public" },
+      "/connect/labs": { n: labs, tone: "danger", testid: "menu-unread-labs" },
     };
   }, [rev]);
   return <AppSidebar appName="محطة التواصل" appTag="داخلي · مختبرات · عامة" icon={MessagesSquare} sections={SECTIONS} getBadges={badges}

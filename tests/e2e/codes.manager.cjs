@@ -13,11 +13,11 @@ const fs = require('node:fs');
   // The code manager's sections (side menu).
   const go = (s) => o.click(`[data-section="${s}"]`);
   ok(await o.locator('text=صفحة المالك فقط').count() === 0, 'no «صفحة المالك فقط» line');
-  ok(await o.locator('[data-section]').count() === 9, 'code manager: nine sections in the side menu (with «المحطات» and «رموز الدخول (PIN)»)');
+  ok(await o.locator('[data-section]').count() === 10, 'code manager: ten sections in the side menu (with «المحطات», «رموز الدخول (PIN)» and «محطة التواصل»)');
   // «المحطات»: every station, including the sync station (with every code) and «عن التطبيق» (for everyone)
   await go('stations'); await o.waitForSelector('[data-testid="stations-overview"]', { timeout: 15000 });
   const sts = await o.locator('[data-testid="stations-overview"] [data-station]').evaluateAll((els) => els.map((e) => e.getAttribute('data-station')));
-  ok(['station', 'purchasing', 'training', 'qc', 'roster', 'admin', 'sync', 'about'].every((x) => sts.includes(x)), `«المحطات» lists every station (${sts.join(', ')})`);
+  ok(['station', 'purchasing', 'training', 'qc', 'roster', 'connect', 'admin', 'sync', 'about'].every((x) => sts.includes(x)), `«المحطات» lists every station (${sts.join(', ')})`);
   ok((await o.locator('[data-station="about"]').innerText()).includes('للجميع') && (await o.locator('[data-station="sync"]').innerText()).includes('مع كل رمز'), 'the sync station comes with every code, «عن التطبيق» is for everyone');
   await go('codes');
   ok(await o.locator('[data-testid="codes-kpis"]').count() === 1, 'the codes open with their figures');

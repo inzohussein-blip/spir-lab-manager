@@ -39,7 +39,7 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   ok(JSON.stringify(ids) === JSON.stringify(['lab', 'report', 'fill', 'forms', 'entry', 'stock', 'tests', 'device', 'look']), `sections: ${ids.join(', ')}`);
   ok(await p.locator('[data-sec="lab"] [data-testid="lab-identity"]').count() === 1 && await p.locator('[data-sec="lab"] [data-testid="lab-contact"]').count() === 1, '«المختبر»: name and logo, contact details');
   ok(await p.locator('[data-sec="look"] [data-testid="pin-card"]').count() === 1 && await p.locator('[data-sec="device"] [data-testid="pin-card"]').count() === 0, 'PIN under «الأمان والمظهر»');
-  for (const st of ['qc', 'roster', 'training', 'store', 'sync']) {
+  for (const st of ['qc', 'roster', 'training', 'store', 'connect', 'sync']) {
     await p.goto(B + `/${st}/settings#look`); await p.waitForSelector('[data-sec="look"] [data-testid="pin-card"]', { timeout: 20000 });
   }
   ok(true, 'every station: «الأمان والمظهر» with the PIN (with the sync station)');

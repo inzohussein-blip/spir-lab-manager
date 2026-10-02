@@ -19,20 +19,24 @@ const card = "rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow
 export function ConnectOwner({ prefs, onSaved }: { prefs: Prefs; onSaved: () => void }) {
   const [list, setList] = useState<PubMsg[] | null>(null);
   const [blocked, setBlocked] = useState<Blocked[]>([]);
+  // Shown at once; saved in the background (the page reloads the owner's settings after).
+  const [on, setOn] = useState({ connectRelay: prefs.connectRelay, connectPublic: prefs.connectPublic });
   const load = useCallback(async () => {
     const d = await post({ op: "connect_list" });
     if (d.ok) { setList(d.messages); setBlocked(d.blocked); }
   }, []);
   useEffect(() => { void load(); }, [load]);
   async function toggle(k: "connectRelay" | "connectPublic", v: boolean) {
-    await post({ op: "prefs", prefs: { ...prefs, [k]: v } });
+    const next = { ...on, [k]: v };
+    setOn(next);
+    await post({ op: "prefs", prefs: { ...prefs, ...next } });
     onSaved();
   }
   return (
     <div className="flex flex-col gap-4" data-testid="connect-owner">
       <section className={card}>
         <label className="flex items-start gap-3 text-sm">
-          <input type="checkbox" checked={prefs.connectRelay} onChange={(e) => void toggle("connectRelay", e.target.checked)} aria-label="صندوق البريد المشفّر" className="mt-1 size-4" />
+          <input type="checkbox" checked={on.connectRelay} onChange={(e) => void toggle("connectRelay", e.target.checked)} aria-label="صندوق البريد المشفّر" className="mt-1 size-4" />
           <span>
             <b className="inline-flex items-center gap-1"><Mail className="size-4" /> صندوق البريد المشفّر (موقوف افتراضياً)</b>
             <span className="mt-0.5 block text-xs text-muted">
@@ -44,7 +48,7 @@ export function ConnectOwner({ prefs, onSaved }: { prefs: Prefs; onSaved: () => 
       </section>
       <section className={card}>
         <label className="flex items-start gap-3 text-sm">
-          <input type="checkbox" checked={prefs.connectPublic} onChange={(e) => void toggle("connectPublic", e.target.checked)} aria-label="المحادثة العامة" className="mt-1 size-4" />
+          <input type="checkbox" checked={on.connectPublic} onChange={(e) => void toggle("connectPublic", e.target.checked)} aria-label="المحادثة العامة" className="mt-1 size-4" />
           <span>
             <b className="inline-flex items-center gap-1"><Globe2 className="size-4" /> المحادثة العامة</b>
             <span className="mt-0.5 block text-xs text-muted">محادثة مشتركة بين كل المختبرات التي فيها «محطة التواصل». يظهر للمختبرات اسم مستعار أو اسم المختبر فقط؛ أنت ترى المختبر وراء كل اسم.</span>

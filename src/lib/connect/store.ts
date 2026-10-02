@@ -131,7 +131,9 @@ export function addMessages(list: Msg[]) {
   if (!list.length) return;
   const all = messages();
   const have = new Set(all.map((m) => m.id));
-  let next = [...all, ...list.filter((m) => !have.has(m.id))];
+  const fresh = list.filter((m) => !have.has(m.id) && (have.add(m.id), true));
+  if (!fresh.length) return;
+  let next = [...all, ...fresh];
   // The public chat keeps its latest messages only; the rest, the latest MAX_MESSAGES.
   const pub = next.filter((m) => m.conv === "public");
   if (pub.length > MAX_PUBLIC) { const drop = new Set(pub.sort((a, b) => a.at - b.at).slice(0, pub.length - MAX_PUBLIC).map((m) => m.id)); next = next.filter((m) => !drop.has(m.id)); }
@@ -148,6 +150,14 @@ export function setStatus(ids: string[], status: MsgStatus, extra?: Partial<Msg>
   if (!ids.length) return;
   const set = new Set(ids);
   writeLS(K.messages, messages().map((m) => (set.has(m.id) ? { ...m, status, ...extra } : m))); changed();
+}
+/** Remove some messages (the owner deleted them from the public chat). */
+export function removeMessages(ids: string[]) {
+  if (!ids.length) return;
+  const set = new Set(ids);
+  const all = messages();
+  const keep = all.filter((m) => !set.has(m.id));
+  if (keep.length !== all.length) { writeLS(K.messages, keep); changed(); }
 }
 export function deleteConversation(conv: string) { writeLS(K.messages, messages().filter((m) => m.conv !== conv)); changed(); }
 /** Remove messages older than the chosen days (on open). */
