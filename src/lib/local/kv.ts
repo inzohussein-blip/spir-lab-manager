@@ -19,9 +19,10 @@
 
 const DB_NAME = "lab-local";
 const STORE = "kv";
-const PREFIXES = ["station.", "purchasing.", "training.", "qc.", "roster.", "connect."];
+const PREFIXES = ["station.", "purchasing.", "training.", "qc.", "roster.", "connect.", "doctors.", "doctor."];
 /** «محطة التواصل»: its keys and messages stay on this computer (never synced, by network or file). */
-const LOCAL_ONLY = ["connect."];
+// «رموز الأطباء» (their keys) and «نافذة الأطباء» (a doctor's own device) too.
+const LOCAL_ONLY = ["connect.", "doctors.", "doctor."];
 /** Kept in localStorage: read by the inline script that sets the theme before the page paints. */
 const isTheme = (k: string) => k.endsWith(".theme.v1");
 const isData = (k: string) => PREFIXES.some((p) => k.startsWith(p)) && !isTheme(k);

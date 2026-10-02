@@ -11,6 +11,7 @@ import { connHost, type SyncConfig } from "@/lib/sync/protocol";
 import { checkSavedAdminDb, cleanFirstAdmin, exportLabData, importShared, linkAdminDb, resetAdminPassword, resolveAdminConn, testAdminDb } from "@/lib/license/adminDb";
 import { forgetAdminDb } from "@/lib/db/lab";
 import { publicForOwner, publicDelete, setBlocked, forgetConnectInfo } from "@/lib/connect/server";
+import { forgetDoctorsInfo } from "@/lib/doctors/server";
 import { passwordMatches, startOwnerSession, endOwnerSession, isOwner, ipOf } from "@/lib/license/owner";
 
 /** Owner endpoints for the code manager (/license). */
@@ -85,7 +86,7 @@ export async function POST(req: NextRequest) {
   if (b.op === "totp_enable") return (await confirmTwoFactor(String(b.code ?? ""))) ? json({ ok: true }) : json({ ok: false, error: "wrong_code" }, 400);
   if (b.op === "totp_disable") return (await disableTwoFactor(String(b.code ?? ""))) ? json({ ok: true }) : json({ ok: false, error: "wrong_code" }, 400);
   if (b.op === "contact") { await setContact(String(b.contact ?? "")); return json({ ok: true }); }
-  if (b.op === "prefs") { const prefs = await setPrefs(b.prefs); forgetAdminDb(); forgetConnectInfo(); return json({ ok: true, prefs }); }
+  if (b.op === "prefs") { const prefs = await setPrefs(b.prefs); forgetAdminDb(); forgetConnectInfo(); forgetDoctorsInfo(); return json({ ok: true, prefs }); }
   // «محطة التواصل»: the public chat's messages with the lab behind each name; delete; stop a lab.
   if (b.op === "connect_list") return json({ ok: true, ...(await publicForOwner()) });
   if (b.op === "connect_delete") { await publicDelete(b.id); return json({ ok: true }); }

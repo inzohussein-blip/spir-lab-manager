@@ -5,6 +5,8 @@ import { Lock, KeyRound, RefreshCw, LockKeyhole, ShieldCheck, EyeOff } from "luc
 import { usePin, tryPin, setPin, lockNow, cleanPin, validPin, type PinStation } from "@/lib/local/pin";
 import { refreshLicense } from "@/lib/license/client";
 import { notifySaved } from "@/components/SettingsLayout";
+import { kvReady } from "@/lib/local/kv";
+import { writeLS } from "@/lib/local/util";
 
 /** Covers the station until its PIN is typed (nothing shows while no PIN is set). */
 export function PinGate({ station, title }: { station: PinStation; title: string }) {
@@ -44,6 +46,18 @@ export function PinGate({ station, title }: { station: PinStation; title: string
           {help === "" ? (
             <button type="button" onClick={() => setHelp("open")} className="font-semibold text-brand-dark hover:underline">نسيت الرمز؟</button>
           ) : (
+            station === "doctor" ? (
+            <div className="flex flex-col items-center gap-2">
+              <p>الرمز على هذا الجهاز فقط. لإزالته تُمسح المختبرات ونتائجها من الجهاز، ثم تضيف رموز المختبرات من جديد.</p>
+              <button type="button" data-testid="doctor-pin-reset" onClick={async () => {
+                if (!window.confirm("مسح المختبرات ونتائجها من هذا الجهاز وإزالة رمز الدخول؟")) return;
+                await kvReady(); // as «خروج» in lib/doctors/viewer
+                writeLS("doctor.labs.v1", []); writeLS("doctor.seen.v1", {});
+                window.dispatchEvent(new Event("doctor-change"));
+                setPin("doctor", null);
+              }} className="inline-flex items-center gap-1 rounded-lg border border-red-200 px-3 py-1.5 font-semibold text-red-700 hover:bg-red-50">مسح وإزالة الرمز</button>
+            </div>
+            ) : (
             <div className="flex flex-col items-center gap-2">
               <p>اطلب من المزوّد تعيين رمز جديد (أو إزالته) من «رموز الدخول» في صفحة الترخيص، ثم اضغط «تحديث» والجهاز متصل بالإنترنت.</p>
               <button type="button" onClick={fromProvider} disabled={help === "busy"} className="inline-flex items-center gap-1 rounded-lg border border-line px-3 py-1.5 font-semibold text-ink hover:bg-canvas disabled:opacity-60">
@@ -51,6 +65,7 @@ export function PinGate({ station, title }: { station: PinStation; title: string
               </button>
               {help === "same" && <p className="text-amber-700">تم التحديث. إذا عيّن المزوّد رمزاً جديداً فأدخله أعلاه، وإلا فلا تغيير بعد.</p>}
             </div>
+            )
           )}
         </div>
       </form>

@@ -51,11 +51,11 @@ interface TwoFactor { enabled: boolean; broken: boolean; forcedOff: boolean; can
 type Prefs = {
   defaultDays: number; defaultModules: LicenseModule[]; trialDays: number; soonDays: number; adminNeedsOwnDb: boolean;
   multiDevice: boolean; selfSignup: boolean; errorLog: boolean; dataExport: boolean;
-  connectRelay: boolean; connectPublic: boolean;
+  connectRelay: boolean; connectPublic: boolean; doctorsOn: boolean;
 };
 const DEFAULT_PREFS: Prefs = {
   defaultDays: 365, defaultModules: [...DEFAULT_MODULES], trialDays: 7, soonDays: 14, adminNeedsOwnDb: NEEDS_DB_GATE,
-  multiDevice: false, selfSignup: false, errorLog: false, dataExport: false, connectRelay: false, connectPublic: true,
+  multiDevice: false, selfSignup: false, errorLog: false, dataExport: false, connectRelay: false, connectPublic: true, doctorsOn: true,
 };
 type Data = { enabled: boolean; owner: boolean; needsDb?: boolean; storage?: Storage; licenses?: Row[]; events?: Ev[]; signIns?: SignIn[]; twoFactor?: TwoFactor; contact?: string; prefs?: Prefs; version?: string; now?: number };
 const agentLabel = (ua: string) => {
@@ -1367,6 +1367,7 @@ function PrefsCard({ prefs, onSaved }: { prefs: Prefs; onSaved: () => void }) {
       defaultDays, defaultModules: p.defaultModules, trialDays: p.trialDays, soonDays: p.soonDays, adminNeedsOwnDb: p.adminNeedsOwnDb,
       multiDevice: p.multiDevice, selfSignup: p.selfSignup, errorLog: p.errorLog, dataExport: p.dataExport,
       connectRelay: prefs.connectRelay, connectPublic: prefs.connectPublic, // set in «محطة التواصل»
+      doctorsOn: p.doctorsOn,
     } });
     setMsg(d.ok ? "✓ حُفظت الإعدادات" : "تعذّر الحفظ.");
     if (d.ok) onSaved();
@@ -1402,6 +1403,17 @@ function PrefsCard({ prefs, onSaved }: { prefs: Prefs; onSaved: () => void }) {
           <span className="mt-0.5 block text-xs text-muted">
             لا تُفتح لوحة الإدارة لرمز مدفوع حتى تُربط قاعدته (منك في «قواعد البيانات» أو من المختبر نفسه). الرموز التجريبية تعمل في قسم مستقل من قاعدة الموقع.
             عند الإيقاف يعمل كل مختبر بلا قاعدة خاصة في قسمه المستقل من قاعدة الموقع. في الحالتين لا يرى مختبر بيانات غيره.
+          </span>
+        </span>
+      </label>
+
+      <label data-testid="doctors-on" className="mt-4 flex items-start gap-2 rounded-lg border border-line p-3 text-sm">
+        <input type="checkbox" checked={p.doctorsOn} onChange={(e) => setP({ ...p, doctorsOn: e.target.checked })} aria-label="نافذة الأطباء" className="mt-1" />
+        <span>
+          <b>نافذة الأطباء</b> <span className="text-xs text-muted">— مفعّلة افتراضياً</span>
+          <span className="mt-0.5 block text-xs text-muted">
+            يعطي المختبر طبيبه رمزاً من «محطة المزامنة ← رموز الأطباء»، فيرى الطبيب في <span dir="ltr">/doctor</span> نتائج مراجعيه للمدة التي يختارها المختبر.
+            تمر النتائج عبر خادمك مشفّرة برمز الطبيب (لا يصل إليك الرمز ولا تستطيع قراءتها). الإيقاف يوقف الرفع والعرض لكل المختبرات.
           </span>
         </span>
       </label>

@@ -20,7 +20,7 @@ const BADGE_TONE = { brand: "bg-brand-light text-brand-dark", warn: "bg-amber-50
  * Desktop: sticky column. Phone: top bar + slide-in drawer.
  */
 export function AppSidebar({
-  appName, appTag, icon: AppIcon, sections, getBadges, footerNote,
+  appName, appTag, icon: AppIcon, sections, getBadges, footerNote, home = true,
 }: {
   appName: string;
   appTag: string;
@@ -28,6 +28,8 @@ export function AppSidebar({
   sections: SideSection[];
   getBadges?: () => SideBadges;
   footerNote?: string;
+  /** The link to the stations' home page (not on a doctor's device, which has no lab code). */
+  home?: boolean;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -128,7 +130,7 @@ export function AppSidebar({
 
         <div className="border-t border-line p-3">
           {footerNote && <p className="mb-2 rounded-xl bg-canvas px-3 py-2 text-[11px] text-muted">{footerNote}</p>}
-          <Link href="/welcome" className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-muted hover:bg-canvas hover:text-ink"><Home className="size-4" /> الصفحة الرئيسية</Link>
+          {home && <Link href="/welcome" className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-muted hover:bg-canvas hover:text-ink"><Home className="size-4" /> الصفحة الرئيسية</Link>}
         </div>
       </aside>
     </>

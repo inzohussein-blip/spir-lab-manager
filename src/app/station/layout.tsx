@@ -7,6 +7,7 @@ import { ACTIVATION_SCRIPT } from "@/lib/local/activation";
 import { StationSidebar } from "@/components/station/StationSidebar";
 import { LocalThemeApplier } from "@/components/local/LocalTheme";
 import { THEME_KEYS, themeScript } from "@/lib/local/theme";
+import { DoctorPublisher } from "@/components/doctors/DoctorPublisher";
 
 export default function StationLayout({ children }: { children: ReactNode }) {
   return (
@@ -19,6 +20,7 @@ export default function StationLayout({ children }: { children: ReactNode }) {
       <LocalThemeApplier storageKey={THEME_KEYS.station} />
       <LocalDataGate>
         <StationSidebar />
+        <DoctorPublisher />
         <main className="min-w-0 flex-1 p-4 md:p-7 print:p-0">{children}</main>
       </LocalDataGate>
       <OfflineReady />
