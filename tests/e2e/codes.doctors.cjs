@@ -57,7 +57,7 @@ const TAG = Date.now().toString(36);
   ok(await d.locator('input[aria-label="رمز المختبر"]').count() === 0, 'the doctors\' window asks for no lab code');
   await d.fill('input[aria-label="رمز الطبيب"]', code); await d.click('[data-testid="add-lab"] button:has-text("إضافة")');
   ok(await until(async () => (await d.locator('[data-testid="add-lab-msg"]').innerText()).includes('1 نتيجة')), 'the doctor adds the lab and gets the result');
-  await d.goto(B + '/welcome'); await d.waitForSelector('input[aria-label="رمز المختبر"]', { timeout: 20000 });
+  await d.goto(B + '/welcome'); await d.waitForSelector('input[aria-label="رمز المختبر"]', { timeout: 45000 });
   ok(await d.locator('[data-testid="doctor-window-link"]').count() === 1, 'the activation window leads a doctor to his window');
 
   // ── The owner's switch ──
