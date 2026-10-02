@@ -142,7 +142,8 @@ export function addMessages(list: Msg[]) {
 }
 export function newOutgoing(conv: string, text: string, via: Via, urgent = false): Msg {
   const s = getSettings();
-  const m: Msg = { id: newId(), conv, at: Date.now(), dir: "out", from: s.name || "أنا", text, via, status: "pending", ...(urgent ? { urgent } : {}) };
+  // Shown here as «أنا» when the computer has no name (lib/connect Thread); sent as «حاسوب».
+  const m: Msg = { id: newId(), conv, at: Date.now(), dir: "out", from: s.name.trim(), text, via, status: "pending", ...(urgent ? { urgent } : {}) };
   addMessages([m]);
   return m;
 }
@@ -173,8 +174,9 @@ export function pruneOld() {
 // ── Read marks and the server's cursors ──────────────────────────────────────
 export function markRead(conv: string) {
   const r = readLS<Record<string, number>>(K.read, {});
-  const last = messagesOf(conv).at(-1)?.at ?? Date.now();
-  if ((r[conv] ?? 0) >= last) return;
+  // The latest message's own time (not this computer's clock, which may differ from the server's).
+  const last = messagesOf(conv).at(-1)?.at;
+  if (last == null || (r[conv] ?? 0) >= last) return;
   writeLS(K.read, { ...r, [conv]: last }); changed();
 }
 export function unread(conv?: string): number {
@@ -184,6 +186,24 @@ export function unread(conv?: string): number {
 export interface Cursors { room: number; public: number }
 export const readCursors = (): Cursors => ({ room: 0, public: 0, ...readLS<Partial<Cursors>>(K.cursors, {}) });
 export const writeCursors = (c: Cursors) => writeLS(K.cursors, c);
+
+// ── Backup: this computer's key, its labs, settings and messages ─────────────
+export interface ConnectBackup { app: "spir-connect-backup"; v: 1; at: number; data: Record<string, unknown> }
+export function exportBackup(): ConnectBackup {
+  const data: Record<string, unknown> = {};
+  for (const k of Object.values(K)) data[k] = readLS<unknown>(k, null);
+  return { app: "spir-connect-backup", v: 1, at: Date.now(), data };
+}
+/** Replace this computer's station data with a backup (its key too: the labs keep knowing it). */
+export function importBackup(raw: unknown): boolean {
+  const b = raw as ConnectBackup;
+  if (!b || b.app !== "spir-connect-backup" || !b.data || typeof b.data !== "object") return false;
+  const id = b.data[K.identity] as Identity | null;
+  if (id && (typeof id.priv !== "string" || typeof id.pub !== "string")) return false;
+  for (const k of Object.values(K)) { const v = b.data[k]; if (v != null) writeLS(k, v); }
+  changed();
+  return true;
+}
 
 /** Re-render on every change of the station's data (this tab or the poller). */
 export function useConnect(): number {

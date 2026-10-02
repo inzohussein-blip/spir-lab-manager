@@ -138,6 +138,18 @@ const fs = require('node:fs');
   await A.goto(B + '/connect/settings#look'); await A.waitForSelector('[data-sec="look"] [data-testid="pin-card"]', { timeout: 20000 });
   ok(true, 'its own PIN card');
   ok(!JSON.stringify(await A.evaluate(() => Object.keys(localStorage))).includes('connect.messages'), 'messages are not in localStorage');
+  // Backup: the key, the labs and the messages — restored on another computer, it is the same «lab».
+  await A.goto(B + '/connect/settings#device-data'); await A.waitForSelector('[data-testid="connect-backup"]', { timeout: 20000 });
+  const [bk] = await Promise.all([A.waitForEvent('download'), A.click('[data-testid="connect-backup"] button:has-text("تصدير نسخة احتياطية")')]);
+  const bkFile = await bk.path();
+  const bkData = JSON.parse(fs.readFileSync(bkFile, 'utf8'));
+  ok(bkData.app === 'spir-connect-backup' && !!bkData.data['connect.identity.v1']?.priv && bkData.data['connect.contacts.v1'].length === 1, 'the backup holds the key and the labs');
+  const C = await computer();
+  await C.goto(B + '/connect/settings#device-data'); await C.waitForSelector('[data-testid="connect-backup"]', { timeout: 20000 });
+  await C.setInputFiles('[data-testid="connect-backup-file"]', bkFile);
+  ok((await C.locator('[data-testid="connect-backup-msg"]').innerText()).includes('تمت الاستعادة'), 'restored on another computer');
+  await C.goto(B + '/connect/labs'); await C.waitForSelector('[data-testid="my-fp"]', { timeout: 20000 });
+  ok((await C.locator('[data-testid="my-fp"]').innerText()) === cA.fp && await C.locator('[data-contact="مختبر الثاني"]').count() === 1, 'same fingerprint and the same labs there');
 
   // ── «محطة المزامنة ← الإعدادات ← الحماية» ──
   await A.goto(B + '/sync/settings#protect'); await A.waitForSelector('[data-testid="sync-master"]', { timeout: 20000 });

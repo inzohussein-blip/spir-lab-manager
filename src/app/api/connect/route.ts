@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
     let r: { ok: boolean; error?: string };
     if (op === "room_send") r = await roomSend(who.scope, b.tag, b.box);
     else if (op === "room_poll") r = await roomPoll(who.scope, b.tag, b.since, { dev: b.device ?? b.dev, box: b.me });
-    else if (op === "mail_register") r = await mailRegister(who.lid, b.pub);
+    else if (op === "mail_register") r = await mailRegister(who.lid, b.pub, b.proof);
     else if (op === "mail_send") r = await mailSend(b.to, b.from, b.box);
     else if (op === "mail_fetch") r = await mailFetch(who.lid, b.addr);
     else if (op === "mail_ack") r = await mailAck(who.lid, b.addr, b.ids);

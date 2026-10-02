@@ -7,14 +7,14 @@
  */
 import { useEffect, useState } from "react";
 import { licenseProof, deviceId } from "@/lib/license/client";
-import { sealRoom, openRoom, sealFor, openFrom, addressOf } from "./crypto";
+import { sealRoom, openRoom, sealFor, openFrom, addressOf, registerProof } from "./crypto";
 import {
   getSettings, identity, myCard, myAddress, contactById, contactByPub, addContact, addMessages, messages, newOutgoing, setStatus,
-  readCursors, writeCursors, pruneOld, removeMessages, CONNECT_EVENT, type Msg,
+  readCursors, writeCursors, pruneOld, removeMessages, markRead, CONNECT_EVENT, type Msg,
 } from "./store";
 import { directSend, isConnected } from "./direct";
 
-export interface ServerInfo { licensing: boolean; room: boolean; relay: boolean; public: boolean }
+export interface ServerInfo { licensing: boolean; room: boolean; relay: boolean; public: boolean; serverPub?: string }
 export interface NetState {
   info: ServerInfo | null;
   /** The lab's computers in the internal chat now (names), and this computer among them. */
@@ -40,7 +40,7 @@ export async function serverInfo(force = false): Promise<ServerInfo | null> {
   if (!force && net.info && Date.now() - infoAt < 5 * 60_000) return net.info;
   try {
     const d = await (await fetch("/api/connect", { cache: "no-store" })).json();
-    if (d?.ok) { infoAt = Date.now(); setNet({ info: { licensing: !!d.licensing, room: !!d.room, relay: !!d.relay, public: !!d.public } }); }
+    if (d?.ok) { infoAt = Date.now(); setNet({ info: { licensing: !!d.licensing, room: !!d.room, relay: !!d.relay, public: !!d.public, serverPub: typeof d.serverPub === "string" ? d.serverPub : undefined } }); }
   } catch { /* offline: keep the last answer */ }
   return net.info;
 }
@@ -67,6 +67,7 @@ export const ERRORS: Record<string, string> = {
   no_name: "اختر اسماً مستعاراً في الإعدادات أولاً.",
   no_mailbox: "المختبر الآخر لم يفعّل صندوق البريد بعد — أرسلها بملف أو باتصال مباشر.",
   bad_token: "رمز المختبر على هذا الجهاز غير صالح.",
+  full: "صندوق المختبر الآخر ممتلئ — أرسلها بملف أو انتظر حتى يستلم رسائله.",
 };
 export const errorText = (e: string) => ERRORS[e] ?? "تعذّر الإرسال.";
 
@@ -86,7 +87,7 @@ const flushRoom = once(async () => {
   const s = getSettings();
   if (!s.room) return;
   for (const m of messages().filter((x) => x.conv === "room" && x.dir === "out" && x.status === "pending")) {
-    const box = sealRoom(s.room.key, { mid: m.id, from: m.from, text: m.text, urgent: m.urgent, at: m.at } satisfies RoomPayload);
+    const box = sealRoom(s.room.key, { mid: m.id, from: m.from || "حاسوب", text: m.text, urgent: m.urgent, at: m.at } satisfies RoomPayload);
     const r = await call({ op: "room_send", tag: s.room.tag, box });
     if (!r.ok) { setNet({ roomError: String(r.error ?? "") }); if (r.error === "same_as_sync") setStatus([m.id], "failed"); return; }
     setStatus([m.id], "sent", { sid: Number(r.id) });
@@ -97,6 +98,8 @@ async function pollRoom() {
   const s = getSettings();
   if (!s.room) { if (net.online.length) setNet({ online: [] }); return; }
   const have = new Set(messages().filter((m) => m.conv === "room").map((m) => m.id));
+  // The first fetch after setting the code brings what was said before: not counted as unread.
+  const first = readCursors().room === 0;
   for (let i = 0; i < 10; i++) {
     const c = readCursors();
     const r = await call({ op: "room_poll", tag: s.room.tag, since: c.room, me: sealRoom(s.room.key, { name: s.name || "حاسوب" }) });
@@ -116,6 +119,7 @@ async function pollRoom() {
     setNet({ online, roomError: "" });
     if (rows.length < 200) break;
   }
+  if (first) markRead("room");
 }
 
 // ── «المحادثة العامة» ────────────────────────────────────────────────────────
@@ -135,6 +139,7 @@ async function pollPublic() {
   removeMessages(((r.gone as number[]) ?? []).map((id) => `p${id}`));
   const max = rows.reduce((n, x) => Math.max(n, x.id), c.public);
   if (max !== c.public) writeCursors({ ...readCursors(), public: max });
+  if (c.public === 0) markRead("public"); // the history at the first open is not «unread»
   if (net.publicError) setNet({ publicError: "" });
 }
 
@@ -179,7 +184,8 @@ async function pollMail() {
   if (!mailboxOn()) return;
   const addr = myAddress();
   if (registered !== addr) {
-    const r = await call({ op: "mail_register", pub: identity().pub });
+    if (!net.info?.serverPub) return;
+    const r = await call({ op: "mail_register", pub: identity().pub, proof: registerProof(identity().priv, identity().pub, net.info.serverPub) });
     if (!r.ok) { setNet({ mailError: String(r.error ?? "") }); return; }
     registered = addr;
   }

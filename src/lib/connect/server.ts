@@ -1,7 +1,7 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import { licensingEnabled, deviceFromToken, getPrefs, licenseQuery as query, licenseConfig } from "@/lib/license/server";
-import { roomKeys } from "./crypto";
+import { roomKeys, serverKeys, checkRegisterProof } from "./crypto";
 
 /**
  * «محطة التواصل» on the server. It only ever keeps sealed messages it cannot open:
@@ -43,11 +43,18 @@ export async function whoIs(b: Record<string, unknown>, needCode = false): Promi
   return { ok: true, scope: who.lid, lid: who.lid, lab: who.row.lab_name };
 }
 
-/** What this server offers the station. */
+let keys: ReturnType<typeof serverKeys> | null = null;
+const myKeys = () => (keys ??= serverKeys(process.env.AUTH_SECRET || process.env.LICENSE_ADMIN_PASSWORD || "spir-connect"));
+/** What this server offers the station (the owner's switches, kept a few seconds: every poll asks). */
+let cached: { at: number; v: { licensing: boolean; room: boolean; relay: boolean; public: boolean; serverPub?: string } } | null = null;
+export function forgetConnectInfo() { cached = null; }
 export async function connectInfo() {
   if (!licensingEnabled()) return { licensing: false, room: true, relay: false, public: false };
+  if (cached && Date.now() - cached.at < 15_000) return cached.v;
   const p = await getPrefs();
-  return { licensing: true, room: p.connectRelay, relay: p.connectRelay, public: p.connectPublic };
+  const v = { licensing: true, room: p.connectRelay, relay: p.connectRelay, public: p.connectPublic, serverPub: myKeys().pub };
+  cached = { at: Date.now(), v };
+  return v;
 }
 
 // ── The lab's internal chat ──────────────────────────────────────────────────
@@ -84,6 +91,7 @@ export async function roomPoll(scope: string, tag: unknown, since: unknown, me: 
   const rows = await query<{ id: string; at: string; box: string }>(
     `select id, at, box from connect_room where scope = $1 and tag = $2 and id > $3 and at > $4 order by id limit 200`,
     [scope, tag, Math.max(0, Number(since) || 0), now - KEEP_DAYS * DAY]);
+  if (Math.random() < 0.02) await query(`delete from connect_presence where at < $1`, [now - DAY]);
   const online = await query<{ dev: string; at: string; box: string }>(
     `select dev, at, box from connect_presence where scope = $1 and tag = $2 and at > $3`, [scope, tag, now - ONLINE_MS]);
   return {
@@ -96,22 +104,23 @@ export async function roomPoll(scope: string, tag: unknown, since: unknown, me: 
 // ── The mailbox between labs ─────────────────────────────────────────────────
 const okAddr = (a: unknown): a is string => typeof a === "string" && /^[0-9a-f]{40}$/.test(a);
 const addrOfPub = (pub: string) => createHash("sha256").update(`spir-connect-addr:${pub}`).digest("hex").slice(0, 40);
-/** A lab's computer opens its mailbox: its address is bound to its code. */
-export async function mailRegister(lid: string, pub: unknown) {
+/** A lab's computer opens its mailbox: it proves it holds the key (not only knows it from a card),
+ *  and the address is bound to its code. */
+export async function mailRegister(lid: string, pub: unknown, proof: unknown) {
   if (typeof pub !== "string" || pub.length > 60) return { ok: false, error: "bad_request" };
+  if (!checkRegisterProof(myKeys().priv, pub, proof)) return { ok: false, error: "bad_proof" };
   await ensureConnectTables();
   const addr = addrOfPub(pub);
-  const cur = await query<{ lid: string }>(`select lid from connect_addr where addr = $1`, [addr]);
-  if (cur[0] && cur[0].lid !== lid) return { ok: false, error: "taken" };
-  await query(`insert into connect_addr (addr, lid, at) values ($1, $2, $3) on conflict (addr) do update set at = excluded.at`, [addr, lid, Date.now()]);
+  await query(`insert into connect_addr (addr, lid, at) values ($1, $2, $3) on conflict (addr) do update set lid = excluded.lid, at = excluded.at`, [addr, lid, Date.now()]);
   return { ok: true, addr };
 }
 export async function mailSend(to: unknown, fromPub: unknown, box: unknown) {
   if (!okAddr(to) || typeof fromPub !== "string" || fromPub.length > 60 || typeof box !== "string" || box.length > LIMITS.mail) return { ok: false, error: "bad_request" };
   await ensureConnectTables();
   if (!(await query(`select 1 from connect_addr where addr = $1`, [to])).length) return { ok: false, error: "no_mailbox" };
-  const n = await query<{ n: string }>(`select count(*) as n from connect_mailbox where to_addr = $1`, [to]);
-  if (Number(n[0]?.n ?? 0) >= 500) return { ok: false, error: "full" };
+  // One sender cannot fill another lab's mailbox.
+  const n = await query<{ n: string; mine: string }>(`select count(*) as n, count(*) filter (where from_pub = $2) as mine from connect_mailbox where to_addr = $1`, [to, fromPub]);
+  if (Number(n[0]?.n ?? 0) >= 500 || Number(n[0]?.mine ?? 0) >= 100) return { ok: false, error: "full" };
   await query(`insert into connect_mailbox (to_addr, from_pub, at, box) values ($1, $2, $3, $4)`, [to, fromPub, Date.now(), box]);
   return { ok: true };
 }

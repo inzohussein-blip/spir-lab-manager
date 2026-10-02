@@ -98,7 +98,7 @@ function Bubble({ m, publicNames }: { m: Msg; publicNames?: boolean }) {
         </div>
         <div className="whitespace-pre-wrap break-words">{m.text}</div>
         <div className="mt-0.5 flex items-center justify-end gap-1 text-[10px] text-muted tabular-nums" dir="ltr">
-          {VIA[m.via] && <span dir="rtl">{VIA[m.via]} ·</span>}
+          {VIA[m.via] && m.status !== "pending" && <span dir="rtl">{VIA[m.via]} ·</span>}
           {time(m.at)}
           {mine && (m.status === "pending" ? <Clock className="size-3" aria-label="بانتظار الإرسال" />
             : m.status === "failed" ? <X className="size-3 text-red-600" aria-label="لم تُرسل" />

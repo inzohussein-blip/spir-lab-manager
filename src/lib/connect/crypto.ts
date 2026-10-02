@@ -14,6 +14,7 @@ import { xchacha20poly1305 } from "@noble/ciphers/chacha";
 import { sha256 } from "@noble/hashes/sha2";
 import { hkdf } from "@noble/hashes/hkdf";
 import { pbkdf2 } from "@noble/hashes/pbkdf2";
+import { hmac } from "@noble/hashes/hmac";
 import { randomBytes, bytesToHex, utf8ToBytes } from "@noble/hashes/utils";
 
 // ── base64url ────────────────────────────────────────────────────────────────
@@ -46,6 +47,25 @@ export function fingerprint(pub: string): string {
 /** The mailbox address of a public key (what the provider's server knows a lab by). */
 export const addressOf = (pub: string) => bytesToHex(sha256(utf8ToBytes(`spir-connect-addr:${pub}`))).slice(0, 40);
 export const validPub = (pub: unknown): pub is string => { try { return typeof pub === "string" && unb64(pub).length === 32; } catch { return false; } };
+
+// ── Opening a mailbox: proof that the computer holds the key ─────────────────
+/** The server's own key pair for this proof (from a server secret; its public half is shown). */
+export function serverKeys(secret: string): { priv: Uint8Array; pub: string } {
+  const priv = sha256(utf8ToBytes(`spir-connect-server:${secret}`));
+  return { priv, pub: b64(x25519.getPublicKey(priv)) };
+}
+/** Only the holder of `myPriv` can make it (and the server check it): no one else can open the
+ *  mailbox of a key it only knows from a card. */
+export function registerProof(myPriv: string, myPub: string, serverPub: string): string {
+  return b64(hmac(sha256, x25519.getSharedSecret(unb64(myPriv), unb64(serverPub)), utf8ToBytes(`register:${myPub}`)));
+}
+export function checkRegisterProof(serverPriv: Uint8Array, pub: string, proof: unknown): boolean {
+  try {
+    if (typeof proof !== "string" || !validPub(pub)) return false;
+    const want = b64(hmac(sha256, x25519.getSharedSecret(serverPriv, unb64(pub)), utf8ToBytes(`register:${pub}`)));
+    return want.length === proof.length && want === proof;
+  } catch { return false; }
+}
 
 // ── «بطاقة التعارف» ──────────────────────────────────────────────────────────
 export interface Card { v: 1; name: string; pub: string }

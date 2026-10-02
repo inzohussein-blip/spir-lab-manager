@@ -5,6 +5,7 @@ import { Lock, Eye, EyeOff, Plus, Trash2, Pencil, Search, ChevronDown, KeyRound,
 import { LICENSE_MODULES, type LicenseModule } from "@/lib/license/modules";
 import { MODULE_META, ALWAYS_STATIONS } from "./stations";
 import { fmtDateTime } from "@/lib/utils";
+import { hashPin } from "@/lib/local/pin";
 
 /** «رموز الدخول (PIN)» in /license: per lab code, hide or show the PIN feature, and set, change or
  *  remove each station's PINs — several for one station only from here. The devices apply it at
@@ -154,11 +155,13 @@ function PinStationBox({ r, st, change }: { r: PinRow; st: ReturnType<typeof sta
   function add() {
     if (!validPin(pin)) { setErr("الرمز من 4 إلى 8 أرقام."); return; }
     if (pins.length >= MAX) { setErr(`حتى ${MAX} رموز للمحطة.`); return; }
+    if (pins.some((p) => p.hash === hashPin(pin))) { setErr("هذا الرمز موجود لهذه المحطة — اختر رمزاً مختلفاً."); return; }
     save([...keepAll(), { label: label.trim() || `رمز ${pins.length + 1}`, pin }]);
     setLabel(""); setPin(""); setErr("");
   }
   function saveEdit(i: number) {
     if (ePin && !validPin(ePin)) { setErr("الرمز من 4 إلى 8 أرقام."); return; }
+    if (ePin && pins.some((p, j) => j !== i && p.hash === hashPin(ePin))) { setErr("هذا الرمز موجود لهذه المحطة — اختر رمزاً مختلفاً."); return; }
     save(pins.map((p, j) => (j === i ? { label: eLabel.trim() || p.label, ...(ePin ? { pin: ePin } : { keep: p.hash }) } : { label: p.label, keep: p.hash })));
     setEdit(null); setErr("");
   }

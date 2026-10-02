@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
-import { Settings, Monitor, KeyRound, Globe2, Building2, MessageSquareText, ShieldCheck, Trash2, Plus, RefreshCw } from "lucide-react";
+import { useRef, useState } from "react";
+import { Settings, Monitor, KeyRound, Globe2, Building2, MessageSquareText, ShieldCheck, Trash2, Plus, RefreshCw, HardDrive, Download, Upload } from "lucide-react";
 import { SettingsLayout, notifySaved } from "@/components/SettingsLayout";
 import { ThemeCard } from "@/components/local/LocalTheme";
 import { PinCard } from "@/components/local/PinGate";
 import { THEME_KEYS } from "@/lib/local/theme";
-import { getSettings, saveSettings, setRoomCode, renewIdentity, myFingerprint, useConnect, DEFAULT_QUICK } from "@/lib/connect/store";
+import { getSettings, saveSettings, setRoomCode, renewIdentity, myFingerprint, useConnect, DEFAULT_QUICK, exportBackup, importBackup } from "@/lib/connect/store";
+import { downloadJson, todayYmd } from "@/lib/local/util";
 import { useNet } from "@/lib/connect/net";
 import { CodeForm } from "@/components/connect/CodeForm";
 import { card } from "@/components/connect/Thread";
@@ -32,6 +33,13 @@ export default function ConnectSettings() {
   const [labName, setLabName] = useState(s.labName);
   const [alias, setAlias] = useState(s.alias);
   const [quick, setQuick] = useState("");
+  const [backupMsg, setBackupMsg] = useState("");
+  const file = useRef<HTMLInputElement>(null);
+  async function restore(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0]; e.target.value = "";
+    if (!f || !window.confirm("استبدال بيانات محطة التواصل على هذا الحاسوب (المفتاح والمختبرات والرسائل) بمحتوى الملف؟")) return;
+    try { setBackupMsg(importBackup(JSON.parse(await f.text())) ? "تمت الاستعادة." : "الملف ليس نسخة احتياطية لمحطة التواصل."); } catch { setBackupMsg("تعذّرت قراءة الملف."); }
+  }
   const save = (p: Parameters<typeof saveSettings>[0]) => { saveSettings(p); notifySaved(); };
   const relay = !!net.info?.licensing && !!net.info.relay;
 
@@ -134,6 +142,21 @@ export default function ConnectSettings() {
                 </form>
                 <button onClick={() => save({ quick: DEFAULT_QUICK })} className="mt-2 text-xs text-brand-dark hover:underline">استعادة الرسائل الافتراضية</button>
               </div>
+            </section>
+          ),
+        },
+        {
+          id: "device-data", label: "الجهاز والبيانات", hint: "النسخ الاحتياطي", icon: <HardDrive />,
+          content: (
+            <section className={card} data-testid="connect-backup">
+              <div className="mb-1 font-bold">النسخ الاحتياطي</div>
+              <p className="mb-3 text-xs text-muted">مفتاح هذا الحاسوب والمختبرات المعروفة والرسائل والإعدادات في ملف واحد. فيه مفتاحك الخاص: احفظه في مكان آمن ولا ترسله لأحد. باستعادته على حاسوب جديد تبقى المختبرات تعرفه دون بطاقة جديدة.</p>
+              <div className="flex flex-wrap gap-2">
+                <button onClick={() => { downloadJson(`connect-backup-${todayYmd()}.json`, exportBackup()); setBackupMsg("تم التصدير."); }} className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas"><Download className="size-4" /> تصدير نسخة احتياطية</button>
+                <button onClick={() => file.current?.click()} className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas"><Upload className="size-4" /> استعادة من ملف</button>
+                <input ref={file} type="file" accept="application/json,.json" onChange={restore} className="hidden" data-testid="connect-backup-file" />
+              </div>
+              {backupMsg && <p className="mt-2 text-xs text-brand-dark" data-testid="connect-backup-msg">{backupMsg}</p>}
             </section>
           ),
         },
