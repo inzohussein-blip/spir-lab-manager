@@ -1,6 +1,6 @@
 "use client";
 
-import { RefreshCw, LayoutDashboard, FileDown, Network, History, Settings } from "lucide-react";
+import { RefreshCw, LayoutDashboard, FileDown, Network, History, Settings, Stethoscope } from "lucide-react";
 import { AppSidebar, type SideBadges, type SideSection } from "@/components/local/AppSidebar";
 import { sameNameRecords } from "@/lib/local/fileSync";
 
@@ -10,6 +10,9 @@ const SECTIONS: SideSection[] = [
     { href: "/sync/file", label: "المزامنة بملف", hint: "تصدير ملف وإدخال ملف", icon: FileDown },
     { href: "/sync/auto", label: "المزامنة التلقائية", hint: "عبر الإنترنت أو الشبكة المحلية", icon: Network },
     { href: "/sync/log", label: "سجل المزامنة", hint: "ما صُدّر وما أُدخل", icon: History },
+  ] },
+  { title: "الأطباء", items: [
+    { href: "/sync/doctors", label: "رموز الأطباء", hint: "نتائج مراجعي كل طبيب في نافذته", icon: Stethoscope },
   ] },
   { title: "الإدارة", items: [
     { href: "/sync/settings", label: "الإعدادات", hint: "اسم الحاسوب والمحطات المشتركة", icon: Settings },

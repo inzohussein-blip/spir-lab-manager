@@ -95,37 +95,37 @@ main > * {
 }
 
 /* ── Local stations interactions (scoped to .station / .training / .qc / .roster — admin/purchasing untouched) ── */
-:is(.station, .store, .training, .qc, .roster, .connect, .about, .sync) button:not(:disabled),
-:is(.station, .store, .training, .qc, .roster, .connect, .about, .sync) a[href] {
+:is(.station, .store, .training, .qc, .roster, .connect, .doctor, .about, .sync) button:not(:disabled),
+:is(.station, .store, .training, .qc, .roster, .connect, .doctor, .about, .sync) a[href] {
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease,
     box-shadow 0.15s ease, transform 0.1s ease;
 }
 /* Tactile press feedback */
-:is(.station, .store, .training, .qc, .roster, .connect, .about, .sync) button:not(:disabled):active {
+:is(.station, .store, .training, .qc, .roster, .connect, .doctor, .about, .sync) button:not(:disabled):active {
   transform: scale(0.96);
 }
-:is(.station, .store, .training, .qc, .roster, .connect, .about, .sync) button:disabled {
+:is(.station, .store, .training, .qc, .roster, .connect, .doctor, .about, .sync) button:disabled {
   cursor: not-allowed;
   opacity: 0.5;
 }
 /* Primary buttons lift slightly on hover */
-:is(.station, .store, .training, .qc, .roster, .connect, .about, .sync) button.bg-brand:not(:disabled):hover {
+:is(.station, .store, .training, .qc, .roster, .connect, .doctor, .about, .sync) button.bg-brand:not(:disabled):hover {
   box-shadow: 0 4px 12px color-mix(in oklab, var(--color-brand) 35%, transparent);
 }
 /* Keyboard focus ring for buttons/links */
-:is(.station, .store, .training, .qc, .roster, .connect, .about, .sync) button:focus-visible,
-:is(.station, .store, .training, .qc, .roster, .connect, .about, .sync) a:focus-visible {
+:is(.station, .store, .training, .qc, .roster, .connect, .doctor, .about, .sync) button:focus-visible,
+:is(.station, .store, .training, .qc, .roster, .connect, .doctor, .about, .sync) a:focus-visible {
   outline: 2px solid var(--color-brand);
   outline-offset: 2px;
 }
 /* Soft glow around focused fields */
-:is(.station, .store, .training, .qc, .roster, .connect, .about, .sync) input:focus,
-:is(.station, .store, .training, .qc, .roster, .connect, .about, .sync) select:focus,
-:is(.station, .store, .training, .qc, .roster, .connect, .about, .sync) textarea:focus {
+:is(.station, .store, .training, .qc, .roster, .connect, .doctor, .about, .sync) input:focus,
+:is(.station, .store, .training, .qc, .roster, .connect, .doctor, .about, .sync) select:focus,
+:is(.station, .store, .training, .qc, .roster, .connect, .doctor, .about, .sync) textarea:focus {
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-brand) 18%, transparent);
 }
 /* Dark theme: the brand teal is bright, so text sitting on it goes dark for contrast */
-:root[data-theme="dark"] :is(.station, .store, .training, .qc, .roster, .connect, .about, .sync) :is(.bg-brand, .from-brand).text-white {
+:root[data-theme="dark"] :is(.station, .store, .training, .qc, .roster, .connect, .doctor, .about, .sync) :is(.bg-brand, .from-brand).text-white {
   color: #042f2e;
 }
 /* Training station — its own accent (indigo) so it reads as a separate app */
@@ -198,8 +198,8 @@ main > * {
 /* One page-title look in every station: the page's icon in a tile of the station's colour
    (screen only; the page's own markup and behaviour are unchanged). */
 @media screen {
-  :is(.station, .store, .training, .qc, .roster, .connect, .about, .sync) main h1:has(> svg:first-child) { gap: 0.75rem; }
-  :is(.station, .store, .training, .qc, .roster, .connect, .about, .sync) main h1 > svg:first-child {
+  :is(.station, .store, .training, .qc, .roster, .connect, .doctor, .about, .sync) main h1:has(> svg:first-child) { gap: 0.75rem; }
+  :is(.station, .store, .training, .qc, .roster, .connect, .doctor, .about, .sync) main h1 > svg:first-child {
     box-sizing: content-box;
     width: 22px;
     height: 22px;
@@ -210,7 +210,7 @@ main > * {
     background: linear-gradient(135deg, var(--color-brand), var(--color-brand-dark));
     box-shadow: 0 6px 16px -6px color-mix(in oklab, var(--color-brand) 70%, transparent);
   }
-  :root[data-theme="dark"] :is(.station, .store, .training, .qc, .roster, .connect, .about, .sync) main h1 > svg:first-child { color: #0f172a; }
+  :root[data-theme="dark"] :is(.station, .store, .training, .qc, .roster, .connect, .doctor, .about, .sync) main h1 > svg:first-child { color: #0f172a; }
 }
 /* Sync station — violet accent */
 .sync {
@@ -234,6 +234,17 @@ main > * {
   --color-brand-dark: #10b981;
   --color-brand-light: #064e3b;
 }
+/* Doctors' window — cyan accent */
+.doctor {
+  --color-brand: #0891b2;
+  --color-brand-dark: #0e7490;
+  --color-brand-light: #ecfeff;
+}
+:root[data-theme="dark"] .doctor {
+  --color-brand: #22d3ee;
+  --color-brand-dark: #06b6d4;
+  --color-brand-light: #164e63;
+}
 /* About the app — purple accent */
 .about {
   --color-brand: #9333ea;
@@ -254,7 +265,7 @@ main > * {
   animation: station-toast-in 0.18s ease-out;
 }
 @media (prefers-reduced-motion: reduce) {
-  :is(.station, .store, .training, .qc, .roster, .connect, .about, .sync) button:not(:disabled):active { transform: none; }
+  :is(.station, .store, .training, .qc, .roster, .connect, .doctor, .about, .sync) button:not(:disabled):active { transform: none; }
   .station-toast { animation: none; }
 }
 

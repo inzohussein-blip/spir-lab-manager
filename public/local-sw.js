@@ -13,7 +13,7 @@
 
 const META_CACHE = "local-meta";
 const PREFIX = "local-app-";
-const BASES = ["/welcome", "/station", "/store", "/training", "/qc", "/roster", "/connect", "/sync", "/about"];
+const BASES = ["/welcome", "/station", "/store", "/training", "/qc", "/roster", "/connect", "/doctor", "/sync", "/about"];
 const ROUTES = [
   "/welcome",
   "/station", "/station/inventory", "/station/records", "/station/settings", "/station/tests", "/station/visits", "/station/trash", "/station/page/_",
@@ -23,7 +23,8 @@ const ROUTES = [
   "/qc", "/qc/analytes", "/qc/chart", "/qc/devices", "/qc/entry", "/qc/settings", "/qc/temps",
   "/roster", "/roster/attendance", "/roster/leaves", "/roster/payroll", "/roster/schedule", "/roster/settings", "/roster/staff",
   "/connect", "/connect/room", "/connect/public", "/connect/labs", "/connect/direct", "/connect/file", "/connect/settings",
-  "/sync", "/sync/file", "/sync/auto", "/sync/log", "/sync/settings",
+  "/doctor", "/doctor/labs", "/doctor/settings",
+  "/sync", "/sync/file", "/sync/auto", "/sync/log", "/sync/doctors", "/sync/settings",
   "/about", "/about/start", "/about/station", "/about/report", "/about/store", "/about/training", "/about/qc", "/about/roster",
   "/about/connect", "/about/sync", "/about/admin", "/about/data", "/about/tips", "/about/faq", "/about/support", "/about/settings",
 ];

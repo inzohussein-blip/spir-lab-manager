@@ -7,6 +7,7 @@ import { ACTIVATION_SCRIPT } from "@/lib/local/activation";
 import { LocalThemeApplier } from "@/components/local/LocalTheme";
 import { THEME_KEYS, themeScript } from "@/lib/local/theme";
 import { SyncSidebar } from "@/components/sync/SyncSidebar";
+import { DoctorPublisher } from "@/components/doctors/DoctorPublisher";
 
 export const metadata = { title: "محطة المزامنة" };
 
@@ -21,6 +22,7 @@ export default function SyncLayout({ children }: { children: ReactNode }) {
       <LocalThemeApplier storageKey={THEME_KEYS.sync} />
       <LocalDataGate>
         <SyncSidebar />
+        <DoctorPublisher />
         <main className="min-w-0 flex-1 p-4 md:p-7">{children}</main>
       </LocalDataGate>
       <OfflineReady />

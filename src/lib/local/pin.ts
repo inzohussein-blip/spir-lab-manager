@@ -11,7 +11,7 @@ import { useEffect, useState } from "react";
  * computer, not strong security.
  */
 
-export type PinStation = "station" | "purchasing" | "training" | "qc" | "roster" | "connect" | "sync" | "about";
+export type PinStation = "station" | "purchasing" | "training" | "qc" | "roster" | "connect" | "sync" | "about" | "doctor";
 /** The owner's old single change (kept for codes set before «رموز الدخول»; see lib/license/server PinOp). */
 export interface PinOp { id: string; hash: string | null; scope: PinStation | "admin" | "all"; at: number }
 /** One PIN the owner gave a station: its hash and a name («الصباحي», «المدير»…). */
@@ -24,7 +24,7 @@ const K = "local.pin.v1";
 const UNLOCK = "local.pin.unlocked";
 export const PIN_EVENT = "local-pin";
 export const PIN_STATIONS: PinStation[] = ["station", "purchasing", "training", "qc", "roster", "connect", "sync", "about"];
-const STATIONS = PIN_STATIONS;
+const STATIONS = PIN_STATIONS; // the owner's PIN changes reach these (not «نافذة الأطباء», a doctor's own device)
 interface Stored {
   /** Each station's main PIN (set here, or the owner's first). */
   pins: Partial<Record<PinStation, string>>;

@@ -209,10 +209,13 @@ export interface OwnerPrefs {
   connectRelay: boolean;
   /** «المحادثة العامة» between all labs with «محطة التواصل». On by default. */
   connectPublic: boolean;
+  /** «نافذة الأطباء»: a lab's computer leaves its doctors' results here, sealed with each doctor's
+   *  code (never readable here). On by default. */
+  doctorsOn: boolean;
 }
 export const DEFAULT_PREFS: OwnerPrefs = {
   defaultDays: 365, defaultModules: [...DEFAULT_MODULES], trialDays: 7, soonDays: 14, adminNeedsOwnDb: true,
-  multiDevice: false, selfSignup: false, errorLog: false, dataExport: false, connectRelay: false, connectPublic: true,
+  multiDevice: false, selfSignup: false, errorLog: false, dataExport: false, connectRelay: false, connectPublic: true, doctorsOn: true,
 };
 const within = (v: unknown, min: number, max: number, dflt: number) => {
   const n = Math.round(Number(v));
@@ -233,6 +236,7 @@ export function cleanPrefs(v: unknown): OwnerPrefs {
     dataExport: p.dataExport === true,
     connectRelay: p.connectRelay === true,
     connectPublic: p.connectPublic !== false,
+    doctorsOn: p.doctorsOn !== false,
   };
 }
 export async function getPrefs(): Promise<OwnerPrefs> {
@@ -855,7 +859,7 @@ export async function storageStatus(write = false): Promise<{ source: string; ok
 }
 
 // ── Attempt limits (kept in the database so they hold across server instances) ─────
-type AttemptKind = "activate" | "owner" | "signup";
+type AttemptKind = "activate" | "owner" | "signup" | "doctor";
 const ATTEMPT_WINDOW = 10 * 60_000;
 const attemptKey = (kind: AttemptKind, ip: string) => `${kind}:${ip}`;
 /** Too many wrong tries from this address in the last 10 minutes? */
