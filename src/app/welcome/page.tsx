@@ -2,7 +2,7 @@ import { OfflineReady } from "@/components/local/OfflineReady";
 import { ActivationGate } from "@/components/local/ActivationGate";
 import { ACTIVATION_SCRIPT } from "@/lib/local/activation";
 import Link from "next/link";
-import { Beaker, ShoppingCart, GraduationCap, ShieldCheck, Users, ArrowLeft, Phone, RefreshCw, Info } from "lucide-react";
+import { Beaker, ShoppingCart, GraduationCap, ShieldCheck, Users, ArrowLeft, Phone, RefreshCw, Info, MessagesSquare } from "lucide-react";
 import { LicensedLink, AdminPanelCard } from "@/components/local/WelcomeLicense";
 import { WelcomeAccount } from "@/components/local/WelcomeAccount";
 import { WelcomeFooter } from "@/components/local/WelcomeFooter";
@@ -94,6 +94,19 @@ export default function WelcomePage() {
             <div className="mt-4 text-lg font-bold">محطة الكادر والدوام</div>
             <p className="mt-1 flex-1 text-sm text-muted">جدول المناوبات الأسبوعي، الحضور والانصراف والتأخير، الإجازات وأرصدتها، السلف وكشف الرواتب الشهري. أسماء الكادر متاحة في المحطات الأخرى.</p>
             <span className="mt-5 inline-flex items-center justify-center gap-1.5 rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white group-hover:bg-sky-700">
+              الدخول <ArrowLeft className="size-4" />
+            </span>
+          </LicensedLink>
+
+          {/* Free — the lab's computers, other labs and «المحادثة العامة» */}
+          <LicensedLink module="connect" href="/connect" className="group flex flex-col rounded-2xl border-2 border-emerald-300 bg-surface p-6 shadow-[var(--shadow-card)] transition-colors hover:border-emerald-500">
+            <span className="absolute -mt-9 ms-auto inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">مجانية</span>
+            <span className="grid size-12 place-items-center rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-sm">
+              <MessagesSquare className="size-6" />
+            </span>
+            <div className="mt-4 text-lg font-bold">محطة التواصل</div>
+            <p className="mt-1 flex-1 text-sm text-muted">محادثة داخلية بين حواسيب المختبر، ورسائل مشفّرة لمختبر آخر (اتصال مباشر أو ملف أو صندوق بريد مشفّر)، و«المحادثة العامة» مع كل المختبرات.</p>
+            <span className="mt-5 inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white group-hover:bg-emerald-700">
               الدخول <ArrowLeft className="size-4" />
             </span>
           </LicensedLink>

@@ -10,6 +10,7 @@ import { SupaError, supaProbe, supaSignIn } from "@/lib/sync/supabase";
 import { connHost, type SyncConfig } from "@/lib/sync/protocol";
 import { checkSavedAdminDb, cleanFirstAdmin, exportLabData, importShared, linkAdminDb, resetAdminPassword, resolveAdminConn, testAdminDb } from "@/lib/license/adminDb";
 import { forgetAdminDb } from "@/lib/db/lab";
+import { publicForOwner, publicDelete, setBlocked } from "@/lib/connect/server";
 import { passwordMatches, startOwnerSession, endOwnerSession, isOwner, ipOf } from "@/lib/license/owner";
 
 /** Owner endpoints for the code manager (/license). */
@@ -85,6 +86,10 @@ export async function POST(req: NextRequest) {
   if (b.op === "totp_disable") return (await disableTwoFactor(String(b.code ?? ""))) ? json({ ok: true }) : json({ ok: false, error: "wrong_code" }, 400);
   if (b.op === "contact") { await setContact(String(b.contact ?? "")); return json({ ok: true }); }
   if (b.op === "prefs") { const prefs = await setPrefs(b.prefs); forgetAdminDb(); return json({ ok: true, prefs }); }
+  // «محطة التواصل»: the public chat's messages with the lab behind each name; delete; stop a lab.
+  if (b.op === "connect_list") return json({ ok: true, ...(await publicForOwner()) });
+  if (b.op === "connect_delete") { await publicDelete(b.id); return json({ ok: true }); }
+  if (b.op === "connect_block") { if (!b.lid) return json({ ok: false, error: "bad_request" }, 400); await setBlocked(String(b.lid), b.on === true); return json({ ok: true }); }
 
   // The lab's own database: see it (never the password or the connection string), test it, link it.
   if (b.op === "sync_get") {

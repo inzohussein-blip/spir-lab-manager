@@ -34,6 +34,15 @@ export function syncExcluded(): string[] {
 }
 /** A station data key this computer shares with the lab's others (not a kept-to-itself station). */
 export const sharedStation = (k: string) => !syncExcluded().some((p) => k.startsWith(p));
+/** «إيقاف المزامنة» (protection, per computer): nothing is sent or received — no automatic sync
+ *  and no sync file in or out — until it is switched on again. On by default. */
+export const SYNC_MASTER_KEY = "lab-sync-master";
+export function syncMasterOn(): boolean {
+  try { return localStorage.getItem(SYNC_MASTER_KEY) !== "0"; } catch { return true; }
+}
+export function setSyncMaster(on: boolean) {
+  try { if (on) localStorage.removeItem(SYNC_MASTER_KEY); else localStorage.setItem(SYNC_MASTER_KEY, "0"); } catch { /* ignore */ }
+}
 export function companySyncOn(): boolean {
   try { return localStorage.getItem(COMPANY_SYNC_KEY) === "1"; } catch { return false; }
 }

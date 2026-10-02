@@ -15,7 +15,7 @@
  */
 import { kvReady, kvGet, kvApply, kvSyncedEntries as kvAllSynced, isSyncedKey as kvIsSynced, onKvChange, KV_REMOTE_EVENT, type KvOrigin } from "@/lib/local/kv";
 import { licenseIdentity, licenseProof, licenseSync, refreshLicense } from "@/lib/license/client";
-import { PULL_LIMIT, PUSH_LIMIT, PULL_BYTES, PUSH_BYTES, COMPANY_SYNC_KEY, companySyncOn, sharedStation, type SupabaseConfig, type SyncRow } from "./protocol";
+import { PULL_LIMIT, PUSH_LIMIT, PULL_BYTES, PUSH_BYTES, COMPANY_SYNC_KEY, companySyncOn, syncMasterOn, sharedStation, type SupabaseConfig, type SyncRow } from "./protocol";
 
 // Stations this computer keeps to itself («محطة المزامنة ← الإعدادات») are neither sent nor received.
 const isSyncedKey = (k: string) => kvIsSynced(k) && sharedStation(k);
@@ -107,7 +107,7 @@ const info = (l: Link): LinkInfo => l.kind === "company" ? { kind: "company", wh
 const newNode = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`);
 
 // ── Talking to the database ──────────────────────────────────────────────────
-export type SyncErrorCode = "auth" | "no_table" | "unreachable" | "db" | "no_code" | "offline" | "private_host" | "bad_url" | "owner_set" | "bad_config" | "no_secret" | "tls" | "needs_db" | "bad_hub_key";
+export type SyncErrorCode = "paused" | "auth" | "no_table" | "unreachable" | "db" | "no_code" | "offline" | "private_host" | "bad_url" | "owner_set" | "bad_config" | "no_secret" | "tls" | "needs_db" | "bad_hub_key";
 class SyncError extends Error { constructor(public code: SyncErrorCode) { super(code); } }
 
 interface Adapter {
@@ -444,6 +444,8 @@ export function syncNow(): Promise<void> {
   running ??= (async () => {
     const work = async () => {
       const link = currentLink();
+      // Switched off on this computer («إيقاف المزامنة»): changes wait in the outbox until it is on again.
+      if (link && !syncMasterOn()) { setStatus({ state: "off", link: info(link), error: "paused" }); return; }
       const st = await loadState(link);
       if (!link || !st) { setStatus({ state: "off", link: null, pending: 0, error: undefined }); return; }
       const ad = adapterFor(link);

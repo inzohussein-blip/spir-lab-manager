@@ -2,14 +2,14 @@
 
 import {
   Info, Rocket, Beaker, FileText, ShoppingCart, GraduationCap, ShieldCheck, Users, RefreshCw, LayoutDashboard,
-  Database, Lightbulb, CircleHelp, Phone, Settings, type LucideIcon,
+  Database, Lightbulb, CircleHelp, Phone, Settings, MessagesSquare, type LucideIcon,
 } from "lucide-react";
 import { AppSidebar, type SideSection } from "@/components/local/AppSidebar";
 import { aboutHref, aboutPage } from "@/lib/about/content";
 
 const ICONS: Record<string, LucideIcon> = {
   "": Info, start: Rocket, station: Beaker, report: FileText, store: ShoppingCart, training: GraduationCap, qc: ShieldCheck,
-  roster: Users, sync: RefreshCw, admin: LayoutDashboard, data: Database, tips: Lightbulb, faq: CircleHelp, support: Phone,
+  roster: Users, connect: MessagesSquare, sync: RefreshCw, admin: LayoutDashboard, data: Database, tips: Lightbulb, faq: CircleHelp, support: Phone,
 };
 
 const item = (slug: string) => {
@@ -19,7 +19,7 @@ const item = (slug: string) => {
 
 const SECTIONS: SideSection[] = [
   { title: "التعريف", items: ["", "start"].map(item) },
-  { title: "المحطات", items: ["station", "report", "store", "training", "qc", "roster", "sync", "admin"].map(item) },
+  { title: "المحطات", items: ["station", "report", "store", "training", "qc", "roster", "connect", "sync", "admin"].map(item) },
   { title: "المساعدة", items: ["data", "tips", "faq", "support"].map(item) },
   { title: "الإدارة", items: [{ href: "/about/settings", label: "الإعدادات", hint: "المظهر وحجم الخط", icon: Settings }] },
 ];

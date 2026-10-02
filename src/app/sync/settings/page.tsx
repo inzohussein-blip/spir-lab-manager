@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Settings, Monitor, Share2, Network, History, ShieldCheck } from "lucide-react";
+import { Settings, Monitor, Share2, Network, History, ShieldCheck, Power } from "lucide-react";
 import { clearSyncLog, setDeviceName, syncLog, thisDevice } from "@/lib/local/fileSync";
-import { SYNC_EXCLUDE_KEY, SYNC_STATIONS, STATION_SYNC, companySyncOn, syncExcluded } from "@/lib/sync/protocol";
+import { SYNC_EXCLUDE_KEY, SYNC_STATIONS, STATION_SYNC, companySyncOn, syncExcluded, syncMasterOn, setSyncMaster } from "@/lib/sync/protocol";
 import { CompanySyncCard } from "@/components/local/CompanySyncCard";
 import { SyncPanel } from "@/components/local/SyncPanel";
 import { ThemeCard } from "@/components/local/LocalTheme";
@@ -23,6 +23,12 @@ export default function SyncSettings() {
   const [excluded, setExcluded] = useState<string[]>(syncExcluded);
   const [logSize, setLogSize] = useState(() => syncLog().length);
   const [msg, setMsg] = useState("");
+  const [master, setMaster] = useState(syncMasterOn);
+  function switchMaster(on: boolean) {
+    if (!on && !window.confirm("إيقاف المزامنة على هذا الحاسوب؟ لا يُرسل شيء ولا يُستقبل (تلقائياً أو بملف) حتى تشغيلها. البيانات تبقى كما هي.")) return;
+    setSyncMaster(on); setMaster(on); notifySaved();
+    void import("@/lib/sync/client").then((m) => m.syncNow());
+  }
   const toggle = (prefix: string, shared: boolean) => {
     const next = shared ? excluded.filter((x) => x !== prefix) : [...new Set([...excluded, prefix])];
     setExcluded(next);
@@ -36,6 +42,22 @@ export default function SyncSettings() {
       icon={<Settings className="size-6" />}
       search
       sections={[
+        {
+          id: "protect", label: "الحماية", hint: "تشغيل المزامنة أو إيقافها", icon: <Power />,
+          badge: master ? undefined : "موقوفة",
+          content: (
+            <section className={card} data-testid="sync-master">
+              <div className="mb-1 font-bold">المزامنة على هذا الحاسوب</div>
+              <p className="mb-3 text-xs text-muted">إيقافها يمنع إرسال أو استقبال أي بيانات من هذا الحاسوب — المزامنة التلقائية وملف المزامنة معاً — حتى تشغيلها من جديد. مفيد عند الشك أو عند إعارة الحاسوب. التعديلات أثناء الإيقاف تُرسل بعد التشغيل.</p>
+              <div className="flex flex-wrap items-center gap-3">
+                <span className={`rounded-full px-3 py-1 text-xs font-semibold ${master ? "bg-teal-50 text-brand-dark" : "bg-amber-100 text-amber-800"}`} data-testid="sync-master-state">{master ? "تعمل" : "موقوفة"}</span>
+                <button type="button" onClick={() => switchMaster(!master)} className={`rounded-lg px-4 py-2 text-sm font-semibold ${master ? "border border-red-200 text-red-700 hover:bg-red-50" : "bg-brand text-white hover:bg-brand-dark"}`}>
+                  {master ? "إيقاف المزامنة" : "تشغيل المزامنة"}
+                </button>
+              </div>
+            </section>
+          ),
+        },
         {
           id: "device", label: "هذا الحاسوب", hint: "اسمه ومعرّفه", icon: <Monitor />,
           content: (

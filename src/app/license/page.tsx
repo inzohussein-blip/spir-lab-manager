@@ -4,11 +4,12 @@ import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } f
 import {
   KeyRound, LogOut, Plus, Copy, Check, Ban, Play, MonitorSmartphone, RefreshCw, Trash2, Pencil, ShieldAlert,
   FlaskConical, Download, ChevronDown, MessageSquare, History, Wallet, MessageSquareText, Database, Upload, ShieldCheck, Smartphone, Phone,
-  Server, Menu, X, ChevronLeft, HardDrive, Settings, Search, Bug, FileSpreadsheet, Lock, LayoutGrid, Wifi, AlarmClock, CircleDollarSign,
+  Server, Menu, X, ChevronLeft, HardDrive, Settings, Search, Bug, FileSpreadsheet, Lock, LayoutGrid, Wifi, AlarmClock, CircleDollarSign, MessagesSquare,
   type LucideIcon,
 } from "lucide-react";
 import { StationsOverview, ALWAYS_STATIONS } from "./stations";
 import { PinSection, type PinPolicyView } from "./pins";
+import { ConnectOwner } from "./connect";
 import { LICENSE_MODULES, DEFAULT_MODULES, moduleLabel, type LicenseModule } from "@/lib/license/modules";
 import { STATION_SYNC, SUPABASE_SQL } from "@/lib/sync/protocol";
 import { SYNC_ERRORS } from "@/components/local/SyncPanel";
@@ -50,10 +51,11 @@ interface TwoFactor { enabled: boolean; broken: boolean; forcedOff: boolean; can
 type Prefs = {
   defaultDays: number; defaultModules: LicenseModule[]; trialDays: number; soonDays: number; adminNeedsOwnDb: boolean;
   multiDevice: boolean; selfSignup: boolean; errorLog: boolean; dataExport: boolean;
+  connectRelay: boolean; connectPublic: boolean;
 };
 const DEFAULT_PREFS: Prefs = {
   defaultDays: 365, defaultModules: [...DEFAULT_MODULES], trialDays: 7, soonDays: 14, adminNeedsOwnDb: NEEDS_DB_GATE,
-  multiDevice: false, selfSignup: false, errorLog: false, dataExport: false,
+  multiDevice: false, selfSignup: false, errorLog: false, dataExport: false, connectRelay: false, connectPublic: true,
 };
 type Data = { enabled: boolean; owner: boolean; needsDb?: boolean; storage?: Storage; licenses?: Row[]; events?: Ev[]; signIns?: SignIn[]; twoFactor?: TwoFactor; contact?: string; prefs?: Prefs; version?: string; now?: number };
 const agentLabel = (ua: string) => {
@@ -92,13 +94,14 @@ const EVENT_LABEL: Record<string, string> = {
 };
 const eventDetail = (e: Ev) => (e.kind === "modules" ? e.detail.split(",").filter(Boolean).map(moduleLabel).join("، ") || "لا شيء" : e.detail);
 
-type Section = "codes" | "new" | "stations" | "pin" | "databases" | "settings" | "errors" | "security" | "backup" | "system";
+type Section = "codes" | "new" | "stations" | "pin" | "connect" | "databases" | "settings" | "errors" | "security" | "backup" | "system";
 const SECTIONS: { title: string; items: { id: Section; label: string; hint: string; icon: LucideIcon }[] }[] = [
   { title: "الرموز", items: [
     { id: "codes", label: "الرموز", hint: "المختبرات وأجهزتها", icon: KeyRound },
     { id: "new", label: "رمز جديد", hint: "إنشاء رمز أو رمز تجريبي", icon: Plus },
     { id: "stations", label: "المحطات", hint: "كل المحطات واستعمالها", icon: LayoutGrid },
     { id: "pin", label: "رموز الدخول (PIN)", hint: "إخفاء وإظهار وتعيين لكل عميل", icon: Lock },
+    { id: "connect", label: "محطة التواصل", hint: "المحادثة العامة وصندوق البريد", icon: MessagesSquare },
     { id: "databases", label: "قواعد البيانات", hint: "قاعدة لوحة الإدارة لكل عميل", icon: HardDrive },
   ] },
   { title: "الإعدادات", items: [
@@ -145,6 +148,7 @@ const MOD_TONE: Record<LicenseModule, string> = {
   training: "border-indigo-300 bg-indigo-50 text-indigo-700",
   qc: "border-rose-300 bg-rose-50 text-rose-700",
   roster: "border-sky-300 bg-sky-50 text-sky-700",
+  connect: "border-emerald-300 bg-emerald-50 text-emerald-700",
   admin: "border-violet-300 bg-violet-50 text-violet-700",
 };
 /** Filter tiles: a dot in their colour, filled with it when chosen. */
@@ -567,6 +571,13 @@ export default function LicensesPage() {
         <>
           <SectionTitle icon={<Lock className="size-6" />} title="رموز الدخول (PIN)" desc="لكل عميل: إخفاء خاصية رمز الدخول أو إظهارها، وتعيين رمز كل محطة أو تغييره أو إزالته — وعدة رموز للمحطة نفسها من هنا فقط." />
           <PinSection rows={all} focus={pinFocus} onFocused={pinFocused} change={(r, c, t) => change(r as Row, c, t)} />
+        </>
+      )}
+
+      {section === "connect" && (
+        <>
+          <SectionTitle icon={<MessagesSquare className="size-6" />} title="محطة التواصل" desc="ما يمر عبر خادمك: صندوق البريد المشفّر (لا تقرؤه)، و«المحادثة العامة» بين المختبرات مع حذف الرسائل وإيقاف مختبر." />
+          <ConnectOwner prefs={prefs} onSaved={load} />
         </>
       )}
 
@@ -1355,6 +1366,7 @@ function PrefsCard({ prefs, onSaved }: { prefs: Prefs; onSaved: () => void }) {
     const d = await post({ op: "prefs", prefs: {
       defaultDays, defaultModules: p.defaultModules, trialDays: p.trialDays, soonDays: p.soonDays, adminNeedsOwnDb: p.adminNeedsOwnDb,
       multiDevice: p.multiDevice, selfSignup: p.selfSignup, errorLog: p.errorLog, dataExport: p.dataExport,
+      connectRelay: prefs.connectRelay, connectPublic: prefs.connectPublic, // set in «محطة التواصل»
     } });
     setMsg(d.ok ? "✓ حُفظت الإعدادات" : "تعذّر الحفظ.");
     if (d.ok) onSaved();

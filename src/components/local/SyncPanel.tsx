@@ -8,6 +8,7 @@ import type { JoinMode, SyncErrorCode, SyncStatus } from "@/lib/sync/client";
 type Sync = typeof import("@/lib/sync/client");
 
 export const SYNC_ERRORS: Record<string, string> = {
+  paused: "المزامنة موقوفة على هذا الحاسوب (الحماية) — شغّلها من «محطة المزامنة ← الإعدادات ← الحماية».",
   auth: "تعذّر الدخول — تحقّق من البريد وكلمة المرور والمفتاح.",
   no_table: "الجدول غير موجود في قاعدة البيانات — نفّذ سكربت الإعداد في SQL Editor أولاً.",
   unreachable: "تعذّر الوصول إلى قاعدة البيانات — تحقّق من العنوان والاتصال.",

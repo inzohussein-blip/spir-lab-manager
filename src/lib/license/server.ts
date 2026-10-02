@@ -104,7 +104,7 @@ export interface LicenseRow {
 export interface PinOp { id: string; hash: string | null; scope: LicenseModule | "all"; at: number }
 /** Same hash as the stations (lib/local/pin): sha256 of a fixed prefix and the digits. */
 /** The stations a PIN can guard (lib/local/pin PinStation): the local stations, sync and about. */
-export const PIN_STATIONS = ["station", "purchasing", "training", "qc", "roster", "sync", "about"] as const;
+export const PIN_STATIONS = ["station", "purchasing", "training", "qc", "roster", "connect", "sync", "about"] as const;
 export type PinStation = (typeof PIN_STATIONS)[number];
 export interface PinEntry { hash: string; label: string }
 /** The owner's «رموز الدخول» for a code: the feature hidden or shown, and per station its PINs
@@ -172,6 +172,9 @@ function ensureTables() {
   return ensured;
 }
 
+/** For «محطة التواصل» (lib/connect/server): the codes' database and its settings. */
+export const licenseQuery = <T = unknown>(sql: string, params?: unknown[]) => query<T>(sql, params);
+export const licenseConfig = { get: (key: string) => getConfig(key), set: (key: string, value: string) => setConfig(key, value) };
 async function getConfig(key: string): Promise<string | null> {
   await ensureTables();
   return (await queryOne<{ value: string }>(`select value from license_config where key = $1`, [key]))?.value ?? null;
@@ -201,10 +204,15 @@ export interface OwnerPrefs {
   errorLog: boolean;
   /** The owner can export a lab's admin-panel data (hidden until switched on). Off by default. */
   dataExport: boolean;
+  /** «محطة التواصل»: the provider's server carries sealed messages (the lab's internal chat for
+   *  computers on the site, and the mailbox between labs) — it never reads them. Off by default. */
+  connectRelay: boolean;
+  /** «المحادثة العامة» between all labs with «محطة التواصل». On by default. */
+  connectPublic: boolean;
 }
 export const DEFAULT_PREFS: OwnerPrefs = {
   defaultDays: 365, defaultModules: [...DEFAULT_MODULES], trialDays: 7, soonDays: 14, adminNeedsOwnDb: true,
-  multiDevice: false, selfSignup: false, errorLog: false, dataExport: false,
+  multiDevice: false, selfSignup: false, errorLog: false, dataExport: false, connectRelay: false, connectPublic: true,
 };
 const within = (v: unknown, min: number, max: number, dflt: number) => {
   const n = Math.round(Number(v));
@@ -223,6 +231,8 @@ export function cleanPrefs(v: unknown): OwnerPrefs {
     selfSignup: p.selfSignup === true,
     errorLog: p.errorLog === true,
     dataExport: p.dataExport === true,
+    connectRelay: p.connectRelay === true,
+    connectPublic: p.connectPublic !== false,
   };
 }
 export async function getPrefs(): Promise<OwnerPrefs> {

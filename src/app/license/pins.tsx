@@ -10,7 +10,7 @@ import { fmtDateTime } from "@/lib/utils";
  *  remove each station's PINs — several for one station only from here. The devices apply it at
  *  their next check with the server (or at once with «نسيت الرمز؟ ← تحديث من المزوّد»). */
 
-type PinStation = "station" | "purchasing" | "training" | "qc" | "roster" | "sync" | "about";
+type PinStation = "station" | "purchasing" | "training" | "qc" | "roster" | "connect" | "sync" | "about";
 interface PinEntry { hash: string; label: string }
 export interface PinPolicyView { id: string; at: number; hidden: boolean; stations: Partial<Record<PinStation, { rev: string; pins: PinEntry[] | null; at: number }>> }
 export interface PinRow {

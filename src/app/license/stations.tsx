@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  Beaker, ShoppingCart, GraduationCap, ShieldCheck, Users, LayoutDashboard, RefreshCw, Info, ExternalLink, Lock, Globe, KeyRound,
+  Beaker, ShoppingCart, GraduationCap, ShieldCheck, Users, LayoutDashboard, RefreshCw, Info, ExternalLink, Lock, Globe, KeyRound, MessagesSquare,
   type LucideIcon,
 } from "lucide-react";
 import { LICENSE_MODULES, type LicenseModule } from "@/lib/license/modules";
@@ -15,6 +15,7 @@ export const MODULE_META: Record<LicenseModule, { icon: LucideIcon; color: strin
   training: { icon: GraduationCap, color: "#4f46e5", desc: "«الدليل» من الصفر (قابل للتعديل والطباعة بشعار المختبر)، مكتبة الفحوصات، الاختبارات، المتدربون والشهادات." },
   qc: { icon: ShieldCheck, color: "#e11d48", desc: "السيطرة النوعية ومخطط Levey-Jennings وقواعد Westgard، الحرارة، صيانة الأجهزة." },
   roster: { icon: Users, color: "#0284c7", desc: "المناوبات والحضور والإجازات والسلف وكشف الرواتب." },
+  connect: { icon: MessagesSquare, color: "#059669", desc: "المحادثة الداخلية بين حواسيب المختبر، والتواصل المشفّر مع المختبرات الأخرى، و«المحادثة العامة»." },
   admin: { icon: LayoutDashboard, color: "#7c3aed", desc: "النسخة الكاملة على الإنترنت: المرضى والطلبات والفواتير، بقاعدة بيانات لكل مختبر." },
 };
 
