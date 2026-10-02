@@ -114,6 +114,15 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   ok((await D.locator('[data-testid="report-phone"]').innerText()).includes('07701234567'), 'the phone shows when the lab allows it');
   await D.click('button:has-text("رجوع")');
 
+  // ── «رمز جديد» offline: nothing changes (the old code would keep working) ──
+  const tagBefore = (await kv(L, 'doctors.shares.v1'))[0].tag;
+  const alerts = []; L.on('dialog', (dl) => { if (dl.type() === 'alert') alerts.push(dl.message()); });
+  await L.context().setOffline(true);
+  await L.click('[data-testid="doctor-share"] button:has-text("رمز جديد")');
+  ok(await until(async () => alerts.some((m) => m.includes('تعذّر إيقاف الرمز القديم'))), 'offline: «رمز جديد» says the old code could not be stopped');
+  ok((await kv(L, 'doctors.shares.v1'))[0].tag === tagBefore, '…and keeps the code as it was');
+  await L.context().setOffline(false);
+
   // ── «رمز جديد»: the old code stops at once ──
   await L.click('[data-testid="doctor-share"] button:has-text("رمز جديد")');
   ok(await until(async () => (await L.locator('[data-testid="doctor-code"]').innerText()).trim() !== code), 'a new code is shown');

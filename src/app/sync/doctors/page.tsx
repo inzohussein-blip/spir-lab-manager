@@ -123,7 +123,7 @@ function ShareRow({ s, onCode }: { s: DoctorShare; onCode: (code: string) => voi
         <select value={s.window} onChange={(e) => updateShare(s.id, { window: e.target.value as DoctorWindow })} aria-label={`مدة العرض — ${s.doctor}`} className="rounded-lg border border-line bg-surface px-2 py-1.5 text-xs">
           {WINDOWS.map((w) => <option key={w} value={w}>{WINDOW_LABEL[w]}</option>)}
         </select>
-        <button onClick={async () => { if (!window.confirm(`رمز جديد لـ«${s.doctor}»؟ يتوقف الرمز القديم فوراً.`)) return; const c = await renewShare(s.id); if (c) onCode(c); }} className="inline-flex items-center gap-1 rounded-lg border border-line px-2.5 py-1.5 text-xs hover:bg-canvas"><RefreshCw className="size-3.5" /> رمز جديد</button>
+        <button onClick={async () => { if (!window.confirm(`رمز جديد لـ«${s.doctor}»؟ يتوقف الرمز القديم فوراً.`)) return; const c = await renewShare(s.id); if (c) onCode(c); else window.alert("تعذّر إيقاف الرمز القديم الآن — تحقّق من الاتصال وأعد المحاولة. لم يتغير شيء."); }} className="inline-flex items-center gap-1 rounded-lg border border-line px-2.5 py-1.5 text-xs hover:bg-canvas"><RefreshCw className="size-3.5" /> رمز جديد</button>
         <button onClick={async () => { if (!window.confirm(`إيقاف رمز «${s.doctor}»؟ تُحذف نتائجه من الخادم ولا يرى شيئاً بعدها.`)) return; if (!(await removeShare(s.id))) window.alert("تعذّر الإيقاف الآن — تحقّق من الاتصال وأعد المحاولة."); }} className="inline-flex items-center gap-1 rounded-lg border border-red-200 px-2.5 py-1.5 text-xs text-red-700 hover:bg-red-50"><Trash2 className="size-3.5" /> إيقاف الرمز</button>
       </div>
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">

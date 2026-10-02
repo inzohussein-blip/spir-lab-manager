@@ -96,6 +96,22 @@ const TAG = Date.now().toString(36);
   for (let i = 0; i < 32; i++) last = (await post(d, { op: 'fetch', tag: (i.toString(16).padStart(2, '0') + TAG).padEnd(40, 'e').replace(/[^0-9a-f]/g, 'e') })).status;
   ok(last === 429, `many wrong codes in a row are slowed down (${last})`);
 
+  // ── Stopping a code while the provider has the window off: its copy still leaves the server ──
+  await prefsSave(false);
+  await a.goto(B + '/sync/doctors'); await a.waitForSelector('[data-testid="doctor-share"]', { timeout: 20000 });
+  await a.click('[data-testid="doctor-share"] button:has-text("إيقاف الرمز")');
+  ok(await until(async () => ((await kv(a, 'doctors.shares.v1')) || []).length === 0), 'a code can be stopped while the window is off');
+  await prefsSave(true);
+  ok((await post(a, { op: 'fetch', tag })).status === 404, '…and its copy is gone when the window is on again');
+
+  // ── At most 300 doctor codes per lab on the server ──
+  const pb = await proof(bb);
+  const box = 'x'.repeat(40);
+  let lastPub = null;
+  for (let i = 0; i < 301; i++) lastPub = await post(bb, { op: 'publish', tag: (i.toString(16).padStart(4, '0') + 'b'.repeat(36)), box, ...pb });
+  ok(lastPub.ok === false && lastPub.error === 'too_many_codes', `the 301st code of one lab is refused (${lastPub.error})`);
+  ok((await post(bb, { op: 'publish', tag: '0000' + 'b'.repeat(36), box: 'y'.repeat(40), ...pb })).ok === true, '…an existing one still updates');
+
   ok(errs.length === 0, `no page errors${errs.length ? ': ' + errs.join(' | ') : ''}`);
   await b.close();
   done('codes.doctors');
