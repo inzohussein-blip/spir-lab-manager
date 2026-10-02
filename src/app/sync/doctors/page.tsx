@@ -33,7 +33,7 @@ export default function DoctorCodesPage() {
   const list = shares();
   return (
     <div className="flex max-w-5xl flex-col gap-5">
-      <PageHead icon={<Stethoscope />} title="رموز الأطباء" sub="أعطِ كل طبيب رمزاً: يرى في «نافذة الأطباء» نتائج المراجعين المحالين باسمه، للمدة التي تختارها. النتائج تُرفع مشفّرة برمزه، ولا يقرؤها غيره." />
+      <PageHead icon={<Stethoscope />} title="رموز الأطباء" sub="أعطِ كل طبيب رمز تفعيل لحسابه: يرى في «نافذة الأطباء» (تُفتح بهذا الرمز وحده) نتائج المراجعين المحالين باسمه، للمدة التي تختارها. النتائج تُرفع مشفّرة برمزه، ولا يقرؤها غيره." />
       {on === false && (
         <div className="flex items-start gap-2 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800 ring-1 ring-amber-200" data-testid="doctors-off">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" /> أوقف المزوّد نافذة الأطباء — لا تُرفع النتائج ولا يراها الأطباء حتى يعيدها.
@@ -88,7 +88,7 @@ function ShownCode({ doctor, code, onClose }: { doctor: string; code: string; on
   const [copied, setCopied] = useState(false);
   const lab = getSettings().labName;
   const link = typeof window !== "undefined" ? `${window.location.origin}/doctor` : "/doctor";
-  const msg = `د. ${doctor}، رمزك لعرض نتائج مراجعيك في ${lab}:\n${code}\nافتح: ${link}`;
+  const msg = `د. ${doctor}، رمز تفعيل حسابك في «نافذة الأطباء» لدى ${lab}:\n${code}\nافتح الرابط وأدخل الرمز: ${link}`;
   return (
     <section className="rounded-2xl border-2 border-brand bg-brand-light/40 p-5 text-center" data-testid="doctor-code-shown">
       <div className="text-sm font-semibold">رمز «{doctor}»</div>
