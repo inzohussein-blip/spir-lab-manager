@@ -13,6 +13,7 @@ export const THEME_KEYS = {
 } as const;
 export type ThemeStation = keyof typeof THEME_KEYS;
 
-/** Inline script that applies the station's choice before it paints (no flash). */
+/** Inline script that applies the station's choice before it paints (no flash): light by default,
+ *  dark, or «تلقائي» (the device's setting). */
 export const themeScript = (key: string) =>
-  `try{var t=localStorage.getItem('${key}');if(t==='dark')document.documentElement.setAttribute('data-theme','dark');else if(t==='light')document.documentElement.removeAttribute('data-theme')}catch(e){}`;
+  `try{var t=localStorage.getItem('${key}');if(t==='dark'||(t==='auto'&&window.matchMedia&&matchMedia('(prefers-color-scheme:dark)').matches))document.documentElement.setAttribute('data-theme','dark');else document.documentElement.removeAttribute('data-theme')}catch(e){}`;

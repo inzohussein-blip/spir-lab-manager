@@ -21,7 +21,7 @@ export default function AboutSettings() {
 
       <PinCard station="about" />
 
-      <ThemeCard storageKey={THEME_KEYS.about} note="فاتح أو غامق، أو تلقائي حسب إعداد الجهاز. يخص هذه المحطة فقط." />
+      <ThemeCard storageKey={THEME_KEYS.about} note="فاتح (الافتراضي) أو غامق، أو تلقائي حسب إعداد الجهاز. يخص هذه المحطة فقط." />
 
       <section className={card} data-testid="about-text-size">
         <div className="mb-1 flex items-center gap-2 font-bold"><Type className="size-4 text-brand-dark" /> حجم الخط</div>
