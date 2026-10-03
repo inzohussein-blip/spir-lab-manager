@@ -9,6 +9,7 @@ import { labQrCode, type LabQrCode } from "@/lib/station/labQr";
 import { FormReport } from "@/components/station/FormReport";
 import { isFormCode, decodeForm, formOptionsOf, type FormCode } from "@/lib/station/templates";
 import { reportExtrasOf, LOGO_PX, WM_SIZE } from "@/lib/station/reportExtras";
+import { reportDateOf, reportDateText, reportDateLabel } from "@/lib/station/reportDate";
 import { CATEGORY_EN } from "@/lib/categoryEn";
 import { NO_FILL, fillSteps, smartFill, headZoom, tableHeight, type Fill } from "@/lib/station/fillPage";
 // The report fonts one can choose (Settings → «خيارات إضافية للتقرير المطبوع»); bundled with the
@@ -67,12 +68,14 @@ const ymd = (ms: number) => new Date(ms).toLocaleDateString("en-CA");
  * table header repeats and rows never split across pages.
  */
 export function ReportSheet({
-  settings, paper = "A4", date, accession, patient, referrer, rows, prev = {}, printPrev = false,
+  settings, paper = "A4", date, at, accession, patient, referrer, rows, prev = {}, printPrev = false,
   emptyText = "No tests selected", className = "", printable = true,
 }: {
   settings: StationSettings;
   paper?: "A4" | "A5";
+  /** The visit's day (YYYY-MM-DD); `at`: its time (ms), for the time and other date forms. */
   date: string;
+  at?: number;
   accession?: string;
   patient: { name: string; gender: Gender; age?: string; phone?: string };
   referrer?: string;
@@ -86,6 +89,24 @@ export function ReportSheet({
 }) {
   // Ready before «طباعة» assigns a sample number, so its barcode is on the first print too.
   useEffect(() => { void loadBarcode(); }, []);
+  // «التاريخ والوقت»: the visit's time, or — when the lab chose it — the moment of printing (kept
+  // current to the minute while the sheet is open).
+  const dOpt = reportDateOf(settings);
+  const [nowMs, setNowMs] = useState<number | null>(null);
+  useEffect(() => {
+    if (dOpt.source !== "print") return;
+    const tick = () => setNowMs(Date.now());
+    tick();
+    const id = setInterval(tick, 20_000);
+    window.addEventListener("beforeprint", tick);
+    return () => { clearInterval(id); window.removeEventListener("beforeprint", tick); };
+  }, [dOpt.source]);
+  const dayMs = /^\d{4}-\d{2}-\d{2}$/.test(date) ? new Date(Number(date.slice(0, 4)), Number(date.slice(5, 7)) - 1, Number(date.slice(8, 10))).getTime() : null;
+  const dateMs = dOpt.source === "print" ? nowMs : at ?? dayMs;
+  // Without a time (an old visit read by its day only), the date alone.
+  const dateText = dateMs == null ? date : reportDateText(dOpt, dateMs, dOpt.source === "print" || at != null);
+  const dateLabel = reportDateLabel(dOpt);
+  const dateValue = <bdi dir={dOpt.format === "long-ar" ? "rtl" : "ltr"} className="whitespace-pre">{dateText}</bdi>;
   // While printing, the page's title is the sample number and patient: the browser offers it as the
   // PDF's file name.
   useEffect(() => {
@@ -215,7 +236,7 @@ export function ReportSheet({
   // Date, then the patient's sample barcode and number under it
   const dateBlock = (
     <div className="flex flex-col items-end text-xs text-gray-600">
-      <div>التاريخ: {date}</div>
+      {dOpt.show && dOpt.place === "head" && <div data-testid="report-date">{dateLabel && <>{dateLabel} </>}{dateValue}</div>}
       {accession && (
         <div className="report-pbc mt-1 flex flex-col items-end">
           {settings.reportBarcode !== false && <Barcode text={accession} className="block h-9 w-44 [&>svg]:h-full [&>svg]:w-full" />}
@@ -254,6 +275,9 @@ export function ReportSheet({
           <div><span style={{ color: c.title }} className="font-semibold">العمر:</span> {patient.age || "—"}</div>
           <div><span style={{ color: c.title }} className="font-semibold">الهاتف:</span> {patient.phone || "—"}</div>
           {referrer && <div><span style={{ color: c.title }} className="font-semibold">الطبيب المُحيل:</span> {referrer}</div>}
+          {dOpt.show && dOpt.place === "patient" && (
+            <div data-testid="report-date">{dateLabel && <><span style={{ color: c.title }} className="font-semibold">{dateLabel}</span> </>}{dateValue}</div>
+          )}
         </div>
     </>
   );

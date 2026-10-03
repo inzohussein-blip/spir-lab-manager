@@ -3,7 +3,7 @@
 import { SyncPanel } from "@/components/local/SyncPanel";
 import { kvFlush } from "@/lib/local/kv";
 import { useEffect, useRef, useState } from "react";
-import { Settings, Image as ImageIcon, Download, Upload, Trash2, Stethoscope, Plus, Pencil, X, Smartphone, History, ListCollapse, ClipboardList, QrCode as QrCodeIcon, Hash, PenLine, RotateCcw, FileText, Building2, Phone, Eye, Calculator, Printer, Tag, Boxes, HardDrive, ShieldCheck, Maximize2, Sparkles } from "lucide-react";
+import { CalendarClock, Settings, Image as ImageIcon, Download, Upload, Trash2, Stethoscope, Plus, Pencil, X, Smartphone, History, ListCollapse, ClipboardList, QrCode as QrCodeIcon, Hash, PenLine, RotateCcw, FileText, Building2, Phone, Eye, Calculator, Printer, Tag, Boxes, HardDrive, ShieldCheck, Maximize2, Sparkles } from "lucide-react";
 import { labQrCode, QR_TITLE_DEFAULT, QR_HINT_DEFAULT } from "@/lib/station/labQr";
 import { SettingsLayout, notifySaved } from "@/components/SettingsLayout";
 import { ReportPreview } from "@/components/station/ReportPreview";
@@ -16,6 +16,7 @@ import {
 import { InstallButton } from "@/components/station/InstallButton";
 import { TableStyleCard } from "@/components/station/TableStyleCard";
 import { ORIGINAL_HEAD, PRE_BOTTOM_DEFAULT, PRE_TOP_DEFAULT, REPORT_FONTS, type ReportHead } from "@/lib/station/reportExtras";
+import { reportDateOf, reportDateText, reportDateLabel, type ReportDate } from "@/lib/station/reportDate";
 import { ThemeCard } from "@/components/local/LocalTheme";
 import { PinCard } from "@/components/local/PinGate";
 import { SettingCard, Toggle, SubOptions, StockOptionsCard } from "@/components/local/SettingsParts";
@@ -223,6 +224,39 @@ export default function StationSettingsPage() {
                   label="طباعة النتيجة السابقة مع الجديدة"
                   desc="يضيف عمود «النتيجة السابقة» إلى جدول النتائج."
                 />
+              </SettingCard>
+
+              <SettingCard title="التاريخ والوقت" icon={<CalendarClock />} desc="ما يُطبع من التاريخ والوقت على التقرير وكيف يُعرض. الأصلي: التاريخ وحده بصيغة 2026-10-03 بجانب رقم العينة." testid="report-date-card">
+                {(() => {
+                  const d = reportDateOf(s);
+                  const setDate = (patch: Partial<ReportDate>) => setOption({ reportDate: { ...d, ...patch } });
+                  const sel = (label: string, value: string, options: [string, string][], on: (v: string) => void) => (
+                    <label className="text-xs text-muted">{label}
+                      <select value={value} onChange={(e) => on(e.target.value)} className={`mt-1 ${inp}`} aria-label={label}>
+                        {options.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
+                      </select>
+                    </label>
+                  );
+                  const sample = new Date(2026, 9, 3, 14, 5).getTime();
+                  return (
+                    <>
+                      <Toggle checked={d.show} onChange={(v) => setDate({ show: v })} label="طباعة التاريخ على التقرير" desc="عند الإيقاف لا يُطبع تاريخ ولا وقت." />
+                      {d.show && (
+                        <SubOptions grid>
+                          {sel("صيغة التاريخ", d.format, [["ymd", "2026-10-03 (الأصلي)"], ["dmy", "03/10/2026"], ["long-ar", "3 تشرين الأول 2026"], ["long-en", "3 Oct 2026"]], (v) => setDate({ format: v as ReportDate["format"] }))}
+                          {sel("الوقت", d.time, [["none", "بلا وقت (الأصلي)"], ["24h", "24 ساعة — 14:05"], ["12h", "12 ساعة — 2:05 م"]], (v) => setDate({ time: v as ReportDate["time"] }))}
+                          {sel("أي وقت", d.source, [["visit", "وقت تسجيل الزيارة (الأصلي)"], ["print", "وقت الطباعة"]], (v) => setDate({ source: v as ReportDate["source"] }))}
+                          {sel("مكانه", d.place, [["head", "أعلى التقرير بجانب رقم العينة (الأصلي)"], ["patient", "ضمن معلومات المريض"]], (v) => setDate({ place: v as ReportDate["place"] }))}
+                          {sel("العنوان قبله", d.label, [["ar", "«التاريخ:» (الأصلي)"], ["en", "«Date:»"], ["none", "بلا عنوان"]], (v) => setDate({ label: v as ReportDate["label"] }))}
+                          <p className="self-end rounded-lg bg-canvas px-3 py-2 text-sm" data-testid="report-date-example">
+                            مثال: {reportDateLabel(d)} <bdi dir={d.format === "long-ar" ? "rtl" : "ltr"} className="whitespace-pre">{reportDateText(d, sample)}</bdi>
+                          </p>
+                          <p className="text-[11px] text-muted sm:col-span-2">«وقت تسجيل الزيارة» يبقى كما هو عند إعادة طباعة زيارة قديمة؛ «وقت الطباعة» يتغيّر مع كل طباعة.</p>
+                        </SubOptions>
+                      )}
+                    </>
+                  );
+                })()}
               </SettingCard>
 
               <SettingCard title="رمز QR أسفل التقرير" icon={<QrCodeIcon />} desc="يقرؤه أي هاتف بالكاميرا مباشرة، دون تطبيق." testid="qr-card">

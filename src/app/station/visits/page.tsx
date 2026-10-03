@@ -316,6 +316,7 @@ export default function StationVisitsPage() {
             settings={settings}
             paper={paper}
             date={dayOf(sel.created_at)}
+            at={sel.created_at}
             accession={sel.accession}
             patient={sel.patient}
             referrer={sel.referrer}

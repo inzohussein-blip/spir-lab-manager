@@ -16,7 +16,8 @@ const SAMPLE: [string, string][] = [["HB", "11.2"], ["WBC", "7.4"], ["PLT", "250
 export function ReportPreview({ settings }: { settings: StationSettings }) {
   const [tests, setTests] = useState<StationTest[]>([]);
   const [date, setDate] = useState("");
-  useEffect(() => { setTests(getTests()); setDate(new Date().toLocaleDateString("en-CA")); }, []);
+  const [at, setAt] = useState<number | undefined>(undefined);
+  useEffect(() => { setTests(getTests()); const now = Date.now(); setDate(new Date(now).toLocaleDateString("en-CA")); setAt(now); }, []);
   const rows = useMemo(() => SAMPLE.flatMap(([code, value]) => {
     const t = tests.find((x) => x.code === code);
     return t ? [{ key: t.id, name: t.name_ar, value, unit: t.unit, test: t } satisfies ReportRow] : [];
@@ -27,7 +28,7 @@ export function ReportPreview({ settings }: { settings: StationSettings }) {
       <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted"><Eye className="size-4" /> معاينة الورقة (A4، بيانات تجريبية)</div>
       <div className="overflow-hidden rounded-lg border border-line bg-white">
         <div style={{ zoom: 0.5 }}>
-          <ReportSheet settings={settings} date={date} accession="LAB-PREVIEW-001" printable={false}
+          <ReportSheet settings={settings} date={date} at={at} accession="LAB-PREVIEW-001" printable={false}
             patient={{ name: "مريض تجريبي", gender: "male", age: "40", phone: "07700000000" }} referrer="د. طبيب محيل" rows={rows} />
         </div>
       </div>
