@@ -4,9 +4,9 @@ import { useEffect, useState } from "react";
 import { Monitor, Moon, Sun } from "lucide-react";
 
 /**
- * Station appearance (each station's Settings): "auto" follows the computer, or
- * force light / dark. The choice belongs to one station only — leaving it restores
- * the site-wide behaviour, and every other station keeps its own choice.
+ * Appearance of every window: light by default, dark, or "auto" (the device's setting).
+ * Each station keeps its own choice (its Settings); the welcome page's choice («lab-theme»)
+ * is for the welcome page, /license and the admin panel. Leaving a station restores that one.
  */
 export type ThemeMode = "auto" | "light" | "dark";
 const EVENT = "local-theme";
@@ -14,28 +14,23 @@ const EVENT = "local-theme";
 function getMode(key: string): ThemeMode {
   try {
     const t = localStorage.getItem(key);
-    return t === "dark" || t === "light" ? t : "auto";
+    return t === "dark" || t === "auto" ? t : "light";
   } catch {
-    return "auto";
+    return "light";
   }
 }
 function setMode(key: string, mode: ThemeMode): void {
   try {
-    if (mode === "auto") localStorage.removeItem(key);
-    else localStorage.setItem(key, mode);
+    localStorage.setItem(key, mode);
   } catch { /* ignore */ }
   window.dispatchEvent(new Event(EVENT));
 }
 
-/** The site-wide choice (same rule as the root layout's pre-paint script). */
-function siteDark(): boolean {
-  try {
-    const t = localStorage.getItem("lab-theme");
-    if (t === "dark") return true;
-    if (t === "light") return false;
-  } catch { /* ignore */ }
-  return !!window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches;
-}
+const deviceDark = () => !!window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches;
+/** Dark for a choice: light unless dark, or «تلقائي» on a dark device. */
+const isDark = (m: ThemeMode) => m === "dark" || (m === "auto" && deviceDark());
+/** The welcome page's choice (same rule as the root layout's pre-paint script). */
+const siteDark = () => isDark(getMode("lab-theme"));
 function apply(dark: boolean) {
   if (dark) document.documentElement.setAttribute("data-theme", "dark");
   else document.documentElement.removeAttribute("data-theme");
@@ -44,7 +39,7 @@ function apply(dark: boolean) {
 /** Mounted in a station layout: applies its choice, restores the site's on leave. */
 export function LocalThemeApplier({ storageKey }: { storageKey: string }) {
   useEffect(() => {
-    const run = () => { const m = getMode(storageKey); apply(m === "auto" ? siteDark() : m === "dark"); };
+    const run = () => apply(isDark(getMode(storageKey)));
     run();
     const mq = window.matchMedia?.("(prefers-color-scheme: dark)");
     window.addEventListener(EVENT, run);
@@ -60,12 +55,12 @@ export function LocalThemeApplier({ storageKey }: { storageKey: string }) {
 
 /** Three-way switch for a station's settings page. */
 export function LocalThemeSwitch({ storageKey }: { storageKey: string }) {
-  const [mode, setModeState] = useState<ThemeMode>("auto");
+  const [mode, setModeState] = useState<ThemeMode>("light");
   useEffect(() => setModeState(getMode(storageKey)), [storageKey]);
   const opts: { m: ThemeMode; label: string; icon: typeof Sun }[] = [
-    { m: "auto", label: "تلقائي (حسب الجهاز)", icon: Monitor },
     { m: "light", label: "فاتح", icon: Sun },
     { m: "dark", label: "غامق", icon: Moon },
+    { m: "auto", label: "تلقائي (حسب الجهاز)", icon: Monitor },
   ];
   return (
     <div role="radiogroup" aria-label="مظهر المحطة" className="inline-flex flex-wrap gap-1 rounded-xl border border-line bg-canvas p-1">
@@ -85,17 +80,14 @@ export function LocalThemeSwitch({ storageKey }: { storageKey: string }) {
   );
 }
 
-/**
- * The site-wide appearance (the welcome page): "auto" follows the computer, or force light / dark.
- * Every station left on «تلقائي» follows it too; a station with its own choice keeps it.
- */
+/** The welcome page's appearance (also /license and the admin panel): light by default. */
 export function SiteThemeSwitch() {
-  const [mode, setModeState] = useState<ThemeMode>("auto");
+  const [mode, setModeState] = useState<ThemeMode>("light");
   useEffect(() => setModeState(getMode("lab-theme")), []);
   const opts: { m: ThemeMode; label: string; icon: typeof Sun }[] = [
-    { m: "auto", label: "تلقائي", icon: Monitor },
     { m: "light", label: "فاتح", icon: Sun },
     { m: "dark", label: "غامق", icon: Moon },
+    { m: "auto", label: "تلقائي", icon: Monitor },
   ];
   return (
     <div role="radiogroup" aria-label="المظهر" data-testid="site-theme" className="inline-flex flex-wrap gap-1 rounded-xl border border-line bg-canvas p-1">
@@ -120,7 +112,7 @@ export function ThemeCard({ storageKey, note }: { storageKey: string; note?: str
   return (
     <div className="mb-4 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
       <div className="mb-1 text-sm font-semibold">مظهر المحطة</div>
-      <p className="mb-3 text-xs text-muted">{note ?? "الوضع الغامق يريح العين في المناوبات الليلية. يخص هذه المحطة فقط، والطباعة تبقى بيضاء دائماً."}</p>
+      <p className="mb-3 text-xs text-muted">{note ?? "الفاتح هو الافتراضي، والغامق يريح العين في المناوبات الليلية. يخص هذه المحطة فقط، والطباعة تبقى بيضاء دائماً."}</p>
       <LocalThemeSwitch storageKey={storageKey} />
     </div>
   );

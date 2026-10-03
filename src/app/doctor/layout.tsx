@@ -6,11 +6,13 @@ import { ACTIVATION_SCRIPT } from "@/lib/local/activation";
 import { LocalThemeApplier } from "@/components/local/LocalTheme";
 import { THEME_KEYS, themeScript } from "@/lib/local/theme";
 import { DoctorSidebar } from "@/components/doctors/DoctorSidebar";
+import { DoctorGate } from "@/components/doctors/DoctorGate";
 
 export const metadata = { title: "نافذة الأطباء" };
 
-/** «نافذة الأطباء»: on the doctor's own device (no lab code): the results the labs share with him
- *  by the codes they gave him. */
+/** «نافذة الأطباء»: standalone like /license — no page links here; the lab sends the address with
+ *  the doctor's activation code, and nothing opens without that code (components/doctors/DoctorGate).
+ *  On the doctor's own device (no lab code): the results the labs share with him. */
 export default function DoctorLayout({ children }: { children: ReactNode }) {
   return (
     <div className="doctor min-h-screen md:flex">
@@ -21,8 +23,10 @@ export default function DoctorLayout({ children }: { children: ReactNode }) {
       <script dangerouslySetInnerHTML={{ __html: themeScript(THEME_KEYS.doctor) }} />
       <LocalThemeApplier storageKey={THEME_KEYS.doctor} />
       <LocalDataGate>
-        <DoctorSidebar />
-        <main className="min-w-0 flex-1 p-4 md:p-7">{children}</main>
+        <DoctorGate>
+          <DoctorSidebar />
+          <main className="min-w-0 flex-1 p-4 md:p-7">{children}</main>
+        </DoctorGate>
       </LocalDataGate>
       <OfflineReady />
     </div>

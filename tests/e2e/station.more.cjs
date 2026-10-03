@@ -26,6 +26,24 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   await p.locator('[data-testid="site-theme"] button:has-text("فاتح")').click();
   ok(await p.evaluate(() => document.documentElement.getAttribute('data-theme') === null && localStorage.getItem('lab-theme') === 'light'), 'light mode');
   await p.locator('[data-testid="site-theme"] button:has-text("تلقائي")').click();
+  await p.locator('[data-testid="site-theme"] button:has-text("فاتح")').click(); // back to the default for the rest
+
+  // ── Light by default in every window, even on a device set to dark; «تلقائي» follows the device ──
+  {
+    const dctx = await b.newContext({ viewport: { width: 1300, height: 900 }, colorScheme: 'dark' });
+    const d = await dctx.newPage(); d.on('pageerror', (e) => errs.push(`dark ${e.message.slice(0, 140)}`));
+    await d.goto(B + '/welcome'); await resetLocal(d, { 'local.activation.v1': 'legacy' });
+    const look = async (path) => { await d.goto(B + path); await d.waitForTimeout(700); return d.evaluate(() => document.documentElement.getAttribute('data-theme')); };
+    const dark = [];
+    for (const path of ['/welcome', '/station', '/store', '/training', '/qc', '/roster', '/connect', '/sync', '/about', '/doctor', '/license']) if ((await look(path)) === 'dark') dark.push(path);
+    ok(dark.length === 0, `a device set to dark: every window opens light (${dark.join(', ') || 'none dark'})`);
+    await d.goto(B + '/station/settings#look'); await d.waitForSelector('[role="radiogroup"][aria-label="مظهر المحطة"]', { timeout: 20000 });
+    ok(await d.locator('[role="radiogroup"][aria-label="مظهر المحطة"] button[aria-checked="true"]').innerText() === 'فاتح', 'the station\'s switch shows «فاتح» by default');
+    await d.click('[role="radiogroup"][aria-label="مظهر المحطة"] button:has-text("تلقائي")');
+    ok(await d.evaluate(() => document.documentElement.getAttribute('data-theme')) === 'dark', '«تلقائي» follows the device (dark here)');
+    ok((await look('/station')) === 'dark' && (await look('/qc')) !== 'dark', '…in that station only');
+    await dctx.close();
+  }
   ok((await p.locator('[data-testid="about-spir"]').innerText()).includes('شركة برمجة'), 'about SPIR: a software company');
   await p.locator('[data-testid="disclaimer"] summary').click();
   ok((await p.locator('[data-testid="disclaimer"]').innerText()).includes('نحن لا نتحمل أي مسؤولية'), 'disclaimer: «نحن لا نتحمل أي مسؤولية»');

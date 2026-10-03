@@ -66,11 +66,12 @@ export function updateShare(id: string, patch: Partial<Pick<DoctorShare, "doctor
   save(shares().map((s) => (s.id === id ? { ...s, ...patch, lastHash: undefined } : s)));
   void publishAll(true);
 }
-/** A new code for the same doctor: the old one stops at once. */
+/** A new code for the same doctor: the old one stops at once (its copy must leave the server
+ *  first — offline, nothing changes and null is returned). */
 export async function renewShare(id: string): Promise<string | null> {
   const s = shares().find((x) => x.id === id);
   if (!s) return null;
-  await call({ op: "revoke", tag: s.tag });
+  if (!(await call({ op: "revoke", tag: s.tag })).ok) return null;
   const code = newDoctorCode();
   save(shares().map((x) => (x.id === id ? { ...x, ...doctorKeys(code), lastAt: undefined, lastHash: undefined, lastCount: undefined, lastError: undefined } : x)));
   void publishAll(true);
@@ -80,8 +81,7 @@ export async function renewShare(id: string): Promise<string | null> {
 export async function removeShare(id: string): Promise<boolean> {
   const s = shares().find((x) => x.id === id);
   if (!s) return true;
-  const r = await call({ op: "revoke", tag: s.tag });
-  if (!r.ok && r.error !== "off") return false;
+  if (!(await call({ op: "revoke", tag: s.tag })).ok) return false;
   save(shares().filter((x) => x.id !== id));
   return true;
 }
@@ -169,6 +169,7 @@ export const DOCTOR_ERRORS: Record<string, string> = {
   offline: "لا اتصال — يُرفع عند عودة الإنترنت.",
   unreachable: "الخادم لا يرد — تُعاد المحاولة.",
   too_big: "نتائج هذا الطبيب كبيرة جداً — اختر مدة أقصر.",
+  too_many_codes: "بلغ المختبر الحد الأقصى لرموز الأطباء (300) — أوقف رموزاً لا تُستعمل.",
   bad_token: "رمز المختبر على هذا الحاسوب غير صالح.",
   expired: "انتهى اشتراك المختبر.", stopped: "رمز المختبر موقوف.",
 };

@@ -69,10 +69,10 @@ export default async function RootLayout({
         <link rel="apple-touch-icon" href="/icon-192.png" />
         {/* Build id for the stations' offline copy (public/local-sw.js). */}
         <meta name="lab-build" content={process.env.LAB_BUILD} />
-        {/* No-flash theme: apply the saved (or system) theme before paint. */}
+        {/* No-flash theme: light unless dark (or «تلقائي» on a dark device) was chosen — before paint. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{var t=localStorage.getItem('lab-theme');if(t==='dark'||(!t&&window.matchMedia&&matchMedia('(prefers-color-scheme:dark)').matches)){document.documentElement.setAttribute('data-theme','dark')}}catch(e){}`,
+            __html: `try{var t=localStorage.getItem('lab-theme');if(t==='dark'||(t==='auto'&&window.matchMedia&&matchMedia('(prefers-color-scheme:dark)').matches)){document.documentElement.setAttribute('data-theme','dark')}}catch(e){}`,
           }}
         />
       </head>

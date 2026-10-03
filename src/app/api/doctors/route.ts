@@ -17,7 +17,9 @@ export async function POST(req: NextRequest) {
   let b: Record<string, unknown> = {};
   try { b = await req.json(); } catch { /* empty */ }
   try {
-    if (!(await doctorsOn())) return json({ ok: false, error: "off" }, 403);
+    // Stopping a code always works (also while the provider has the window off), so a stopped
+    // code's copy never waits on the server to be shown again later.
+    if (b.op !== "revoke" && !(await doctorsOn())) return json({ ok: false, error: "off" }, 403);
     if (b.op === "fetch") {
       // A wrong code is answered «not found»; many in a row from one address wait a while.
       const limit = licensingEnabled(); // the provider's site (a lab's own server is its own)

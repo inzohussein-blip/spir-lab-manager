@@ -24,12 +24,15 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   const hb = tests.find((t) => t.code === 'HB');
   ok(!!hb, 'the lab\'s test list has Hb');
   const now = Date.now();
+  // The newest visit is always today's (also when the test runs just after midnight).
+  const sinceMidnight = now - new Date(now).setHours(0, 0, 0, 0);
+  const v1Ago = Math.max(1000, Math.min(10 * 60000, sinceMidnight - 1000));
   const visit = (id, ago, name, referrer, results, phone) => ({
     id, created_at: now - ago, accession: `A-${id}`, patient: { name, gender: 'male', age: '40', ...(phone ? { phone } : {}) }, referrer,
     results: results.map((value) => ({ testId: hb.id, name_ar: hb.name_ar, value, unit: hb.unit })),
   });
   await kvPut(L, 'station.visits.v1', [
-    visit('v1', 10 * 60000, 'مريض أول', 'د. أحمد علي', ['7.5'], '07701234567'),
+    visit('v1', v1Ago, 'مريض أول', 'د. أحمد علي', ['7.5'], '07701234567'),
     visit('v2', 3 * DAY, 'مريض ثاني', 'الدكتور احمد علي', ['14']),
     visit('v3', 2 * 60 * 60000, 'مريض سامي', 'Dr Sami', ['13']),
     visit('v4', 20 * DAY, 'مريض الشهر', 'د. أحمد علي', ['12']),
@@ -64,16 +67,22 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   // ── «نافذة الأطباء» on the doctor's own device ──
   const D = await device();
   await D.goto(B + '/doctor'); await resetLocal(D);
-  await D.goto(B + '/doctor'); await D.waitForSelector('[data-testid="doctor-empty"]', { timeout: 20000 });
-  ok(await D.locator('.doctor').count() === 1 && await D.locator('aside nav a').count() === 3, 'its own look and menu (3 items)');
-  ok(await D.locator('[data-testid="pin-gate"], [role="dialog"][aria-label]').count() === 0, 'no lab code is asked for');
+  const activate = async (c) => { await D.fill('[data-testid="doctor-gate"] input[aria-label="رمز التفعيل"]', c); await D.click('[data-testid="doctor-gate"] button:has-text("تفعيل")'); };
+  for (const path of ['/doctor', '/doctor/labs', '/doctor/settings']) {
+    await D.goto(B + path); await D.waitForSelector('[data-testid="doctor-gate"]', { timeout: 20000 });
+  }
+  ok(await D.locator('aside').count() === 0 && await D.locator('a[href]').count() === 0, 'without an activation code: only the activation screen (no menu, no page, no link)');
+  ok(await D.locator('.doctor').count() === 1, 'its own look');
+  ok(await D.locator('input[aria-label="رمز المختبر"], [data-testid="pin-gate"]').count() === 0, 'no lab code is asked for');
+  await activate('ABCD-EFGH-JKMN');
+  ok(await until(async () => (await D.locator('[data-testid="doctor-gate-error"]').innerText()).includes('لا نتائج لهذا الرمز')), 'a wrong code is refused');
+  await activate(` ${code.toLowerCase().replace(/-/g, ' ')} `);
+  await D.waitForSelector('aside nav a', { timeout: 20000 });
+  ok(await D.locator('[data-testid="doctor-gate"]').count() === 0 && await D.locator('aside nav a').count() === 3, 'the code (typed in small letters with spaces) activates the account: the window and its menu (3 items)');
   ok(await D.locator('aside a[href="/welcome"]').count() === 0, 'no link to the lab\'s stations');
-  await D.goto(B + '/doctor/labs'); await D.waitForSelector('[data-testid="add-lab"]', { timeout: 20000 });
-  await D.fill('input[aria-label="رمز الطبيب"]', 'ABCD-EFGH-JKMN'); await D.click('[data-testid="add-lab"] button:has-text("إضافة")');
-  ok(await until(async () => (await D.locator('[data-testid="add-lab-msg"]').innerText()).includes('لا نتائج لهذا الرمز')), 'a wrong code is refused');
-  await D.fill('input[aria-label="رمز الطبيب"]', ` ${code.toLowerCase().replace(/-/g, ' ')} `); await D.click('[data-testid="add-lab"] button:has-text("إضافة")');
-  ok(await until(async () => (await D.locator('[data-testid="add-lab-msg"]').innerText()).includes('مختبر الاختبار')), 'the code (typed in small letters with spaces) adds the lab by its name');
+  ok((await kv(D, 'doctor.labs.v1'))[0].name === 'مختبر الاختبار', 'the lab is known by its name');
   ok(!JSON.stringify(await kv(D, 'doctor.labs.v1')).includes(code), 'the doctor\'s device keeps what comes from the code, not the code');
+  await D.goto(B + '/doctor/labs'); await D.waitForSelector('[data-testid="add-lab"]', { timeout: 20000 });
   await D.fill('input[aria-label="رمز الطبيب"]', code); await D.click('[data-testid="add-lab"] button:has-text("إضافة")');
   ok(await until(async () => (await D.locator('[data-testid="add-lab-msg"]').innerText()).includes('مضاف مسبقاً')), 'the same lab is not added twice');
 
@@ -114,45 +123,58 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   ok((await D.locator('[data-testid="report-phone"]').innerText()).includes('07701234567'), 'the phone shows when the lab allows it');
   await D.click('button:has-text("رجوع")');
 
+  // ── «رمز جديد» offline: nothing changes (the old code would keep working) ──
+  const tagBefore = (await kv(L, 'doctors.shares.v1'))[0].tag;
+  const alerts = []; L.on('dialog', (dl) => { if (dl.type() === 'alert') alerts.push(dl.message()); });
+  await L.context().setOffline(true);
+  await L.click('[data-testid="doctor-share"] button:has-text("رمز جديد")');
+  ok(await until(async () => alerts.some((m) => m.includes('تعذّر إيقاف الرمز القديم'))), 'offline: «رمز جديد» says the old code could not be stopped');
+  ok((await kv(L, 'doctors.shares.v1'))[0].tag === tagBefore, '…and keeps the code as it was');
+  await L.context().setOffline(false);
+
   // ── «رمز جديد»: the old code stops at once ──
   await L.click('[data-testid="doctor-share"] button:has-text("رمز جديد")');
   ok(await until(async () => (await L.locator('[data-testid="doctor-code"]').innerText()).trim() !== code), 'a new code is shown');
   const code2 = (await L.locator('[data-testid="doctor-code"]').innerText()).trim();
   ok(await until(async () => (await kv(L, 'doctors.shares.v1'))[0].lastAt > 0), 'the new code\'s copy is uploaded');
   await D.click('[data-testid="doctor-refresh"]');
-  ok(await until(async () => (await D.locator('[data-testid="lab-error"]').count()) === 1 && (await D.locator('[data-testid="doctor-visit"]').count()) === 0), 'with the old code the doctor sees nothing more, and why');
-  await D.goto(B + '/doctor/labs'); await D.waitForSelector('[data-testid="doctor-lab"]', { timeout: 20000 });
-  await D.click('[data-testid="doctor-lab"] button:has-text("إزالة")');
-  await D.fill('input[aria-label="رمز الطبيب"]', code2); await D.click('[data-testid="add-lab"] button:has-text("إضافة")');
-  ok(await until(async () => (await D.locator('[data-testid="add-lab-msg"]').innerText()).includes('4 نتيجة')), 'the new code opens the results');
-
-  // ── «إيقاف الرمز» ──
-  const tag2 = (await kv(L, 'doctors.shares.v1'))[0].tag;
-  await L.click('[data-testid="doctor-share"] button:has-text("إيقاف الرمز")');
-  ok(await until(async () => ((await kv(L, 'doctors.shares.v1')) || []).length === 0), 'the code is stopped');
-  const gone = await L.evaluate(async (tag) => (await fetch('/api/doctors', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ op: 'fetch', tag }) })).status, tag2);
-  ok(gone === 404, 'its copy left the server');
-
-  // ── The doctor leaves the device ──
-  await D.goto(B + '/doctor/settings#leave'); await D.waitForSelector('[data-testid="doctor-leave"]', { timeout: 20000 });
-  ok(await D.locator('[data-testid="settings-layout"]').count() === 1, 'the settings page');
-  await D.click('[data-testid="doctor-leave"] button:has-text("خروج")');
-  ok(await until(async () => ((await kv(D, 'doctor.labs.v1')) || []).length === 0), '«خروج» forgets the labs and results on this device');
+  ok(await until(async () => (await D.locator('[data-testid="doctor-gate-stopped"]').count()) === 1 && (await D.locator('aside').count()) === 0), 'with the old code the window closes: the activation screen, saying the code was stopped');
+  await activate(code2);
+  ok(await until(async () => (await D.locator('[data-testid="doctor-visit"]').count()) === 4), 'the new code opens the results');
+  ok((await kv(D, 'doctor.labs.v1')).length === 1, 'the stopped code\'s lab leaves the device');
 
   // ── A PIN on the doctor's device; forgotten: clear the device instead of asking a provider ──
   await D.goto(B + '/doctor/settings#look'); await D.waitForSelector('[data-testid="pin-card"]', { timeout: 20000 });
   await D.click('[data-testid="pin-card"] button:has-text("تفعيل رمز الدخول")');
   await D.fill('input[aria-label="الرمز الجديد"]', '2468'); await D.fill('input[aria-label="تأكيد الرمز"]', '2468');
   await D.click('[data-testid="pin-card"] button:has-text("حفظ الرمز")');
-  await kvPut(D, 'doctor.labs.v1', [{ id: 'x1', tag: 'a'.repeat(40), key: 'k', name: 'مختبر محفوظ', addedAt: 1 }]);
   const D2 = await D.context().newPage(); D2.on('pageerror', (e) => errs.push(`D2 ${e.message.slice(0, 140)}`)); D2.on('dialog', (d) => d.accept());
   await D2.goto(B + '/doctor'); await D2.waitForSelector('[data-testid="pin-gate"]', { timeout: 20000 });
   ok(true, 'a new window asks for the doctor\'s PIN');
   await D2.click('[data-testid="pin-gate"] button:has-text("نسيت الرمز؟")');
   ok(await D2.locator('[data-testid="pin-gate"] button:has-text("تحديث من المزوّد")').count() === 0, 'no provider to ask on a doctor\'s device');
   await D2.click('[data-testid="doctor-pin-reset"]');
-  ok(await until(async () => (await D2.locator('[data-testid="pin-gate"]').count()) === 0), 'forgotten PIN: removed…');
-  ok(((await kv(D2, 'doctor.labs.v1')) || []).length === 0, '…with the labs and results on the device');
+  ok(await until(async () => (await D2.locator('[data-testid="pin-gate"]').count()) === 0 && (await D2.locator('[data-testid="doctor-gate"]').count()) === 1), 'forgotten PIN: removed, back to the activation screen…');
+  ok(((await kv(D2, 'doctor.labs.v1')) || []).length === 0, '…with the labs and results gone from the device');
+  await D2.close();
+
+  // ── The doctor leaves the device ──
+  await D.goto(B + '/doctor'); await D.waitForSelector('[data-testid="doctor-gate"]', { timeout: 20000 });
+  await activate(code2); await D.waitForSelector('aside nav a', { timeout: 20000 });
+  await D.goto(B + '/doctor/settings#leave'); await D.waitForSelector('[data-testid="doctor-leave"]', { timeout: 20000 });
+  ok(await D.locator('[data-testid="settings-layout"]').count() === 1, 'the settings page');
+  await D.click('[data-testid="doctor-leave"] button:has-text("خروج")');
+  ok(await until(async () => ((await kv(D, 'doctor.labs.v1')) || []).length === 0 && (await D.locator('[data-testid="doctor-gate"]').count()) === 1), '«خروج» forgets the labs and results and shows the activation screen');
+
+  // ── «إيقاف الرمز»: the doctor's window closes ──
+  await activate(code2); await D.waitForSelector('aside nav a', { timeout: 20000 });
+  const tag2 = (await kv(L, 'doctors.shares.v1'))[0].tag;
+  await L.click('[data-testid="doctor-share"] button:has-text("إيقاف الرمز")');
+  ok(await until(async () => ((await kv(L, 'doctors.shares.v1')) || []).length === 0), 'the code is stopped');
+  const gone = await L.evaluate(async (tag) => (await fetch('/api/doctors', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ op: 'fetch', tag }) })).status, tag2);
+  ok(gone === 404, 'its copy left the server');
+  await D.goto(B + '/doctor');
+  ok(await until(async () => (await D.locator('[data-testid="doctor-gate-stopped"]').count()) === 1), 'the doctor\'s window closes (activation screen)');
   ok(errs.length === 0, `no page errors${errs.length ? ': ' + errs.join(' | ') : ''}`);
   await b.close();
   done('doctors');

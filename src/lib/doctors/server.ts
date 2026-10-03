@@ -10,6 +10,8 @@ import { okTag } from "./code";
  */
 const DAY = 86_400_000;
 export const MAX_BOX = 4_000_000;
+/** Doctor codes one lab keeps on the server (each copy up to MAX_BOX). */
+export const MAX_PER_LAB = 300;
 
 let ready: Promise<void> | null = null;
 function ensureTable(): Promise<void> {
@@ -43,9 +45,15 @@ export async function publish(scope: string, tag: unknown, box: unknown) {
   await ensureTable();
   const cur = await query<{ scope: string }>(`select scope from doctor_shares where tag = $1`, [tag]);
   if (cur[0] && cur[0].scope !== scope) return { ok: false, error: "taken" };
+  if (!cur[0]) {
+    const n = await query<{ n: string }>(`select count(*) as n from doctor_shares where scope = $1`, [scope]);
+    if (Number(n[0]?.n ?? 0) >= MAX_PER_LAB) return { ok: false, error: "too_many_codes" };
+  }
   const at = Date.now();
-  await query(`insert into doctor_shares (tag, scope, at, box) values ($1, $2, $3, $4)
-    on conflict (tag) do update set at = excluded.at, box = excluded.box`, [tag, scope, at, box]);
+  // Only the lab that left a copy replaces it (also when two uploads race).
+  const done = await query<{ tag: string }>(`insert into doctor_shares (tag, scope, at, box) values ($1, $2, $3, $4)
+    on conflict (tag) do update set at = excluded.at, box = excluded.box where doctor_shares.scope = excluded.scope returning tag`, [tag, scope, at, box]);
+  if (!done.length) return { ok: false, error: "taken" };
   if (Math.random() < 0.05) await query(`delete from doctor_shares where at < $1`, [at - 90 * DAY]);
   return { ok: true, at };
 }

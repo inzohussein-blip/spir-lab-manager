@@ -52,16 +52,18 @@ const TAG = Date.now().toString(36);
 
   // ── The doctor's device: no lab code ──
   const d = await computer(null, 'doctor');
-  await d.goto(B + '/doctor/labs'); await d.waitForSelector('[data-testid="add-lab"]', { timeout: 20000 });
+  await d.goto(B + '/doctor/labs'); await d.waitForSelector('[data-testid="doctor-gate"]', { timeout: 20000 });
   await d.waitForTimeout(1500);
-  ok(await d.locator('input[aria-label="رمز المختبر"]').count() === 0, 'the doctors\' window asks for no lab code');
+  ok(await d.locator('input[aria-label="رمز المختبر"]').count() === 0 && await d.locator('a[href]').count() === 0, 'the doctors\' window asks for no lab code, only its activation code (no link anywhere)');
   ok(await d.evaluate(() => localStorage.getItem('local.activation.v1')) === 'pending', 'the doctor\'s browser is marked new (its offline copy does not count as an older station\'s data)');
-  await d.fill('input[aria-label="رمز الطبيب"]', code); await d.click('[data-testid="add-lab"] button:has-text("إضافة")');
-  ok(await until(async () => (await d.locator('[data-testid="add-lab-msg"]').innerText()).includes('1 نتيجة')), 'the doctor adds the lab and gets the result');
+  await d.fill('[data-testid="doctor-gate"] input[aria-label="رمز التفعيل"]', code); await d.click('[data-testid="doctor-gate"] button:has-text("تفعيل")');
+  await d.waitForSelector('[data-testid="doctor-lab"]', { timeout: 20000 });
+  ok((await d.locator('[data-testid="doctor-lab"]').innerText()).includes('1 نتيجة'), 'the doctor activates the account with the code and gets the result');
+  // Standalone like /license: nothing leads to it.
   await d.goto(B + '/welcome'); await d.waitForSelector('input[aria-label="رمز المختبر"]', { timeout: 45000 });
-  ok(await d.locator('[data-testid="doctor-window-link"]').count() === 1, 'the activation window leads a doctor to his window');
+  ok(await d.locator('a[href^="/doctor"]').count() === 0, 'neither the welcome page nor its activation window leads to the doctors\' window');
   await d.goto(B + '/station'); await d.waitForSelector('input[aria-label="رمز المختبر"]', { timeout: 45000 });
-  ok(await d.locator('[data-testid="doctor-window-link"]').count() === 0, '…from the welcome page only (a station leads nowhere else)');
+  ok(await d.locator('a[href^="/doctor"]').count() === 0, '…nor a station');
   // «عن التطبيق» first, then the stations: still asked for a lab code (its offline copy is not older data).
   const v = await computer(null, 'visitor');
   await v.goto(B + '/about'); await v.waitForTimeout(1500);
@@ -95,6 +97,22 @@ const TAG = Date.now().toString(36);
   let last = 0;
   for (let i = 0; i < 32; i++) last = (await post(d, { op: 'fetch', tag: (i.toString(16).padStart(2, '0') + TAG).padEnd(40, 'e').replace(/[^0-9a-f]/g, 'e') })).status;
   ok(last === 429, `many wrong codes in a row are slowed down (${last})`);
+
+  // ── Stopping a code while the provider has the window off: its copy still leaves the server ──
+  await prefsSave(false);
+  await a.goto(B + '/sync/doctors'); await a.waitForSelector('[data-testid="doctor-share"]', { timeout: 20000 });
+  await a.click('[data-testid="doctor-share"] button:has-text("إيقاف الرمز")');
+  ok(await until(async () => ((await kv(a, 'doctors.shares.v1')) || []).length === 0), 'a code can be stopped while the window is off');
+  await prefsSave(true);
+  ok((await post(a, { op: 'fetch', tag })).status === 404, '…and its copy is gone when the window is on again');
+
+  // ── At most 300 doctor codes per lab on the server ──
+  const pb = await proof(bb);
+  const box = 'x'.repeat(40);
+  let lastPub = null;
+  for (let i = 0; i < 301; i++) lastPub = await post(bb, { op: 'publish', tag: (i.toString(16).padStart(4, '0') + 'b'.repeat(36)), box, ...pb });
+  ok(lastPub.ok === false && lastPub.error === 'too_many_codes', `the 301st code of one lab is refused (${lastPub.error})`);
+  ok((await post(bb, { op: 'publish', tag: '0000' + 'b'.repeat(36), box: 'y'.repeat(40), ...pb })).ok === true, '…an existing one still updates');
 
   ok(errs.length === 0, `no page errors${errs.length ? ': ' + errs.join(' | ') : ''}`);
   await b.close();
