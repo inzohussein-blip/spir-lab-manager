@@ -24,12 +24,15 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   const hb = tests.find((t) => t.code === 'HB');
   ok(!!hb, 'the lab\'s test list has Hb');
   const now = Date.now();
+  // The newest visit is always today's (also when the test runs just after midnight).
+  const sinceMidnight = now - new Date(now).setHours(0, 0, 0, 0);
+  const v1Ago = Math.max(1000, Math.min(10 * 60000, sinceMidnight - 1000));
   const visit = (id, ago, name, referrer, results, phone) => ({
     id, created_at: now - ago, accession: `A-${id}`, patient: { name, gender: 'male', age: '40', ...(phone ? { phone } : {}) }, referrer,
     results: results.map((value) => ({ testId: hb.id, name_ar: hb.name_ar, value, unit: hb.unit })),
   });
   await kvPut(L, 'station.visits.v1', [
-    visit('v1', 10 * 60000, 'مريض أول', 'د. أحمد علي', ['7.5'], '07701234567'),
+    visit('v1', v1Ago, 'مريض أول', 'د. أحمد علي', ['7.5'], '07701234567'),
     visit('v2', 3 * DAY, 'مريض ثاني', 'الدكتور احمد علي', ['14']),
     visit('v3', 2 * 60 * 60000, 'مريض سامي', 'Dr Sami', ['13']),
     visit('v4', 20 * DAY, 'مريض الشهر', 'د. أحمد علي', ['12']),
