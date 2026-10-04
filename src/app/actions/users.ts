@@ -4,8 +4,9 @@ import { revalidatePath } from "next/cache";
 import { query } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { logAudit } from "@/lib/audit";
+import { ensureDesk } from "@/lib/desk/schema";
 
-const ROLES = ["admin", "technician", "reception"];
+const ROLES = ["admin", "technician", "reception", "collector"];
 
 async function requireAdmin(): Promise<boolean> {
   const u = await getCurrentUser();
@@ -19,6 +20,7 @@ export async function createUser(formData: FormData): Promise<void> {
   const full_name = String(formData.get("full_name") || "").trim();
   const role = String(formData.get("role") || "technician");
   if (!username || !password || !full_name || !ROLES.includes(role)) return;
+  await ensureDesk(); // «ساحب الدم» is a role added later (migration 0030)
   await query(
     `insert into app_users (username, password_hash, full_name, role)
      values ($1, crypt($2, gen_salt('bf')), $3, $4)
@@ -34,6 +36,7 @@ export async function setUserRole(formData: FormData): Promise<void> {
   const id = String(formData.get("user_id") || "");
   const role = String(formData.get("role") || "");
   if (!id || !ROLES.includes(role)) return;
+  await ensureDesk();
   await query(`update app_users set role = $1 where id = $2`, [role, id]);
   await logAudit("user.role", "user", id, { role });
   revalidatePath("/users");

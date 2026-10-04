@@ -22,8 +22,10 @@ const PAY_METHOD: Record<string, string> = {
 
 /** Reception receipt (وصل) — a compact printable slip listing the ordered
  *  tests, their prices, the total, and the payment status. */
-export default async function ReceiptPage(props: { params: Promise<{ id: string }> }) {
+export default async function ReceiptPage(props: { params: Promise<{ id: string }>; searchParams: Promise<{ back?: string }> }) {
   const params = await props.params;
+  // Opened from «نافذة ساحب الدم»: back to it (the collector has no other page).
+  const back = (await props.searchParams).back === "collect" ? "/collect" : `/orders/${params.id}`;
   const order = await queryOne<any>(
     `select o.accession_no, o.order_date, o.total_amount, o.payment_status,
             o.payment_method, p.full_name, p.gender, p.age_years,
@@ -46,13 +48,18 @@ export default async function ReceiptPage(props: { params: Promise<{ id: string 
     [params.id]
   );
   const barcode = order.accession_no ? await barcodeSvg(order.accession_no) : "";
+  // The bill as charged (discount, what was paid, what remains), when the sample has an invoice.
+  const bill = await queryOne<{ subtotal: number; discount: number; total: number; paid: number }>(
+    `select subtotal, discount, total, paid from invoices where order_id = $1 and status <> 'void' order by created_at limit 1`,
+    [params.id]
+  ).catch(() => null);
 
   return (
     <div>
       <div className="no-print mb-4 flex gap-2">
         <PrintButton />
-        <Button href={`/orders/${params.id}`} variant="ghost">
-          فتح الطلب
+        <Button href={back} variant="ghost">
+          {back === "/collect" ? "رجوع" : "فتح الطلب"}
         </Button>
       </div>
 
@@ -103,10 +110,36 @@ export default async function ReceiptPage(props: { params: Promise<{ id: string 
 
         <div className="my-3 border-t border-dashed border-gray-400" />
 
+        {bill && Number(bill.discount) > 0 && (
+          <>
+            <div className="flex items-center justify-between text-[12px]">
+              <span>المجموع</span>
+              <span className="tabular-nums">{money(bill.subtotal)} د.ع</span>
+            </div>
+            <div className="flex items-center justify-between text-[12px]" data-testid="receipt-discount">
+              <span>الخصم</span>
+              <span className="tabular-nums">{money(bill.discount)} د.ع</span>
+            </div>
+          </>
+        )}
         <div className="flex items-center justify-between text-sm font-bold">
           <span>الإجمالي</span>
-          <span className="tabular-nums">{money(order.total_amount)} د.ع</span>
+          <span className="tabular-nums" data-testid="receipt-total">{money(bill ? bill.total : order.total_amount)} د.ع</span>
         </div>
+        {bill && (
+          <>
+            <div className="mt-1 flex items-center justify-between text-[12px]">
+              <span>المدفوع</span>
+              <span className="tabular-nums" data-testid="receipt-paid">{money(bill.paid)} د.ع</span>
+            </div>
+            {Number(bill.total) - Number(bill.paid) > 0 && (
+              <div className="flex items-center justify-between text-[12px] font-bold">
+                <span>المتبقي</span>
+                <span className="tabular-nums" data-testid="receipt-left">{money(Number(bill.total) - Number(bill.paid))} د.ع</span>
+              </div>
+            )}
+          </>
+        )}
         <div className="mt-1 flex items-center justify-between text-[12px]">
           <span>حالة الدفع</span>
           <span>

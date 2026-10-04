@@ -6,6 +6,9 @@ import {
 import { query, queryOne } from "@/lib/db";
 import { PageHeader, StatTile, Card, Button } from "@/components/ui/primitives";
 import { money } from "@/lib/utils";
+import { redirect } from "next/navigation";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { MyDay } from "@/components/desk/MyDay";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +20,9 @@ const QUICK_ACTIONS = [
 ];
 
 export default async function DashboardPage() {
+  // «ساحب الدم» has his own window only.
+  const me = await getCurrentUser();
+  if (me?.role === "collector") redirect("/collect");
   const [today, queues, lowStock, expiring, recent] = await Promise.all([
     queryOne<{ visits: number; income: number }>(
       `select count(*)::int as visits, coalesce(sum(total_amount),0) as income
@@ -47,6 +53,7 @@ export default async function DashboardPage() {
         title="لوحة التحكم"
         subtitle="نظرة سريعة على نشاط المختبر اليوم"
       />
+      <MyDay role={me?.role ?? ""} />
 
       {/* Quick actions */}
       <div className="mb-4 flex flex-wrap gap-2">

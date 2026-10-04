@@ -4,11 +4,11 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
-import { LabMark } from "@/components/Sidebar";
+import { LabMark, NavBadge, type NavBadges } from "@/components/Sidebar";
 import { navForRole } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 
-export function MobileNav({ role, lab }: { role: string; lab: { name: string; logo: string } }) {
+export function MobileNav({ role, lab, badges = {} }: { role: string; lab: { name: string; logo: string }; badges?: NavBadges }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const groups = navForRole(role);
@@ -68,6 +68,7 @@ export function MobileNav({ role, lab }: { role: string; lab: { name: string; lo
                         >
                           <item.icon className="size-4.5 shrink-0" />
                           {item.label}
+                          <NavBadge b={badges[item.href]} />
                         </Link>
                       );
                     })}

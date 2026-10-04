@@ -1,6 +1,8 @@
 import { query } from "@/lib/db";
 import { PageHeader, Card, Button } from "@/components/ui/primitives";
-import { addStaff, addCoverShift } from "@/app/actions/staff";
+import { addStaff, addCoverShift, setSalary } from "@/app/actions/staff";
+import { StaffTabs } from "@/components/StaffTabs";
+import { ensureOps } from "@/lib/desk/schema";
 
 export const dynamic = "force-dynamic";
 
@@ -8,9 +10,10 @@ const field =
   "w-full rounded-lg border border-line px-3 py-2 text-sm outline-none focus:border-brand";
 
 export default async function StaffPage() {
+  await ensureOps();
   const [staff, covers] = await Promise.all([
     query<any>(
-      `select id, full_name, role, phone from staff where is_active order by full_name`
+      `select id, full_name, role, phone, salary from staff where is_active order by full_name`
     ),
     query<any>(
       `select c.cover_date, c.reason,
@@ -24,7 +27,8 @@ export default async function StaffPage() {
 
   return (
     <div>
-      <PageHeader title="الكادر والبدلاء" subtitle="القسم 6 — سجل العاملين والبدلاء" />
+      <PageHeader title="الكادر والبدلاء" subtitle="سجل العاملين ورواتبهم والبدلاء" />
+      <StaffTabs active="/staff" />
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <div className="mb-3 font-semibold">سجل الكادر</div>
@@ -34,6 +38,7 @@ export default async function StaffPage() {
                 <th className="py-2 font-medium">الاسم</th>
                 <th className="py-2 font-medium">الدور</th>
                 <th className="py-2 font-medium">الهاتف</th>
+                <th className="py-2 font-medium">الراتب الشهري</th>
               </tr>
             </thead>
             <tbody>
@@ -42,6 +47,14 @@ export default async function StaffPage() {
                   <td className="py-2 font-medium">{s.full_name}</td>
                   <td className="py-2">{s.role ?? "—"}</td>
                   <td className="py-2 text-muted">{s.phone ?? "—"}</td>
+                  <td className="py-2">
+                    <form action={setSalary} className="flex items-center gap-1">
+                      <input type="hidden" name="staff_id" value={s.id} />
+                      <input name="salary" type="number" min="0" defaultValue={Number(s.salary) || ""} placeholder="0" aria-label={`راتب ${s.full_name}`}
+                        className="w-24 rounded-lg border border-line px-2 py-1 text-sm tabular-nums" />
+                      <button className="rounded-lg bg-brand-light px-2 py-1 text-xs font-semibold text-brand-dark">حفظ</button>
+                    </form>
+                  </td>
                 </tr>
               ))}
             </tbody>

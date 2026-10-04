@@ -109,6 +109,11 @@ const settingsReady = (pg) => pg.waitForFunction(() => document.querySelectorAll
   const P1 = 'مريض المختبر الأول ' + TAG;
   await addPatient(p, P1);
   ok(await lists(p, P1), 'lab 1 saves a patient in its section');
+  // The windows added later work in a lab's section too (their tables come with its migrations).
+  for (const [path, sel] of [['/lab', '[data-testid="lab-queue"]'], ['/collect', '[data-testid="desk-tests"]'], ['/quality', '[data-testid="quality-board"]'], ['/staff/payroll', '[data-testid="payroll"]'], ['/referrers/codes', '[data-testid="doctor-codes"]']]) {
+    await p.goto(B + path);
+    ok(await p.waitForSelector(sel, { timeout: 20000 }).then(() => true, () => false), `lab 1's section: ${path} opens`);
+  }
   ok(await firstRun(p2, 'nbadmin', 'nb-pass-1'), 'lab 2 creates its own first admin');
   ok(!(await lists(p2, P1)) && !(await lists(p2, SAMPLE)), 'lab 2 sees neither lab 1\'s patients nor the shared data');
   ok(!(await signInOn(p2, 'secadmin', 'sec-pass-1')), 'lab 1\'s account does not open lab 2\'s panel');

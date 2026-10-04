@@ -24,17 +24,21 @@ import {
   Wallet,
   HandCoins,
   Percent,
+  Syringe,
+  Upload,
+  KeyRound,
+  Microscope,
   type LucideIcon,
 } from "lucide-react";
 
-export type Role = "admin" | "technician" | "reception";
-export const ALL_ROLES: Role[] = ["admin", "technician", "reception"];
+export type Role = "admin" | "technician" | "reception" | "collector";
+export const ALL_ROLES: Role[] = ["admin", "technician", "reception", "collector"];
 
 export interface NavItem {
   href: string;
   label: string;
   icon: LucideIcon;
-  // Roles allowed to see/use this item; omitted = all roles.
+  // Roles allowed to see/use this item; omitted = every role but «ساحب الدم» (who has only his window).
   roles?: Role[];
 }
 
@@ -45,12 +49,15 @@ export interface NavGroup {
 
 const LAB = ["admin", "technician"] as Role[]; // lab bench + management
 const FIN = ["admin", "reception"] as Role[]; // front-office / billing
+const COLLECT = ["admin", "reception", "collector"] as Role[]; // the blood collector's desk
 
 export const NAV_GROUPS: NavGroup[] = [
   {
     label: "الرئيسية",
     items: [
       { href: "/", label: "لوحة التحكم", icon: LayoutDashboard },
+      { href: "/collect", label: "نافذة ساحب الدم", icon: Syringe, roles: COLLECT },
+      { href: "/lab", label: "نافذة المختبر", icon: Microscope, roles: LAB },
       { href: "/orders/new", label: "طلب فحص جديد", icon: ClipboardPlus },
       { href: "/insights", label: "لوحة التحليلات", icon: BarChart3, roles: FIN },
     ],
@@ -92,6 +99,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/appointments", label: "المواعيد", icon: CalendarClock },
       { href: "/referrers", label: "الأطباء المُحيلون", icon: Stethoscope },
       { href: "/referrers/commissions", label: "حصص الأطباء", icon: Percent, roles: FIN },
+      { href: "/referrers/codes", label: "رموز الأطباء", icon: KeyRound, roles: ["admin"] },
     ],
   },
   {
@@ -102,16 +110,24 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/audit", label: "سجل التدقيق", icon: ShieldCheck, roles: ["admin"] },
       { href: "/tools", label: "الأدوات", icon: Wrench },
       { href: "/settings", label: "الإعدادات", icon: Settings, roles: ["admin"] },
+      { href: "/settings/import", label: "استيراد من المحطات", icon: Upload, roles: ["admin"] },
     ],
   },
 ];
 
 export const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((g) => g.items);
 
-/** Items visible to a given role (undefined roles = allowed). */
+/** Whether a role may use an item (no roles listed = every role but the collector). */
+export const allows = (it: NavItem, role: string): boolean =>
+  role === "admin" || (it.roles ? it.roles.includes(role as Role) : role !== "collector");
+
+/** Items visible to a given role. */
 export function navForRole(role: string): NavGroup[] {
   return NAV_GROUPS.map((g) => ({
     label: g.label,
-    items: g.items.filter((it) => !it.roles || it.roles.includes(role as Role)),
+    items: g.items.filter((it) => allows(it, role)),
   })).filter((g) => g.items.length > 0);
 }
+
+/** Where a role starts after signing in. */
+export const homeFor = (role: string): string => (role === "collector" ? "/collect" : "/");

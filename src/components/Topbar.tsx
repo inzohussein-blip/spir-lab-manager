@@ -8,13 +8,14 @@ import { NewButton } from "@/components/NewButton";
 import { MobileNav } from "@/components/MobileNav";
 import { SyncStatus } from "@/components/offline/SyncStatus";
 import type { SessionUser } from "@/lib/auth/session";
+import type { NavBadges } from "@/components/Sidebar";
 
-export function Topbar({ user, lab }: { user: SessionUser; lab: { name: string; logo: string } }) {
+export function Topbar({ user, lab, badges }: { user: SessionUser; lab: { name: string; logo: string }; badges?: NavBadges }) {
   return (
     <header className="no-print sticky top-0 z-20 flex h-14 items-center justify-between gap-3 border-b border-line bg-surface/90 px-4 backdrop-blur md:px-7">
       <div className="flex flex-1 items-center gap-3">
-        <MobileNav role={user.role} lab={lab} />
-        <NewButton />
+        <MobileNav role={user.role} lab={lab} badges={badges} />
+        {user.role !== "collector" && <NewButton />}
         <div className="hidden flex-1 sm:block">
           <CommandPalette role={user.role} />
         </div>
