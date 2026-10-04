@@ -17,7 +17,13 @@ function Submit() {
 
 /** First visit to a lab's new database: its first admin account. */
 export function FirstRunForm() {
-  const [state, action] = useFormState(firstRunAction, {});
+  // Signed in: the panel opens with a full page load (its frame differs from this page's), at once —
+  // the page behind this form changes as soon as the account exists.
+  const [state, action] = useFormState(async (prev: { error?: string; to?: string; username?: string; full_name?: string }, fd: FormData) => {
+    const r = await firstRunAction(prev, fd);
+    if (r.to) window.location.replace(r.to);
+    return r;
+  }, {});
   return (
     <div className="flex min-h-screen items-center justify-center bg-canvas p-4">
       <div data-testid="first-run" className="w-full max-w-sm rounded-2xl border border-line bg-surface p-7 shadow-[var(--shadow-pop)]">
@@ -27,8 +33,8 @@ export function FirstRunForm() {
           <p className="text-sm text-muted">قاعدة بيانات مختبرك جديدة وليس فيها حسابات بعد. أنشئ حساب المدير الأول — تضيف بعده باقي المستخدمين من «المستخدمون».</p>
         </div>
         <form action={action} className="flex flex-col gap-3">
-          <label className="text-sm font-medium">الاسم الكامل<input name="full_name" className={field} placeholder="مدير المختبر" /></label>
-          <label className="text-sm font-medium">اسم المستخدم<input name="username" dir="ltr" autoComplete="username" className={field} /></label>
+          <label className="text-sm font-medium">الاسم الكامل<input name="full_name" defaultValue={state.full_name ?? ""} className={field} placeholder="مدير المختبر" /></label>
+          <label className="text-sm font-medium">اسم المستخدم<input name="username" defaultValue={state.username ?? ""} dir="ltr" autoComplete="username" className={field} /></label>
           <label className="text-sm font-medium">كلمة المرور<input name="password" type="password" dir="ltr" autoComplete="new-password" className={field} /></label>
           <label className="text-sm font-medium">تأكيد كلمة المرور<input name="again" type="password" dir="ltr" autoComplete="new-password" className={field} /></label>
           {state?.error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{state.error}</p>}

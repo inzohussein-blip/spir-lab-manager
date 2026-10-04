@@ -53,7 +53,7 @@ export default async function CommissionsPage(props: { searchParams: Promise<{ m
           <StatTile label="المفوتر عليها" value={`${money(rows.reduce((s, r) => s + Number(r.billed), 0))} د.ع`} tone="brand" />
           <StatTile label="مجموع الحصص" value={`${money(totalShare)} د.ع`} tone="warn" icon={<Percent className="size-5" />} />
         </div>
-        <Card className="p-0">
+        <Card className="p-0 data-table">
           {rows.length === 0 ? <EmptyState icon={<Stethoscope className="size-6" />} title="لا أطباء بعد" hint="أضف الأطباء من «الأطباء المُحيلون»." /> : (
             <table className="w-full text-sm" data-testid="commissions-list">
               <thead className="border-b border-line text-right text-muted">

@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Check, Save, WifiOff } from "lucide-react";
 import { useOffline } from "@/components/offline/OfflineProvider";
+import { formPlain } from "@/lib/station/formPlain";
 
 const field =
   "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
@@ -122,6 +123,21 @@ export function ResultEntry({
       else toast.success("حُفظت النتيجة");
       setSaved(true);
     });
+  }
+
+  // A written result (Positive, a titer, a report form…) entered in «نافذة المختبر»: shown here as it
+  // is — this page only takes numbers, and saving from it would replace the result.
+  if (!item.is_special && item.value_text != null) {
+    return (
+      <div className="rounded-2xl border border-brand/40 bg-surface p-5 shadow-[var(--shadow-card)]" data-testid="result-text">
+        <div className="mb-2 flex items-center gap-2">
+          <span className="grid size-5 place-items-center rounded-full bg-brand text-white"><Check className="size-3" strokeWidth={3} /></span>
+          <span className="font-semibold">{item.name_ar}</span>
+        </div>
+        <div className="rounded-lg bg-canvas px-3 py-2 text-sm font-semibold" dir="auto">{formPlain(item.value_text)}</div>
+        <p className="mt-2 text-xs text-muted">نتيجة نصية من «نافذة المختبر» — تُعدَّل هناك.</p>
+      </div>
+    );
   }
 
   return (

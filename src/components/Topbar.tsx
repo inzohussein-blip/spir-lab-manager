@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { LogOut, Home } from "lucide-react";
 import { logoutAction } from "@/app/actions/auth";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -23,16 +22,16 @@ export function Topbar({ user, lab, badges }: { user: SessionUser; lab: { name: 
       </div>
       <div className="flex items-center gap-1">
         <SyncStatus />
-        <Link href="/welcome" title="الصفحة الرئيسية" aria-label="الصفحة الرئيسية" data-testid="admin-home"
+        <a href="/welcome" title="الصفحة الرئيسية" aria-label="الصفحة الرئيسية" data-testid="admin-home"
           className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-muted hover:bg-canvas hover:text-ink">
           <Home className="size-4" />
           <span className="hidden lg:inline">الصفحة الرئيسية</span>
-        </Link>
+        </a>
         <span className="hidden text-sm text-muted md:inline">
           مرحباً، <span className="font-semibold text-ink">{user.full_name}</span>
         </span>
         <ThemeToggle />
-        <form action={logoutAction}>
+        <form action={async () => { await logoutAction(); window.location.replace("/login"); }}>
           <button
             type="submit"
             className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-muted hover:bg-canvas hover:text-ink"

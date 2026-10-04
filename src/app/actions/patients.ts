@@ -1,11 +1,13 @@
 "use server";
 
+import { hasRole } from "@/lib/auth/guard";
 import { revalidatePath } from "next/cache";
 import { query } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
 
 /** Insert a patient and return its id (no redirect, so it is offline-replayable). */
 export async function createPatient(formData: FormData): Promise<{ id: string } | null> {
+  if (!(await hasRole("technician", "reception"))) return null; // the role's pages only (see lib/nav.ts)
   const full_name = String(formData.get("full_name") || "").trim();
   if (!full_name) return null;
   const rows = await query<{ id: string }>(

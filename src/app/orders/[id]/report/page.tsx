@@ -8,6 +8,7 @@ import Link from "next/link";
 import { getLabIdentity, getReportLook, labLogo, labName } from "@/lib/lab-identity";
 import { tableColors } from "@/lib/station/tableStyle";
 import { categoryEn } from "@/lib/categoryEn";
+import { formPlain } from "@/lib/station/formPlain";
 import { PrintButton } from "@/components/PrintButton";
 import { WhatsAppButton } from "@/components/WhatsAppButton";
 import { ReportImageButton } from "@/components/ReportImageButton";
@@ -242,7 +243,7 @@ export default async function ReportPage(
                     </td>
                     <td className="py-2">
                       <span className={it.flag === "H" || it.flag === "L" ? "font-bold" : ""}>
-                        {it.value_numeric ?? it.value_text ?? (it.is_special ? t.details : "—")}
+                        {it.value_numeric ?? (it.value_text != null ? formPlain(it.value_text) : null) ?? (it.is_special ? t.details : "—")}
                       </span>
                     </td>
                     <td className="py-2 text-gray-600">{it.unit ?? "—"}</td>

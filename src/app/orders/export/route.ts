@@ -1,5 +1,7 @@
 import { NextRequest } from "next/server";
 import { query } from "@/lib/db";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { canAccess } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +26,9 @@ function csvCell(v: unknown): string {
 /** Export the (optionally filtered) sample registry as CSV — same filters as
  *  the /orders page. UTF-8 BOM so Arabic opens correctly in Excel. */
 export async function GET(req: NextRequest) {
+  // A real sign-in with access to the sample log (the middleware only sees that a cookie is there).
+  const user = await getCurrentUser();
+  if (!user || !canAccess("/orders", user.role)) return new Response("forbidden", { status: 403 });
   const sp = req.nextUrl.searchParams;
   const q = (sp.get("q") || "").trim();
   const status = sp.get("status") || "";

@@ -1,5 +1,6 @@
 "use server";
 
+import { hasRole } from "@/lib/auth/guard";
 import { query, queryOne } from "@/lib/db";
 import { cloudApiConfigured, sendCloudMessage, waLink } from "@/lib/whatsapp";
 import { logAudit } from "@/lib/audit";
@@ -12,6 +13,7 @@ import { logAudit } from "@/lib/audit";
 export async function sendReportWhatsApp(
   orderId: string
 ): Promise<{ ok: boolean; link?: string; error?: string; via: string }> {
+  if (!(await hasRole("technician", "reception"))) return { ok: false, error: "لا تملك الصلاحية.", via: "none" }; // the role's pages only (see lib/nav.ts)
   const row = await queryOne<any>(
     `select o.patient_id, p.full_name, p.phone,
             (select qr_token from reports where order_id = o.id limit 1) as token

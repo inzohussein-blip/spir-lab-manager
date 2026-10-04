@@ -13,6 +13,8 @@ import { LabDbProblem } from "@/components/LabDbProblem";
 import { ErrorReporter } from "@/components/ErrorReporter";
 import { getLabIdentity, labName } from "@/lib/lab-identity";
 import { navBadges } from "@/lib/desk/badges";
+import { isBarePath } from "@/lib/barePaths";
+import { LayoutGuard } from "@/components/LayoutGuard";
 // Arabic UI font bundled with the app (no Google Fonts request) — works offline.
 import "@fontsource/ibm-plex-sans-arabic/arabic-400.css";
 import "@fontsource/ibm-plex-sans-arabic/arabic-500.css";
@@ -38,18 +40,7 @@ export default async function RootLayout({
   const pathname = (await headers()).get("x-pathname") ?? "";
   // The login screen and the standalone Lab Station render without the main
   // app chrome (the station brings its own sidebar and needs no session).
-  const isBare =
-    pathname === "/login" ||
-    pathname.startsWith("/login/") ||
-    pathname === "/welcome" ||
-    pathname.startsWith("/station") ||
-    pathname.startsWith("/store") ||
-    pathname.startsWith("/training") ||
-    pathname.startsWith("/qc") ||
-    pathname.startsWith("/roster") ||
-    pathname.startsWith("/connect") ||
-    pathname.startsWith("/doctor") ||
-    pathname.startsWith("/license");
+  const isBare = isBarePath(pathname);
   const isLogin = pathname === "/login" || pathname.startsWith("/login/");
   // The lab's own database (when its code has one) must answer before the panel can open.
   const dbProblem = !isBare || isLogin ? await labDbProblem() : null;
@@ -80,6 +71,7 @@ export default async function RootLayout({
       </head>
       <body className="min-h-screen">
         <Toaster position="top-center" richColors />
+        <LayoutGuard />
         <ErrorReporter />
         {dbProblem ? (
           <LabDbProblem code={dbProblem.code} host={dbProblem.host} />

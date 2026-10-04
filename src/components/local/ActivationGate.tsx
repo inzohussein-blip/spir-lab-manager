@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { KeyRound, Lock, WifiOff, Clock, ArrowRight, RefreshCw, X, MessageSquare } from "lucide-react";
 import {
-  evaluate, fetchEnabled, refreshLicense, activateCode, cachedContact, providerMessage, WARN_DAYS, cachedSignup, type LicenseState,
+  evaluate, fetchEnabled, refreshLicense, activateCode, cachedContact, providerMessage, WARN_DAYS, cachedSignup, LICENSE_EVENT, type LicenseState,
 } from "@/lib/license/client";
 import { moduleLabel, type LicenseModule } from "@/lib/license/modules";
 
@@ -34,7 +34,10 @@ export function useLicense(module?: LicenseModule) {
       await boot;
       if (alive) await run();
     })();
-    return () => { alive = false; };
+    // A code entered or renewed on this page (the activation window): every card re-checks at once.
+    const again = () => { void run(); };
+    window.addEventListener(LICENSE_EVENT, again);
+    return () => { alive = false; window.removeEventListener(LICENSE_EVENT, again); };
   }, [run]);
   return { state, recheck: run };
 }

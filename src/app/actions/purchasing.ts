@@ -1,5 +1,6 @@
 "use server";
 
+import { hasRole } from "@/lib/auth/guard";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { query, queryOne } from "@/lib/db";
@@ -9,6 +10,7 @@ type Line = { product_id?: string; description?: string; quantity: number; unit_
 
 /** Create a purchase order with line items. Lines arrive as a JSON string. */
 export async function createPurchaseOrder(formData: FormData): Promise<void> {
+  if (!(await hasRole("technician"))) return; // the role's pages only (see lib/nav.ts)
   const supplierId = (formData.get("supplier_id") as string) || null;
   let lines: Line[] = [];
   try {
@@ -52,6 +54,7 @@ export async function createPurchaseOrder(formData: FormData): Promise<void> {
 /** Receive a purchase order: increment stock for each product line + log
  *  movements, then mark received. */
 export async function receivePurchaseOrder(formData: FormData): Promise<void> {
+  if (!(await hasRole("technician"))) return; // the role's pages only (see lib/nav.ts)
   const poId = String(formData.get("po_id") || "");
   if (!poId) return;
   const po = await queryOne<any>(`select status from purchase_orders where id = $1`, [poId]);
@@ -82,6 +85,7 @@ export async function receivePurchaseOrder(formData: FormData): Promise<void> {
 }
 
 export async function cancelPurchaseOrder(formData: FormData): Promise<void> {
+  if (!(await hasRole("technician"))) return; // the role's pages only (see lib/nav.ts)
   const poId = String(formData.get("po_id") || "");
   if (!poId) return;
   await query(`update purchase_orders set status = 'cancelled' where id = $1 and status <> 'received'`, [poId]);

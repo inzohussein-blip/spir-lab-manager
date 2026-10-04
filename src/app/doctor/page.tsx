@@ -8,6 +8,7 @@ import { WINDOW_LABEL } from "@/lib/doctors/code";
 import { card, btn } from "@/components/sync/parts";
 import { PageHead } from "@/components/sync/ui";
 import { cn, fmtDate, fmtDateTime } from "@/lib/utils";
+import { formPlain } from "@/lib/station/formPlain";
 
 const DAY = 86_400_000;
 type Period = "all" | "today" | "week" | "month";
@@ -169,7 +170,7 @@ function Report({ row, onBack }: { row: Row; onBack: () => void }) {
               <tr key={i} className="border-b border-line/60" data-testid="report-result">
                 <td className="py-1.5">{r.name}</td>
                 <td className={cn("py-1.5 font-semibold", r.flag === "H" && "flag-H", r.flag === "L" && "flag-L", r.hl && "underline")}>
-                  {r.value}{r.flag === "H" || r.flag === "L" ? ` ${r.flag}` : ""}
+                  {formPlain(r.value)}{r.flag === "H" || r.flag === "L" ? ` ${r.flag}` : ""}
                 </td>
                 <td className="py-1.5 text-muted">{r.unit ?? ""}</td>
                 {anyRange && <td className="py-1.5 text-muted">{r.range ?? ""}</td>}

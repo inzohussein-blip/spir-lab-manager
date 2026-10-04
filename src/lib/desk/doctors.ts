@@ -6,6 +6,7 @@ import { doctorsOn, publish, revoke } from "@/lib/doctors/server";
 import { doctorKeys, sealSnapshot, WINDOW_DAYS, type DoctorSnapshot, type DoctorVisit, type DoctorWindow } from "@/lib/doctors/code";
 import { getLabIdentity, labName } from "@/lib/lab-identity";
 import { ensureOps } from "./schema";
+import { formPlain } from "@/lib/station/formPlain";
 
 /**
  * «نافذة الأطباء» fed from the admin panel: each referring doctor's code is kept in the lab's
@@ -47,7 +48,7 @@ async function snapshot(row: CodeRow): Promise<DoctorSnapshot> {
     results: results.filter((r) => r.order_id === o.id).map((r) => {
       const range = r.normal_low != null || r.normal_high != null ? `${r.normal_low ?? ""} – ${r.normal_high ?? ""}`.trim() : r.normal_text || undefined;
       return {
-        name: r.name_ar, value: r.value_text ?? String(Number(r.value_numeric)), ...(r.unit ? { unit: r.unit } : {}),
+        name: r.name_ar, value: r.value_text != null ? formPlain(r.value_text) : String(Number(r.value_numeric)), ...(r.unit ? { unit: r.unit } : {}),
         ...(range ? { range } : {}), ...(r.flag ? { flag: r.flag } : {}), ...(r.hl ? { hl: true } : {}),
       };
     }),

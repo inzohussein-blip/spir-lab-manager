@@ -83,9 +83,9 @@ export function Sidebar({ role, lab, badges = {} }: { role: string; lab: { name:
         ))}
       </nav>
       <div className="mt-auto border-t border-line px-3 py-3">
-        <Link href="/welcome" className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted hover:bg-canvas hover:text-ink" data-testid="sidebar-home">
+        <a href="/welcome" className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted hover:bg-canvas hover:text-ink" data-testid="sidebar-home">
           <Home className="size-4.5 shrink-0" /> الصفحة الرئيسية
-        </Link>
+        </a>
       </div>
     </aside>
   );

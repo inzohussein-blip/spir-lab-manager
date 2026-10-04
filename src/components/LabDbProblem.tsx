@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { DatabaseZap } from "lucide-react";
 import { adminDbError } from "@/lib/db/labErrors";
 import { NeedsDbGate } from "./NeedsDbGate";
@@ -21,7 +20,7 @@ export function LabDbProblem({ code, host }: { code: string; host: string }) {
         </p>
         <div className="flex justify-center gap-2">
           <a href="" className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark">إعادة المحاولة</a>
-          <Link href="/welcome" className="rounded-lg border border-line px-4 py-2 text-sm hover:bg-canvas">الصفحة الرئيسية</Link>
+          <a href="/welcome" className="rounded-lg border border-line px-4 py-2 text-sm hover:bg-canvas">الصفحة الرئيسية</a>
         </div>
       </div>
     </div>
