@@ -22,10 +22,13 @@ export interface PurchaseItem {
   qty: number;
   /** Price of one (item or kit): the line total ÷ the quantity. */
   unitPrice: number;
-  /** The line's total as typed («السعر الإجمالي»); older lines have only qty × unitPrice. */
+  /** The line's total as typed («المجموع»); older lines have only qty × unitPrice. */
   total?: number;
   /** A kit bought (its contents go to the stock room, see Kit). */
   kitId?: string;
+  /** Optional: the batch's expiry date (YYYY-MM-DD) and lot number, also noted on the stock item. */
+  expiry?: string;
+  lot?: string;
 }
 
 /** A kit: one purchasable package holding several stock items, e.g. «كت السكر» = 4 × «كاشف
@@ -207,28 +210,47 @@ function changeStock(moves: { id: string; qty: number }[], reason: "purchase" | 
  *  (with no quantity yet, then the purchase's); a kit's parts, each times the kits bought. The
  *  item's unit price follows the purchase (a kit's, when it holds one item). Returns what was added. */
 export function addToStock(items: PurchaseItem[], ref?: string): { id: string; qty: number }[] {
-  const lines = items.map((it) => ({ name: it.name.trim(), qty: Number(it.qty) || 0, price: Number(it.unitPrice) || 0, kitId: it.kitId }))
+  const lines = items.map((it) => ({ name: it.name.trim(), qty: Number(it.qty) || 0, price: Number(it.unitPrice) || 0, kitId: it.kitId, expiry: it.expiry, lot: it.lot }))
     .filter((x) => x.name && x.qty > 0);
   if (!lines.length) return [];
   const stock = getStock();
   const kits = getKits();
   const fresh: typeof stock = [];
   const prices = new Map<string, number>();
+  // The batch's expiry and lot on the item: the nearest expiry is the one to watch.
+  const batch = new Map<string, { expiry?: string; lot?: string }>();
+  const note = (id: string, x: { expiry?: string; lot?: string }) => {
+    if (!x.expiry && !x.lot) return;
+    const b = batch.get(id) ?? {};
+    batch.set(id, { expiry: x.expiry && (!b.expiry || x.expiry < b.expiry) ? x.expiry : b.expiry, lot: x.lot || b.lot });
+  };
   const added = lines.flatMap((x) => {
     // Only a line bought as a kit is opened into its contents.
     const kit = x.kitId ? kits.find((k) => k.id === x.kitId) ?? kits.find((k) => key(k.name) === key(x.name)) : undefined;
     if (kit) {
       const parts = kit.parts.filter((p) => stock.some((s) => s.id === p.stockId) && p.qty > 0);
       if (parts.length === 1 && x.price > 0) prices.set(parts[0].stockId, Math.round((x.price / parts[0].qty) * 100) / 100);
+      for (const p of parts) note(p.stockId, x);
       return parts.map((p) => ({ id: p.stockId, qty: p.qty * x.qty }));
     }
     let item = stock.find((s) => key(s.name) === key(x.name)) ?? fresh.find((s) => key(s.name) === key(x.name));
     if (!item) { item = { id: uid(), name: x.name, qty: 0 }; fresh.push(item); }
     if (x.price > 0) prices.set(item.id, x.price);
+    note(item.id, x);
     return [{ id: item.id, qty: x.qty }];
   });
   if (fresh.length) saveStock([...stock, ...fresh]);
   changeStock(added, "purchase", ref, prices);
+  if (batch.size) {
+    saveStock(getStock().map((s) => {
+      const b = batch.get(s.id);
+      if (!b) return s;
+      // Stock left from before keeps its expiry when it comes sooner; otherwise the new batch's.
+      const before = Number(s.qty) - added.filter((a) => a.id === s.id).reduce((t, a) => t + a.qty, 0);
+      const expiry = b.expiry && (!s.expiry || before <= 0 || b.expiry < s.expiry) ? b.expiry : s.expiry;
+      return { ...s, ...(expiry ? { expiry } : {}), ...(b.lot ? { lot: b.lot } : {}) };
+    }), "edit", ref);
+  }
   return added;
 }
 export function getPurchase(id: string): Purchase | null {
