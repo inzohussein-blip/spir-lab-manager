@@ -915,6 +915,7 @@ function StationEntryPage() {
         settings={settings}
         paper={paper}
         date={today}
+        at={createdAt ?? nowMs ?? undefined}
         accession={accession || undefined}
         patient={{ name, gender, age, phone }}
         referrer={referrer || undefined}

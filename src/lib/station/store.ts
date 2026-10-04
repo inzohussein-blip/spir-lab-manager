@@ -253,6 +253,8 @@ export interface StationSettings {
   /** Logo placement and watermark — off by default (the original letterhead). */
   reportHeadOn?: boolean;
   reportHead?: Partial<import("./reportExtras").ReportHead>;
+  /** The date (and time) on the printed report and how it shows (lib/station/reportDate; the original when unset). */
+  reportDate?: Partial<import("./reportDate").ReportDate>;
   /** The report's font — off by default (the app's font). */
   reportFontOn?: boolean;
   reportFont?: string;

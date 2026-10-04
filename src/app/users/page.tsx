@@ -5,7 +5,7 @@ import { PageHeader, Card, Button } from "@/components/ui/primitives";
 export const dynamic = "force-dynamic";
 
 const field = "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
-const roleLabel: Record<string, string> = { admin: "مدير", technician: "فني", reception: "استقبال" };
+const roleLabel: Record<string, string> = { admin: "مدير", technician: "فني", reception: "استقبال", collector: "ساحب الدم" };
 
 export default async function UsersPage() {
   const users = await query<any>(
@@ -25,6 +25,7 @@ export default async function UsersPage() {
           <select name="role" className={field} defaultValue="technician">
             <option value="technician">فني</option>
             <option value="reception">استقبال</option>
+            <option value="collector">ساحب الدم</option>
             <option value="admin">مدير</option>
           </select>
           <div className="lg:col-span-4"><Button>إضافة</Button></div>

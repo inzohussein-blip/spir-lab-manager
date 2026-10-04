@@ -108,6 +108,34 @@ const IMG = '/lab-images/test/أنبوب اختبار.png';
   ok(await sig.count() === 1 && (await sig.innerText()).includes('د. محلل الفحص') && await sig.locator('img').count() === 2, 'report shows the signature (with name) and the stamp');
   ok(await sig.locator('img').first().evaluate((i) => new Promise((r) => { if (i.complete) return r(i.naturalWidth > 0); i.onload = () => r(true); i.onerror = () => r(false); })), 'the signature image loads');
 
+  // ── «التاريخ والوقت» on the printed report (Settings → التقرير المطبوع) ──
+  const reportDate = async (where) => (await where.locator('[data-testid="report-date"]').innerText()).replace(/\s+/g, ' ').trim();
+  const z = (n) => String(n).padStart(2, '0');
+  const times = ((await kv(p, 'station.visits.v1')) || []).map((v) => new Date(v.created_at));
+  const first = await reportDate(p);
+  ok(times.some((d) => first === `التاريخ: ${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}`) && await p.locator('[data-testid="report-patient"] [data-testid="report-date"]').count() === 0, `as before by default: «${first}» at the top, no time`);
+  await p.goto(B + '/station/settings#report'); await p.waitForSelector('[data-testid="report-date-card"]', { timeout: 20000 });
+  const card = p.locator('[data-testid="report-date-card"]');
+  await card.locator('select[aria-label="صيغة التاريخ"]').selectOption('long-ar');
+  await card.locator('select[aria-label="الوقت"]').selectOption('12h');
+  await card.locator('select[aria-label="مكانه"]').selectOption('patient');
+  ok((await card.locator('[data-testid="report-date-example"]').innerText()).replace(/\s+/g, ' ').includes('3 تشرين الأول 2026 2:05 م'), 'the example shows the chosen form (3 تشرين الأول 2026 2:05 م)');
+  const prev = p.locator('[data-testid="settings-preview"]');
+  ok(await prev.locator('[data-testid="report-patient"] [data-testid="report-date"]').count() === 1 && /التاريخ: \d{1,2} \S+( \S+)? \d{4} \d{1,2}:\d{2} [صم]/.test(await reportDate(prev.locator('[data-testid="report-patient"]'))), 'the preview: the date with the time, inside the patient\'s details');
+  await card.locator('select[aria-label="العنوان قبله"]').selectOption('en');
+  await card.locator('select[aria-label="صيغة التاريخ"]').selectOption('dmy');
+  await card.locator('select[aria-label="الوقت"]').selectOption('24h');
+  await card.locator('select[aria-label="مكانه"]').selectOption('head');
+  const saved = (await kv(p, 'station.settings.v1')).reportDate;
+  ok(saved.format === 'dmy' && saved.time === '24h' && saved.place === 'head' && saved.label === 'en', 'the choices are saved');
+  await p.goto(B + '/station/visits'); await p.waitForSelector('text=مراجع رقم 0', { timeout: 15000 });
+  await p.click('button:has-text("عرض/طباعة")'); await p.waitForTimeout(500);
+  const again = await reportDate(p);
+  ok(times.some((d) => again === `Date: ${z(d.getDate())}/${z(d.getMonth() + 1)}/${d.getFullYear()} ${z(d.getHours())}:${z(d.getMinutes())}`), `a reprint shows the visit's own date and time (${again})`);
+  await p.goto(B + '/station/settings#report'); await p.waitForSelector('[data-testid="report-date-card"]', { timeout: 20000 });
+  await p.locator('[data-testid="report-date-card"] label:has-text("طباعة التاريخ على التقرير") button[role=switch]').click();
+  ok((await kv(p, 'station.settings.v1')).reportDate.show === false && await p.locator('[data-testid="settings-preview"] [data-testid="report-date"]').count() === 0, 'the date can be left off the report');
+
   ok(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.join(' | ') : ''));
   await b.close();
   done();

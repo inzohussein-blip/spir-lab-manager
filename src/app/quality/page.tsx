@@ -1,6 +1,11 @@
 import { query, queryOne } from "@/lib/db";
 import { addQcRun } from "@/app/actions/quality";
 import { PageHeader, Card, Button, StatTile } from "@/components/ui/primitives";
+import { QualityBoard } from "@/components/quality/QualityBoard";
+import { ensureOps } from "@/lib/desk/schema";
+import type { Analyte, QcResult, TempUnit, TempReading, Device } from "@/lib/qc/store";
+
+const day = (v: unknown) => String(v ?? "").slice(0, 10);
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +18,28 @@ const statusTone: Record<string, string> = {
 };
 
 export default async function QualityPage() {
+  await ensureOps();
+  const [aRows, rRows, uRows, tRows, dRows, lRows, today] = await Promise.all([
+    query<any>(`select id, name, unit, device, levels, active from qc_analytes order by name`),
+    query<any>(`select id, analyte_id, level_id, run_date, value, mean, sd, by_name, note, at from qc_results where run_date >= current_date - 400 order by run_date`),
+    query<any>(`select id, name, kind, min_c, max_c from temp_units order by name`),
+    query<any>(`select id, unit_id, read_date, slot, value, by_name, action from temp_readings where read_date >= current_date - 62`),
+    query<any>(`select id, name, model, serial, calib_months, last_calib, tasks from lab_devices order by name`),
+    query<any>(`select id, device_id, log_date, type, text, action, downtime, resolved, by_name from device_logs order by log_date desc, at desc limit 500`),
+    queryOne<{ d: string }>(`select current_date::text as d`),
+  ]);
+  const analytes: Analyte[] = aRows.map((r) => ({ id: r.id, name: r.name, unit: r.unit ?? undefined, device: r.device ?? undefined, levels: r.levels ?? [], active: r.active }));
+  const results: QcResult[] = rRows.map((r) => ({
+    id: r.id, analyteId: r.analyte_id, levelId: r.level_id, date: day(r.run_date), at: new Date(r.at).getTime(), value: Number(r.value),
+    mean: r.mean == null ? undefined : Number(r.mean), sd: r.sd == null ? undefined : Number(r.sd), by: r.by_name ?? undefined, note: r.note ?? undefined,
+  }));
+  const units: TempUnit[] = uRows.map((r) => ({ id: r.id, name: r.name, kind: r.kind ?? "", min: Number(r.min_c), max: Number(r.max_c) }));
+  const temps: TempReading[] = tRows.map((r) => ({ id: r.id, unitId: r.unit_id, date: day(r.read_date), slot: r.slot, value: Number(r.value), by: r.by_name ?? undefined, action: r.action ?? undefined }));
+  const devices: Device[] = dRows.map((r) => ({
+    id: r.id, name: r.name, model: r.model ?? undefined, serial: r.serial ?? undefined, calibMonths: r.calib_months ?? undefined, lastCalib: r.last_calib ? day(r.last_calib) : undefined,
+    tasks: r.tasks ?? [],
+    log: lRows.filter((l) => l.device_id === r.id).map((l) => ({ id: l.id, date: day(l.log_date), type: l.type, text: l.text, action: l.action ?? undefined, downtime: l.downtime == null ? undefined : Number(l.downtime), resolved: l.resolved, by: l.by_name ?? undefined })),
+  }));
   const [runs, summary] = await Promise.all([
     query<any>(`select * from qc_runs order by run_at desc limit 100`),
     queryOne<any>(
@@ -26,7 +53,8 @@ export default async function QualityPage() {
 
   return (
     <div>
-      <PageHeader title="مراقبة الجودة (QC)" subtitle="تشغيل المحاليل الضابطة ومتابعة الأداء" />
+      <PageHeader title="مراقبة الجودة (QC)" subtitle="السيطرة اليومية بقواعد Westgard ومخطط Levey-Jennings، ودرجات الحرارة، والأجهزة" />
+      <QualityBoard today={today?.d ?? ""} analytes={analytes} results={results} units={units} temps={temps} devices={devices} quick={<>
 
       <div className="mb-6 grid gap-4 sm:grid-cols-3">
         <StatTile label="نسبة القبول (30 يوماً)" value={`${rate}%`} tone={rate < 90 ? "warn" : "brand"} />
@@ -76,6 +104,7 @@ export default async function QualityPage() {
           </tbody>
         </table>
       </Card>
+      </>} />
     </div>
   );
 }

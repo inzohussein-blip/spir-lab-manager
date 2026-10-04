@@ -18,7 +18,19 @@ export function LabMark({ lab, className }: { lab: { name: string; logo: string 
   );
 }
 
-export function Sidebar({ role, lab }: { role: string; lab: { name: string; logo: string } }) {
+export type NavBadges = Record<string, { n: number; urgent?: boolean }>;
+
+/** What is waiting behind a menu item (samples in the lab, results to hand over, low stock…). */
+export function NavBadge({ b }: { b?: { n: number; urgent?: boolean } }) {
+  if (!b?.n) return null;
+  return (
+    <span data-testid="nav-badge" className={cn("ms-auto rounded-full px-1.5 text-[11px] font-bold tabular-nums", b.urgent ? "bg-red-600 text-white" : "bg-brand-light text-brand-dark")}>
+      {b.n > 99 ? "99+" : b.n}
+    </span>
+  );
+}
+
+export function Sidebar({ role, lab, badges = {} }: { role: string; lab: { name: string; logo: string }; badges?: NavBadges }) {
   const pathname = usePathname();
   const groups = navForRole(role);
 
@@ -61,6 +73,7 @@ export function Sidebar({ role, lab }: { role: string; lab: { name: string; logo
                   >
                     <item.icon className="size-4.5 shrink-0" />
                     {item.label}
+                    <NavBadge b={badges[item.href]} />
                   </Link>
                 );
               })}

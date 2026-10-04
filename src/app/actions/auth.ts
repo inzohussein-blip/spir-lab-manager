@@ -5,6 +5,7 @@ import { verifyCredentials } from "@/lib/auth/current-user";
 import { createSession, destroySession } from "@/lib/auth/session";
 import { queryOne } from "@/lib/db";
 import { labTarget } from "@/lib/db/lab";
+import { homeFor } from "@/lib/nav";
 
 export async function loginAction(
   _prev: { error?: string } | undefined,
@@ -20,7 +21,7 @@ export async function loginAction(
     return { error: "بيانات الدخول غير صحيحة" };
   }
   await createSession(user);
-  redirect("/");
+  redirect(homeFor(user.role));
 }
 
 export async function logoutAction(): Promise<void> {

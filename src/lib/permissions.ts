@@ -1,4 +1,4 @@
-import { NAV_ITEMS } from "@/lib/nav";
+import { NAV_ITEMS, allows } from "@/lib/nav";
 
 /**
  * Server-side access check: can this role open this path? Detail routes inherit
@@ -7,7 +7,10 @@ import { NAV_ITEMS } from "@/lib/nav";
  */
 export function canAccess(pathname: string, role: string): boolean {
   if (role === "admin") return true;
-  if (pathname === "/") return true;
+  if (pathname === "/") return true; // the collector is sent on to his window by the page itself
+
+  // The collector prints his receipts and tube labels.
+  if (role === "collector" && /^\/orders\/[^/]+\/(receipt|label)$/.test(pathname)) return true;
 
   let match: (typeof NAV_ITEMS)[number] | null = null;
   for (const it of NAV_ITEMS) {
@@ -16,6 +19,6 @@ export function canAccess(pathname: string, role: string): boolean {
       if (!match || it.href.length > match.href.length) match = it;
     }
   }
-  if (!match) return true;
-  return !match.roles || match.roles.includes(role as any);
+  if (!match) return role !== "collector" || /^\/(login|verify|api)(\/|$)/.test(pathname);
+  return allows(match, role);
 }

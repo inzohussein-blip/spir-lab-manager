@@ -3,6 +3,7 @@ import { query } from "@/lib/db";
 import { PageHeader, Card, Button, StatTile } from "@/components/ui/primitives";
 import { addReagent, restock } from "@/app/actions/inventory";
 import { cn } from "@/lib/utils";
+import { InventoryTabs } from "@/components/InventoryTabs";
 
 export const dynamic = "force-dynamic";
 
@@ -43,8 +44,9 @@ export default async function InventoryPage() {
     <div>
       <PageHeader
         title="المخزون والكواشف"
-        subtitle="القسم 3 — يُخصم تلقائياً عند إجراء الفحوصات"
+        subtitle="يُخصم تلقائياً عند طلب الفحوص المرتبطة بها (كتالوج الفحوصات ← المادة المستهلكة)"
       />
+      <InventoryTabs active="/inventory" />
 
       <div className="mb-4 grid gap-4 sm:grid-cols-3">
         <StatTile label="إجمالي الأصناف" value={products.length} icon={<Boxes className="size-5" />} />

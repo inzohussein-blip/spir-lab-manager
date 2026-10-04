@@ -45,7 +45,7 @@ const { B, ok, launch, done } = require('./lib.cjs');
 
   // The day's cash box.
   await p.goto(B + '/cashbox'); await p.waitForSelector('[data-testid="cashbox"]', { timeout: 20000 });
-  ok((await p.locator('[data-testid="cashbox-in"]').innerText()).includes(name), 'cash box: the payment is in today\'s money in');
+  ok((await p.locator('[data-testid="cashbox-in"]').allInnerTexts()).join(' ').includes(name), 'cash box: the payment is in today\'s money in');
   await p.fill('[data-testid="cashbox-add-expense"] input[name="title"]', 'كهرباء التجربة');
   await p.fill('[data-testid="cashbox-add-expense"] input[name="amount"]', '1000');
   await p.click('[data-testid="cashbox-add-expense"] button'); await p.waitForTimeout(1000);
