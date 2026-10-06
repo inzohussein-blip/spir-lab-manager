@@ -149,6 +149,34 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   await scan('6291041500213'); await scan('6291041500213'); await scan('6291041500213');
   ok(await p.locator('input[aria-label="المعدود كاشف السكر"]').inputValue() === '3', 'stocktake: each scan counts one');
 
+  // ── The supplier's invoice number, a GS1 box code, and an ordered purchase (received later) ──
+  await p.goto(B + '/store'); await p.waitForSelector('[data-testid="purchase-new"]', { timeout: 20000 }); await p.click('[data-testid="purchase-new"]');
+  await p.waitForSelector('[data-testid="scan-box"]', { timeout: 20000 });
+  ok(await p.locator('[data-testid="camera-scan"]').count() === 1, 'purchases: the camera scan button is beside the scan box');
+  await p.fill('input[aria-label="المورّد"]', 'مورّد الكواشف');
+  await p.fill('input[aria-label="رقم فاتورة المورّد"]', 'INV-77');
+  await scan('(01)06291041509999(17)271231(10)LOT9');
+  ok(await p.locator('input[aria-label="اللوت"]').first().inputValue() === 'LOT9' && await p.locator('input[aria-label="الاكسباير"]').first().inputValue() === '2027-12-31', 'a GS1 box code fills the line\'s lot and expiry');
+  await p.fill('input[placeholder="الصنف"]', 'كاشف الصفراء');
+  await p.locator('input[aria-label="العدد"]').first().fill('3');
+  await p.locator('input[aria-label="المجموع"]').first().fill('9000');
+  await p.check('input[aria-label="طلبية بانتظار الاستلام"]');
+  await p.click('button:has-text("حفظ العملية")');
+  const ord = async () => ((await kv(p, 'purchasing.purchases.v1')) || []).find((x) => x.supplierRef === 'INV-77');
+  ok(await settled(async () => !!(await ord())) && (await ord()).ordered === true && (await ord()).items[0].gtin === '06291041509999', 'saved as ordered, with the supplier\'s invoice number and the box code');
+  ok(!(await stock()).some((s) => s.name === 'كاشف الصفراء'), 'an ordered purchase brings nothing into the stock room');
+  ok((await p.locator('li[data-purchase]').first().innerText()).includes('بانتظار الاستلام') && (await p.locator('li[data-purchase]').first().innerText()).includes('INV-77'), 'the list shows it as waiting, with the invoice number');
+  ok(!(await p.locator('[data-testid="purchase-totals"]').innerText()).includes('9,000'), 'and it is not counted as spending yet');
+  await p.click('[data-testid="purchase-receive"]');
+  ok(await settled(async () => (await ord())?.ordered !== true) && await settled(async () => !!(await stock()).find((s) => s.name === 'كاشف الصفراء')), '«استلام»: the purchase is received');
+  const gall = (await stock()).find((s) => s.name === 'كاشف الصفراء');
+  ok(gall?.qty === 3 && gall.lot === 'LOT9' && gall.expiry === '2027-12-31' && gall.barcode === '06291041509999', 'its lines went into the stock room with lot, expiry and the box code as the item\'s barcode');
+  ok((await p.locator('[data-testid="purchase-totals"]').innerText()).includes('9,000'), 'and now counts as spending');
+  await p.goto(B + '/store'); await p.waitForSelector('[data-testid="purchase-new"]', { timeout: 20000 }); await p.click('[data-testid="purchase-new"]');
+  await p.waitForSelector('[data-testid="scan-box"]', { timeout: 20000 });
+  await scan('(01)06291041509999(17)281130(10)LOT10');
+  ok(await p.locator('input[placeholder="الصنف"]').first().inputValue() === 'كاشف الصفراء' && await p.locator('input[aria-label="اللوت"]').first().inputValue() === 'LOT10', 'the next scan of that box finds the item by its code, with the new lot');
+
   ok(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.slice(0, 3).join(' | ') : ''));
   await b.close();
   done();

@@ -28,8 +28,9 @@ export function StoreHub({ tab }: { tab: keyof typeof TITLES }) {
     setSum({
       items: stock.length,
       alerts: stock.filter((s) => { const d = daysToExpiry(s.expiry); return (s.minQty != null && Number(s.qty) <= Number(s.minQty)) || (d != null && d <= 30); }).length,
-      spent: purchases.reduce((t, p) => t + Number(p.total || 0), 0),
-      unpaid: purchases.filter((p) => !p.paid).reduce((t, p) => t + Number(p.total || 0), 0),
+      // An ordered purchase that has not arrived is not spending yet.
+      spent: purchases.filter((p) => !p.ordered).reduce((t, p) => t + Number(p.total || 0), 0),
+      unpaid: purchases.filter((p) => !p.ordered && !p.paid).reduce((t, p) => t + Number(p.total || 0), 0),
     });
   }, [tab]);
   const T = TITLES[tab];
