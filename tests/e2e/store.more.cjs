@@ -74,11 +74,30 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
 
   // ── «الجرد» ──
   await p.goto(B + '/store/count'); await p.waitForSelector('[data-testid="count-table"]', { timeout: 20000 });
+  ok((await p.locator('tr[data-count="كاشف السكر"] [data-testid="count-used"]').innerText()).trim() === '1' && (await p.locator('tr[data-count="كاشف السكر"] [data-testid="count-system"]').innerText()).trim() === '7', 'per material: what was used (1 issued by hand) and what is left on record (7)');
+  ok((await p.locator('[data-testid="count-last"]').innerText()).includes('لم يُجرَ بعد'), 'no stocktake yet');
+  await p.click('[data-testid="count-extras-toggle"]'); await p.check('[data-testid="count-extras"] input[aria-label="الوارد"]');
+  ok(await settled(async () => (await kv(p, 'purchasing.settings.v1'))?.countReceived === true) && (await p.locator('tr[data-count="كاشف السكر"] [data-testid="count-received"]').innerText()).trim() === '8', '«أعمدة إضافية»: the received column (8 bought), kept in the settings');
+  await p.click('[data-testid="count-sheet"]');
+  ok((await p.locator('[data-testid="count-print"]').innerText()).includes('ورقة جرد المخزن'), 'a blank stocktake sheet to print');
+  await p.fill('input[aria-label="ملاحظة الجرد"]', 'جرد الشهر');
   await p.fill('input[aria-label="المعدود كاشف السكر"]', '5');
   ok((await p.locator('tr[data-count="كاشف السكر"] [data-testid="count-diff"]').innerText()).trim() === '-2', 'the difference shows (5 counted, 7 recorded → -2)');
   await p.click('[data-testid="count-save"]');
   ok(await settled(async () => (await qty('glu')) === 5) && (await qty('cal')) === 2, 'the stocktake sets the counted item only (7 → 5)');
-  ok(await p.locator('[data-testid="count-history"] details').count() === 1, 'the stocktake is kept');
+  ok(await p.locator('[data-testid="count-history"] li[data-count-record]').count() === 1 && (await p.locator('[data-testid="count-history"]').innerText()).includes('جرد الشهر'), 'the stocktake is kept, with its note');
+  ok((await p.locator('[data-testid="count-record"]').innerText()).includes('محضر جرد المخزن'), 'and its record opens to print');
+  ok(!(await p.locator('[data-testid="count-last"]').innerText()).includes('لم يُجرَ بعد') && await p.locator('[data-testid="count-period"]').inputValue() === 'last', 'the next count covers the time since this one');
+
+  // ── «اقتراح الشراء»: below the minimum → an order in «المشتريات» ──
+  await kvPut(p, 'station.stock.v1', (await stock()).map((s) => (s.id === 'glu' ? { ...s, minQty: 10 } : s)));
+  await p.goto(B + '/store/reorder'); await p.waitForSelector('[data-testid="reorder-group"]', { timeout: 20000 });
+  ok(await p.locator('[data-testid="reorder-group"] tr[data-item="كاشف السكر"]').count() === 1 && await p.locator('tr[data-item="محلول المعايرة"]').count() === 0, 'the reagent below its minimum (5 / 10) is suggested; the rest is not');
+  ok(await p.locator('input[aria-label="كمية كاشف السكر"]').inputValue() === '15', 'suggested: twice the minimum less what is left (20 − 5 = 15)');
+  await p.click('[data-testid="reorder-send"]');
+  const ro = async () => ((await kv(p, 'purchasing.purchases.v1')) || []).find((x) => x.notes === 'من اقتراح الشراء');
+  ok(await settled(async () => !!(await ro())) && (await ro()).ordered === true && (await ro()).items[0].qty === 15, 'sent to «المشتريات» as an order waiting to be received');
+  await kvPut(p, 'station.stock.v1', (await stock()).map((s) => (s.id === 'glu' ? { ...s, minQty: undefined } : s)));
   ok(((await kv(p, 'station.stockMoves.v1')) || [])[0]?.reason === 'count', 'and recorded in the movement log');
 
   // ── Options: all off at first ──

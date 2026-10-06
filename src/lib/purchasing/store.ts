@@ -84,6 +84,13 @@ export interface PurchasingSettings {
   supplierFields?: boolean;
   /** «المشتريات»: the purchase date on the new purchase (hidden by default: today's date). */
   showDate?: boolean;
+  /** «الجرد»: extra columns (expiry, received in the period, value of what is left, unit cost). */
+  countExpiry?: boolean;
+  countReceived?: boolean;
+  countValue?: boolean;
+  countCost?: boolean;
+  /** «اقتراح الشراء»: the days of use an order should cover (30 by default). */
+  reorderCoverDays?: number;
 }
 
 const K_SUP = "purchasing.suppliers.v1";
@@ -140,23 +147,31 @@ export function kitMatch(name: string): Kit | null {
 
 // ── Stocktakes ─────────────────────────────────────────────────────────────────
 /** A stocktake («الجرد»): the counted quantity of each item against what was recorded. */
-export interface StockCount { id: string; at: number; lines: { stockId: string; name: string; before: number; counted: number }[] }
+export interface StockCount {
+  id: string; at: number; lines: { stockId: string; name: string; before: number; counted: number }[];
+  /** The stocktake's date (YYYY-MM-DD, otherwise the day it was saved) and a note. */
+  date?: string; note?: string;
+}
 const K_COUNTS = "station.stockCounts.v1";
 export function getCounts(): StockCount[] {
   return read<StockCount[]>(K_COUNTS, []);
 }
 /** Set the counted items to what was found on the shelf, keep the stocktake (the last 50), and
  *  record the differences in «سجل الحركة». Returns the saved stocktake. */
-export function applyCount(counted: Record<string, number>): StockCount | null {
+export function applyCount(counted: Record<string, number>, meta: { date?: string; note?: string } = {}): StockCount | null {
   const stock = getStock();
   const lines = stock.filter((s) => counted[s.id] != null && Number.isFinite(counted[s.id]))
     .map((s) => ({ stockId: s.id, name: s.name, before: Number(s.qty) || 0, counted: counted[s.id] }));
   if (!lines.length) return null;
-  const rec: StockCount = { id: uid(), at: Date.now(), lines };
-  saveStock(stock.map((s) => (counted[s.id] != null && Number.isFinite(counted[s.id]) ? { ...s, qty: counted[s.id] } : s)), "count", `جرد ${new Date(rec.at).toLocaleDateString("en-CA")}`);
+  const rec: StockCount = { id: uid(), at: Date.now(), lines,
+    ...(meta.date && /^\d{4}-\d{2}-\d{2}$/.test(meta.date) ? { date: meta.date } : {}), ...(meta.note?.trim() ? { note: meta.note.trim().slice(0, 200) } : {}) };
+  saveStock(stock.map((s) => (counted[s.id] != null && Number.isFinite(counted[s.id]) ? { ...s, qty: counted[s.id] } : s)), "count", `جرد ${countDate(rec)}${rec.note ? ` — ${rec.note}` : ""}`);
   write(K_COUNTS, [rec, ...getCounts()].slice(0, 50));
   return rec;
 }
+
+/** A stocktake's date: as written, or the day it was saved. */
+export const countDate = (c: StockCount): string => c.date ?? new Date(c.at).toLocaleDateString("en-CA");
 
 // ── Payments (supplier debts) ────────────────────────────────────────────────
 /** Paid so far: the payments, or the whole total for a purchase marked paid without them. */

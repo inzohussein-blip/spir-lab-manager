@@ -1,6 +1,6 @@
 "use client";
 
-import { ShoppingCart, Truck, Settings, FileBarChart, Tags, ClipboardCheck, History } from "lucide-react";
+import { ShoppingCart, Truck, Settings, FileBarChart, Tags, ClipboardCheck, History, ShoppingBasket } from "lucide-react";
 import { AppSidebar, type SideBadges, type SideSection } from "@/components/local/AppSidebar";
 import { getStock, daysToExpiry, pendingStock } from "@/lib/station/store";
 import { pendingQcStock } from "@/lib/local/links";
@@ -14,6 +14,7 @@ const SECTIONS: SideSection[] = [
     { href: "/store/items", label: "الأصناف", hint: "الكواشف والمستلزمات والكتات", icon: Tags },
     { href: "/store/count", label: "الجرد", hint: "المعدود مقابل المسجّل", icon: ClipboardCheck },
     { href: "/store/moves", label: "سجل الحركة", hint: "كل تغيّر في الكميات", icon: History },
+    { href: "/store/reorder", label: "اقتراح الشراء", hint: "طلبات الشراء من النواقص", icon: ShoppingBasket },
   ] },
   { title: "المتابعة", items: [
     { href: "/store/report", label: "التقارير (شهري/سنوي)", hint: "المصروف حسب الفترة", icon: FileBarChart },
