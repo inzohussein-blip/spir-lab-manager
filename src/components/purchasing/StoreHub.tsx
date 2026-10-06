@@ -5,7 +5,7 @@ import { ShoppingCart, Boxes, Tags, History, ClipboardCheck } from "lucide-react
 import { getStock, daysToExpiry } from "@/lib/station/store";
 import { getPurchases } from "@/lib/purchasing/store";
 import { money } from "@/lib/utils";
-import { PurchasesPanel } from "./PurchasesPanel";
+import { PurchasesPage } from "./PurchasesPage";
 import { StockPanel } from "./StockPanel";
 import { ItemsPanel } from "./ItemsPanel";
 import { MovesPanel } from "./MovesPanel";
@@ -22,6 +22,12 @@ const TITLES = {
 /** A page of «المخزن والمشتريات» (each has its own entry in the side menu): «المشتريات», «المخزن»
  *  (what is in stock) and «الأصناف» (the items: the lab's tests and their materials, and tubes). */
 export function StoreHub({ tab }: { tab: keyof typeof TITLES }) {
+  // «المشتريات» has its own page, laid out as in the supplier station.
+  if (tab === "purchases") return <PurchasesPage />;
+  return <OtherTabs tab={tab} />;
+}
+
+function OtherTabs({ tab }: { tab: Exclude<keyof typeof TITLES, "purchases"> }) {
   const [sum, setSum] = useState({ items: 0, alerts: 0, spent: 0, unpaid: 0 });
   useEffect(() => {
     const stock = getStock(), purchases = getPurchases();
@@ -44,7 +50,7 @@ export function StoreHub({ tab }: { tab: keyof typeof TITLES }) {
           أصناف المخزن <b className="tabular-nums">{sum.items}</b>{sum.alerts > 0 && <> · <b className="tabular-nums text-amber-700">{sum.alerts}</b> تنبيه</>}
         </p>
       </div>
-      {tab === "purchases" ? <PurchasesPanel /> : tab === "stock" ? <StockPanel /> : tab === "items" ? <ItemsPanel /> : tab === "moves" ? <MovesPanel /> : <CountPanel />}
+      {tab === "stock" ? <StockPanel /> : tab === "items" ? <ItemsPanel /> : tab === "moves" ? <MovesPanel /> : <CountPanel />}
     </div>
   );
 }

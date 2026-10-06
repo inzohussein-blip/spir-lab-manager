@@ -25,7 +25,7 @@ const { B, ok, launch, done, kv, resetLocal } = require('./lib.cjs');
   };
 
   // ── Purchasing ──
-  await p.goto(B + '/store'); await p.waitForSelector('[data-testid="purchase-new"]', { timeout: 20000 }); await p.click('[data-testid="purchase-new"]');
+  await p.goto(B + '/store'); await p.waitForSelector('[data-testid="purchase-form"]', { timeout: 20000 });
   await p.fill('input[aria-label="المورّد"]', 'مورّد الفحص');
   await p.fill('input[placeholder="الصنف"]', 'كاشف الفحص'); await p.fill('input[aria-label="العدد"]', '3'); await p.fill('input[aria-label="المجموع"]', '75000');
   await p.click('button:has-text("حفظ العملية")'); await p.waitForTimeout(800);
