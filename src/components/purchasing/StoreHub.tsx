@@ -1,56 +1,40 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { ShoppingCart, Boxes, Tags, History, ClipboardCheck } from "lucide-react";
-import { getStock, daysToExpiry } from "@/lib/station/store";
-import { getPurchases } from "@/lib/purchasing/store";
-import { money } from "@/lib/utils";
-import { PurchasesPage } from "./PurchasesPage";
-import { StockPanel } from "./StockPanel";
+import { ShoppingCart, Boxes, Tags, History, ClipboardCheck, ShoppingBasket } from "lucide-react";
+import { StockBook } from "./StockBook";
 import { ItemsPanel } from "./ItemsPanel";
 import { MovesPanel } from "./MovesPanel";
 import { CountPanel } from "./CountPanel";
+import { ReorderPanel } from "./ReorderPanel";
 
 const TITLES = {
-  purchases: { title: "المشتريات", icon: ShoppingCart },
-  stock: { title: "المخزن", icon: Boxes },
-  items: { title: "الأصناف", icon: Tags },
-  moves: { title: "سجل الحركة", icon: History },
-  count: { title: "الجرد", icon: ClipboardCheck },
+  purchases: { title: "المشتريات", icon: ShoppingCart, desc: "" },
+  stock: { title: "المخزن", icon: Boxes, desc: "" },
+  items: { title: "الأصناف", icon: Tags, desc: "الكواشف والمستلزمات والكتات، والتحاليل وموادها: ما يُحسم من المخزن مع كل فحص، وما يصرفه الفاحص بيده." },
+  moves: { title: "سجل الحركة", icon: History, desc: "كل تغيّر في كميات المخزن: المشتريات، نتائج المختبر، السيطرة، الإضافة والصرف، الجرد والتعديل." },
+  count: { title: "الجرد", icon: ClipboardCheck, desc: "" },
+  reorder: { title: "اقتراح الشراء", icon: ShoppingBasket, desc: "" },
 } as const;
 
-/** A page of «المخزن والمشتريات» (each has its own entry in the side menu): «المشتريات», «المخزن»
- *  (what is in stock) and «الأصناف» (the items: the lab's tests and their materials, and tubes). */
+/** A page of «المخزن والمشتريات», each laid out as its page in the supplier station: «المشتريات
+ *  والمخزن والأسعار» (/store and /store/inventory), «الجرد», «اقتراح الشراء», and the lab's own
+ *  «الأصناف» (tests and their materials, tubes, kits) and «سجل الحركة». */
 export function StoreHub({ tab }: { tab: keyof typeof TITLES }) {
-  // «المشتريات» has its own page, laid out as in the supplier station.
-  if (tab === "purchases") return <PurchasesPage />;
+  if (tab === "purchases" || tab === "stock") return <StockBook view={tab} />;
+  if (tab === "count") return <CountPanel />;
+  if (tab === "reorder") return <ReorderPanel />;
   return <OtherTabs tab={tab} />;
 }
 
-function OtherTabs({ tab }: { tab: Exclude<keyof typeof TITLES, "purchases"> }) {
-  const [sum, setSum] = useState({ items: 0, alerts: 0, spent: 0, unpaid: 0 });
-  useEffect(() => {
-    const stock = getStock(), purchases = getPurchases();
-    setSum({
-      items: stock.length,
-      alerts: stock.filter((s) => { const d = daysToExpiry(s.expiry); return (s.minQty != null && Number(s.qty) <= Number(s.minQty)) || (d != null && d <= 30); }).length,
-      // An ordered purchase that has not arrived is not spending yet.
-      spent: purchases.filter((p) => !p.ordered).reduce((t, p) => t + Number(p.total || 0), 0),
-      unpaid: purchases.filter((p) => !p.ordered && !p.paid).reduce((t, p) => t + Number(p.total || 0), 0),
-    });
-  }, [tab]);
+function OtherTabs({ tab }: { tab: "items" | "moves" }) {
   const T = TITLES[tab];
   return (
     <div>
-      <div className="no-print mb-4">
-        <div className="text-xs font-semibold text-amber-700">المخزن والمشتريات</div>
+      <div className="no-print mb-5">
         <h1 className="flex items-center gap-2 text-2xl font-bold"><T.icon className="size-6" /> {T.title}</h1>
-        <p className="mt-1 text-xs text-muted" data-testid="store-summary">
-          المصروف <b className="tabular-nums">{money(sum.spent)}</b> د.ع · غير مدفوع <b className="tabular-nums">{money(sum.unpaid)}</b> د.ع ·
-          أصناف المخزن <b className="tabular-nums">{sum.items}</b>{sum.alerts > 0 && <> · <b className="tabular-nums text-amber-700">{sum.alerts}</b> تنبيه</>}
-        </p>
+        <p className="mt-1 text-sm text-muted">{T.desc}</p>
       </div>
-      {tab === "stock" ? <StockPanel /> : tab === "items" ? <ItemsPanel /> : tab === "moves" ? <MovesPanel /> : <CountPanel />}
+      {tab === "items" ? <ItemsPanel /> : <MovesPanel />}
     </div>
   );
 }

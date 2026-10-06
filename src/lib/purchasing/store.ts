@@ -18,6 +18,8 @@ export interface Supplier {
 }
 
 export interface PurchaseItem {
+  /** The device the material is for (optional; kept on the stock item when it has none). */
+  device?: string;
   name: string;
   qty: number;
   /** Price of one (item or kit): the line total ÷ the quantity. */
@@ -77,6 +79,18 @@ export interface PurchasingSettings {
   debts?: boolean;
   prices?: boolean;
   barcode?: boolean;
+  /** «المشتريات»: the supplier's name and invoice number on the new purchase (hidden by default;
+   *  always shown with supplier debts on, which need the supplier). */
+  supplierFields?: boolean;
+  /** «المشتريات»: the purchase date on the new purchase (hidden by default: today's date). */
+  showDate?: boolean;
+  /** «الجرد»: extra columns (expiry, received in the period, value of what is left, unit cost). */
+  countExpiry?: boolean;
+  countReceived?: boolean;
+  countValue?: boolean;
+  countCost?: boolean;
+  /** «اقتراح الشراء»: the days of use an order should cover (30 by default). */
+  reorderCoverDays?: number;
 }
 
 const K_SUP = "purchasing.suppliers.v1";
@@ -133,23 +147,31 @@ export function kitMatch(name: string): Kit | null {
 
 // ── Stocktakes ─────────────────────────────────────────────────────────────────
 /** A stocktake («الجرد»): the counted quantity of each item against what was recorded. */
-export interface StockCount { id: string; at: number; lines: { stockId: string; name: string; before: number; counted: number }[] }
+export interface StockCount {
+  id: string; at: number; lines: { stockId: string; name: string; before: number; counted: number }[];
+  /** The stocktake's date (YYYY-MM-DD, otherwise the day it was saved) and a note. */
+  date?: string; note?: string;
+}
 const K_COUNTS = "station.stockCounts.v1";
 export function getCounts(): StockCount[] {
   return read<StockCount[]>(K_COUNTS, []);
 }
 /** Set the counted items to what was found on the shelf, keep the stocktake (the last 50), and
  *  record the differences in «سجل الحركة». Returns the saved stocktake. */
-export function applyCount(counted: Record<string, number>): StockCount | null {
+export function applyCount(counted: Record<string, number>, meta: { date?: string; note?: string } = {}): StockCount | null {
   const stock = getStock();
   const lines = stock.filter((s) => counted[s.id] != null && Number.isFinite(counted[s.id]))
     .map((s) => ({ stockId: s.id, name: s.name, before: Number(s.qty) || 0, counted: counted[s.id] }));
   if (!lines.length) return null;
-  const rec: StockCount = { id: uid(), at: Date.now(), lines };
-  saveStock(stock.map((s) => (counted[s.id] != null && Number.isFinite(counted[s.id]) ? { ...s, qty: counted[s.id] } : s)), "count", `جرد ${new Date(rec.at).toLocaleDateString("en-CA")}`);
+  const rec: StockCount = { id: uid(), at: Date.now(), lines,
+    ...(meta.date && /^\d{4}-\d{2}-\d{2}$/.test(meta.date) ? { date: meta.date } : {}), ...(meta.note?.trim() ? { note: meta.note.trim().slice(0, 200) } : {}) };
+  saveStock(stock.map((s) => (counted[s.id] != null && Number.isFinite(counted[s.id]) ? { ...s, qty: counted[s.id] } : s)), "count", `جرد ${countDate(rec)}${rec.note ? ` — ${rec.note}` : ""}`);
   write(K_COUNTS, [rec, ...getCounts()].slice(0, 50));
   return rec;
 }
+
+/** A stocktake's date: as written, or the day it was saved. */
+export const countDate = (c: StockCount): string => c.date ?? new Date(c.at).toLocaleDateString("en-CA");
 
 // ── Payments (supplier debts) ────────────────────────────────────────────────
 /** Paid so far: the payments, or the whole total for a purchase marked paid without them. */
@@ -206,7 +228,7 @@ export function stockMatch(name: string): { id: string; name: string; qty: numbe
   if (!k) return null;
   return getStock().find((s) => key(s.name) === k) ?? null;
 }
-function changeStock(moves: { id: string; qty: number }[], reason: "purchase" | "purchase-del", ref?: string, prices?: Map<string, number>): void {
+function changeStock(moves: { id: string; qty: number }[], reason: "purchase" | "purchase-del" | "add", ref?: string, prices?: Map<string, number>): void {
   const by = new Map<string, number>();
   for (const m of moves) by.set(m.id, (by.get(m.id) ?? 0) + m.qty);
   saveStock(getStock().map((s) => (by.has(s.id)
@@ -216,8 +238,8 @@ function changeStock(moves: { id: string; qty: number }[], reason: "purchase" | 
 /** Put bought quantities in the stock room: onto the item of the same name, or as a new item
  *  (with no quantity yet, then the purchase's); a kit's parts, each times the kits bought. The
  *  item's unit price follows the purchase (a kit's, when it holds one item). Returns what was added. */
-export function addToStock(items: PurchaseItem[], ref?: string): { id: string; qty: number }[] {
-  const lines = items.map((it) => ({ name: it.name.trim(), qty: Number(it.qty) || 0, price: Number(it.unitPrice) || 0, kitId: it.kitId, expiry: it.expiry, lot: it.lot, gtin: it.gtin }))
+export function addToStock(items: PurchaseItem[], ref?: string, reason: "purchase" | "add" = "purchase"): { id: string; qty: number }[] {
+  const lines = items.map((it) => ({ name: it.name.trim(), qty: Number(it.qty) || 0, price: Number(it.unitPrice) || 0, kitId: it.kitId, expiry: it.expiry, lot: it.lot, gtin: it.gtin, device: it.device?.trim() }))
     .filter((x) => x.name && x.qty > 0);
   if (!lines.length) return [];
   const stock = getStock();
@@ -233,6 +255,7 @@ export function addToStock(items: PurchaseItem[], ref?: string): { id: string; q
   };
   // A scanned GS1 code becomes the barcode of the item or kit that has none, for the next scan.
   const codes = new Map<string, string>();
+  const devices = new Map<string, string>();
   const kitCodes = new Map<string, string>();
   const added = lines.flatMap((x) => {
     // Only a line bought as a kit is opened into its contents.
@@ -249,12 +272,14 @@ export function addToStock(items: PurchaseItem[], ref?: string): { id: string; q
     if (x.price > 0) prices.set(item.id, x.price);
     note(item.id, x);
     if (x.gtin && !item.barcode) codes.set(item.id, x.gtin);
+    if (x.device && !item.device) devices.set(item.id, x.device);
     return [{ id: item.id, qty: x.qty }];
   });
   if (fresh.length) saveStock([...stock, ...fresh]);
-  changeStock(added, "purchase", ref, prices);
+  changeStock(added, reason, ref, prices);
   if (kitCodes.size) saveKits(kits.map((k) => (kitCodes.has(k.id) ? { ...k, barcode: kitCodes.get(k.id) } : k)));
-  if (codes.size) saveStock(getStock().map((s) => (codes.has(s.id) ? { ...s, barcode: codes.get(s.id) } : s)), "edit", ref);
+  if (codes.size || devices.size) saveStock(getStock().map((s) => (codes.has(s.id) || devices.has(s.id)
+    ? { ...s, ...(codes.has(s.id) ? { barcode: codes.get(s.id) } : {}), ...(devices.has(s.id) ? { device: devices.get(s.id) } : {}) } : s)), "edit", ref);
   if (batch.size) {
     saveStock(getStock().map((s) => {
       const b = batch.get(s.id);
@@ -279,6 +304,14 @@ export function receivePurchase(id: string): number {
 }
 export function getPurchase(id: string): Purchase | null {
   return getPurchases().find((p) => p.id === id) ?? null;
+}
+
+/** Device names offered on a purchase line: those on the stock items and the quality station's
+ *  devices (read as they are, without seeding them). */
+export function deviceNames(): string[] {
+  const qc = read<{ name?: string }[]>("qc.devices.v1", []);
+  const names = [...getStock().map((s) => s.device ?? ""), ...(Array.isArray(qc) ? qc.map((d) => d?.name ?? "") : [])].map((n) => n.trim()).filter(Boolean);
+  return Array.from(new Set(names)).sort((a, b) => a.localeCompare(b));
 }
 
 // ── Settings ─────────────────────────────────────────────────────────────────

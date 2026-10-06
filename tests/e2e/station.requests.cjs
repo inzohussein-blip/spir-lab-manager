@@ -21,10 +21,11 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   ok(await p.locator('[data-testid="item-form"] input[aria-label="الكمية"]').inputValue() === '5', 'Arabic-keyboard digit typed as 5');
   await p.click('[data-testid="item-form"] button[type=submit]');
   ok(await settled(async () => ((await kv(p, 'station.stock.v1')) || []).some((s) => s.name === 'كاشف السكر' && s.qty === 5)), 'stock item saved (shared key with the lab station)');
-  ok(await p.locator('aside a[href="/store"]:has-text("المشتريات")').count() === 1 && await p.locator('aside a[href="/store/inventory"]:has-text("المخزن")').count() === 1
-    && await p.locator('aside a[href="/store/items"]:has-text("الأصناف")').count() === 1, 'purchases, stock and items: each in the side menu');
+  ok(await p.locator('aside a[href="/store"]:has-text("المشتريات والمخزن والأسعار")').count() === 1 && await p.locator('aside a[href="/store/suppliers"]:has-text("الموردون")').count() === 1
+    && await p.locator('aside a[href="/store/items"]:has-text("الأصناف")').count() === 1, 'purchases, stock and prices in one entry, the suppliers under it, and the items');
 
   // ── A purchase: typed amounts and the stock link ──
+  await kvPut(p, 'purchasing.settings.v1', { orgName: 'المخزن والمشتريات', supplierFields: true }); // the supplier's name is an option
   await p.goto(B + '/store'); await p.waitForSelector('[data-testid="purchase-form"]', { timeout: 20000 });
   await p.fill('input[aria-label="المورّد"]', 'مورّد المخزن');
   await p.fill('input[placeholder="الصنف"]', 'كاشف السكر');
