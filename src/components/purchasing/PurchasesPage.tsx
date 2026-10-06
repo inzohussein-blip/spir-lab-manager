@@ -8,6 +8,7 @@ import { getKits, getPurchases, getSettings, dueOf, type Kit, type Purchase, typ
 import { money } from "@/lib/utils";
 import { PurchaseForm } from "./PurchaseForm";
 import { PurchasesLog } from "./PurchasesLog";
+import { StockPanel } from "./StockPanel";
 
 function Tile({ label, value, tone, testid }: { label: string; value: string | number; tone?: "danger" | "warn"; testid?: string }) {
   const c = tone === "danger" ? "text-red-600" : tone === "warn" ? "text-amber-600" : "text-amber-700";
@@ -31,6 +32,7 @@ export function PurchasesPage() {
   const [kits, setKits] = useState<Kit[]>([]);
   const [opts, setOpts] = useState<PurchasingSettings>({ orgName: "" });
   const [msg, setMsg] = useState("");
+  const [view, setView] = useState<"purchases" | "stock">("purchases");
   const reload = () => { setPurchases(getPurchases()); setStock(getStock()); setKits(getKits()); setOpts(getSettings()); };
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- this device's data (browser storage) is read once the page is on screen, never while rendering on the server
@@ -68,11 +70,14 @@ export function PurchasesPage() {
 
       {msg && <p className="mb-3 rounded-lg bg-teal-50 px-3 py-2 text-sm text-brand-dark" role="status">{msg}</p>}
       <div className="mb-3 flex gap-1 border-b border-line text-sm" role="tablist" aria-label="العرض">
-        <button type="button" role="tab" aria-selected data-testid="view-purchases" className="-mb-px border-b-2 border-amber-600 px-4 py-2 font-semibold text-amber-700">
-          سجل المشتريات ({purchases.length}){orderedN ? ` · ${orderedN} بانتظار الاستلام` : ""}
-        </button>
+        {([["purchases", `سجل المشتريات (${purchases.length})${orderedN ? ` · ${orderedN} بانتظار الاستلام` : ""}`], ["stock", `المخزن (${stock.length})`]] as const).map(([k, l]) => (
+          <button key={k} type="button" role="tab" aria-selected={view === k} data-testid={`view-${k}`} onClick={() => setView(k)}
+            className={`-mb-px border-b-2 px-4 py-2 ${view === k ? "border-amber-600 font-semibold text-amber-700" : "border-transparent text-muted hover:text-ink"}`}>{l}</button>
+        ))}
       </div>
-      <PurchasesLog purchases={purchases} stock={stock} kits={kits} opts={opts} onChanged={reload} onMsg={setMsg} />
+      {view === "purchases"
+        ? <PurchasesLog purchases={purchases} stock={stock} kits={kits} opts={opts} onChanged={reload} onMsg={setMsg} />
+        : <StockPanel />}
     </div>
   );
 }

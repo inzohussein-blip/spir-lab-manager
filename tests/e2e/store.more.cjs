@@ -176,6 +176,13 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   await scan('(01)06291041509999(17)281130(10)LOT10');
   ok(await p.locator('input[placeholder="الصنف"]').first().inputValue() === 'كاشف الصفراء' && await p.locator('input[aria-label="اللوت"]').first().inputValue() === 'LOT10', 'the next scan of that box finds the item by its code, with the new lot');
 
+  // ── The stock room one tab away on the purchases page ──
+  await p.goto(B + '/store'); await p.waitForSelector('[data-testid="purchase-form"]', { timeout: 20000 });
+  await p.click('[data-testid="view-stock"]');
+  ok(await p.locator('[data-testid="stock-qty"]').count() > 0 && await p.locator('[data-testid="purchases-log"]').count() === 0, 'the «المخزن» tab shows the stock room under the purchase form');
+  await p.click('[data-testid="view-purchases"]');
+  ok(await p.locator('[data-testid="purchases-log"]').count() === 1, 'and the log comes back');
+
   ok(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.slice(0, 3).join(' | ') : ''));
   await b.close();
   done();
