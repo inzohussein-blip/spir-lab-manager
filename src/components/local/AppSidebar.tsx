@@ -7,7 +7,7 @@ import { Home, Menu, X, ChevronLeft, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSideCollapsed, SideCollapseButton, SideReopenButton } from "@/components/local/SideCollapse";
 
-export interface SideItem { href: string; label: string; hint: string; icon: LucideIcon; exact?: boolean }
+export interface SideItem { href: string; label: string; hint: string; icon: LucideIcon; exact?: boolean; /** Other pages that show this entry as the open one. */ also?: string[] }
 export interface SideSection { title: string; items: SideItem[] }
 export interface SideBadge { n: number; tone?: "brand" | "warn" | "danger" | "info"; testid?: string; title?: string }
 /** Numbers beside a menu item (one or several), by its href. */
@@ -48,7 +48,7 @@ export function AppSidebar({
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
 
-  const isActive = (it: SideItem) => (it.exact ? pathname === it.href : pathname === it.href || pathname.startsWith(it.href + "/"));
+  const isActive = (it: SideItem) => (it.exact ? pathname === it.href : pathname === it.href || pathname.startsWith(it.href + "/")) || !!it.also?.includes(pathname);
   const current = sections.flatMap((s) => s.items).find(isActive)?.label ?? appName;
 
   return (

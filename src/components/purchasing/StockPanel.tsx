@@ -34,6 +34,7 @@ export function StockPanel() {
   const [q, setQ] = useState("");
   const [msg, setMsg] = useState("");
   const [move, setMove] = useState<Move | null>(null);
+  const [recv, setRecv] = useState<Record<string, string>>({});
 
   const reload = () => { setRows(getStock()); setPending(pendingStock()); setPendingQc(pendingQcStock()); };
   useEffect(() => { reload(); setTests(getTests()); setQc(qcLinks()); setOpts(stockOptions()); setStore(getSettings()); }, []);
@@ -53,6 +54,15 @@ export function StockPanel() {
     setRows(next); saveStock(next, move.sign > 0 ? "add" : "issue");
     setMsg(`${move.sign > 0 ? "أُضيف" : "صُرف"} ${n} — ${move.item.name}`);
     setMove(null);
+  }
+  /** «استلام كمية»: the count typed beside an item goes into the stock room (as an addition). */
+  function receive(item: StockItem) {
+    const n = Math.round(Number(recv[item.id]) || 0);
+    if (!(n > 0)) return;
+    const next = getStock().map((r) => (r.id === item.id ? { ...r, qty: stockFloor(Number(r.qty) + n) } : r));
+    saveStock(next, "add"); setRows(next);
+    setRecv((c) => ({ ...c, [item.id]: "" }));
+    setMsg(`أُضيف ${n} — ${item.name}`);
   }
   /** Settings → «الباركود»: a scanned item opens its «صرف» window (the most common task). */
   function onScan(code: string): string {
@@ -75,7 +85,6 @@ export function StockPanel() {
   function about(s: StockItem) {
     const ids = stockTestIds(s);
     const names = ids.map((id) => tests.find((t) => t.id === id)?.name_ar).filter(Boolean) as string[];
-    const d = daysToExpiry(s.expiry);
     return (
       <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted">
         {isByHand(s) && <span data-testid="stock-byhand" className="rounded-full bg-sky-50 px-1.5 text-sky-700">مستلزم · يصرفه الفاحص</span>}
@@ -83,7 +92,6 @@ export function StockPanel() {
           <span data-testid="stock-tests" title={names.join("، ")}>{ids.length === 1 ? names[0] : `${ids.length} فحص`}</span>
         )}
         {qc.has(s.id) && <span data-testid="qc-link" className="text-rose-700">سيطرة: {qc.get(s.id)!.join("، ")}</span>}
-        {s.expiry && <span className={d != null && d < 0 ? "text-red-600" : d != null && d <= 30 ? "text-amber-700" : ""}>ينتهي {s.expiry}</span>}
       </div>
     );
   }
@@ -147,7 +155,7 @@ export function StockPanel() {
       <div className="flex flex-wrap items-center gap-3">
         <Chips label="عرض" value={filter} onChange={setFilter}
           options={[["all", "الكل", rows.length], ["low", "نفد أو ناقص", counts.low], ["soon", "قرب الانتهاء", counts.soon], ["supplies", "المستلزمات", counts.supplies]]} />
-        {store.prices && <span className="ms-auto text-sm text-muted" data-testid="stock-value">قيمة المخزن: <b className="tabular-nums text-amber-700">{money(value)}</b> د.ع</span>}
+        {<span className="ms-auto text-sm text-muted" data-testid="stock-value">قيمة المخزن: <b className="tabular-nums text-amber-700">{money(value)}</b> د.ع</span>}
       </div>
       {msg && <p className="rounded-lg bg-teal-50 px-3 py-2 text-sm text-brand-dark" role="status">{msg}</p>}
 
@@ -157,34 +165,74 @@ export function StockPanel() {
             {rows.length ? "لا أصناف هنا." : <>المخزن فارغ — أضف الأصناف من <Link href="/store/items" className="text-amber-700 underline">«الأصناف»</Link>، أو سجّل عملية شراء.</>}
           </p>
         ) : (
-          <ul className="divide-y divide-line">
-            {shown.map((s) => {
-              const n = Number(s.qty) || 0;
-              const low = isLow(s);
-              return (
-                <li key={s.id} data-stock={s.name} className="flex flex-wrap items-center gap-3 px-4 py-3 hover:bg-canvas">
-                  <div className="min-w-44 flex-1">
-                    <div className="font-semibold">{s.name}</div>
-                    {about(s)}
-                  </div>
-                  <div className="w-28 text-center" data-testid="stock-qty">
-                    <span className={`text-2xl font-bold tabular-nums ${low ? "text-red-600" : ""}`} dir="ltr">{s.qty}</span>
-                    {n <= 0 ? <span className="block text-[11px] font-semibold text-red-700">{n < 0 ? "بالسالب" : "نفد"}</span>
-                      : low ? <span className="block text-[11px] font-semibold text-red-700">ناقص</span> : null}
-                  </div>
-                  {store.prices && <div className="w-28 text-center text-sm tabular-nums text-muted" data-testid="stock-price">{s.price != null ? `${money(Math.max(0, n) * s.price)} د.ع` : "—"}</div>}
-                  <div className="flex items-center gap-1.5">
-                    <button onClick={() => setMove({ item: s, sign: 1 })} aria-label={`إضافة إلى ${s.name}`}
-                      className="inline-flex items-center gap-1 rounded-lg border border-teal-300 px-3 py-1.5 text-sm font-medium text-teal-800 hover:bg-teal-50"><Plus className="size-4" /> إضافة</button>
-                    <button onClick={() => setMove({ item: s, sign: -1 })} aria-label={`صرف من ${s.name}`}
-                      className="inline-flex items-center gap-1 rounded-lg border border-amber-300 px-3 py-1.5 text-sm font-medium text-amber-800 hover:bg-amber-50"><Minus className="size-4" /> صرف</button>
-                    <Link href={`/store/moves?item=${s.id}`} aria-label={`سجل حركة ${s.name}`} title="سجل الحركة" className="grid size-8 place-items-center rounded-lg text-muted hover:bg-surface hover:text-ink"><History className="size-4" /></Link>
-                    <Link href={`/store/items?edit=${s.id}`} aria-label={`تعديل ${s.name}`} title="تعديل الصنف" className="grid size-8 place-items-center rounded-lg text-muted hover:bg-surface hover:text-ink"><Pencil className="size-4" /></Link>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[980px] text-sm" data-testid="stock-list">
+              <thead className="border-b border-line text-right text-muted">
+                <tr>
+                  <th className="px-3 py-3 font-medium">ت</th>
+                  <th className="px-3 py-3 font-medium">الجهاز</th>
+                  <th className="px-3 py-3 font-medium">المادة</th>
+                  <th className="px-3 py-3 text-center font-medium">الرصيد</th>
+                  <th className="px-3 py-3 font-medium">الإكسباير</th>
+                  <th className="px-3 py-3 font-medium">الكلفة</th>
+                  <th className="px-3 py-3 font-medium">القيمة</th>
+                  <th className="px-3 py-3 font-medium">الحد الأدنى</th>
+                  <th className="px-3 py-3 font-medium">الحالة</th>
+                  <th className="px-3 py-3 font-medium">استلام كمية</th>
+                  <th className="px-3 py-3" />
+                </tr>
+              </thead>
+              <tbody>
+                {shown.map((s, i) => {
+                  const n = Number(s.qty) || 0;
+                  const low = isLow(s);
+                  const d = daysToExpiry(s.expiry);
+                  return (
+                    <tr key={s.id} data-stock={s.name} className="border-b border-line align-top last:border-0 hover:bg-canvas">
+                      <td className="px-3 py-3 text-xs tabular-nums text-muted">{i + 1}</td>
+                      <td className="px-3 py-3 text-muted">{s.device || "—"}</td>
+                      <td className="px-3 py-3"><div className="font-semibold">{s.name}</div>{about(s)}</td>
+                      <td className="px-3 py-3 text-center" data-testid="stock-qty">
+                        <span className={`text-xl font-bold tabular-nums ${low ? "text-red-600" : ""}`} dir="ltr">{s.qty}</span>
+                        {n <= 0 ? <span className="block text-[11px] font-semibold text-red-700">{n < 0 ? "بالسالب" : "نفد"}</span>
+                          : low ? <span className="block text-[11px] font-semibold text-red-700">ناقص</span> : null}
+                      </td>
+                      <td className={`whitespace-nowrap px-3 py-3 tabular-nums ${d != null && d < 0 ? "text-red-600" : d != null && d <= 30 ? "text-amber-700" : "text-muted"}`}>
+                        {s.expiry || "—"}{s.lot && <div className="text-[11px] text-muted" dir="ltr">LOT {s.lot}</div>}
+                      </td>
+                      <td className="px-3 py-3 tabular-nums text-muted">{s.price != null ? money(s.price) : "—"}</td>
+                      <td className="px-3 py-3 tabular-nums" data-testid="stock-price">{s.price != null ? money(Math.max(0, n) * s.price) : "—"}</td>
+                      <td className="px-3 py-3 tabular-nums text-muted">{s.minQty ?? "—"}</td>
+                      <td className="px-3 py-3">
+                        {n <= 0 ? <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700">نفد</span>
+                          : low ? <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700">ناقص</span>
+                          : d != null && d <= 30 ? <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">{d < 0 ? "منتهي" : "قرب الانتهاء"}</span>
+                          : <span className="rounded-full bg-teal-50 px-2 py-0.5 text-xs font-semibold text-brand-dark">متوفر</span>}
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="flex items-center gap-1">
+                          <NumberInput value={recv[s.id] ?? ""} onValue={(v) => setRecv((c) => ({ ...c, [s.id]: v }))} placeholder="0" aria-label={`استلام كمية ${s.name}`}
+                            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); receive(s); } }}
+                            className="w-16 rounded-lg border border-line bg-surface px-2 py-1 text-center text-sm tabular-nums outline-none focus:border-brand" />
+                          <button onClick={() => receive(s)} aria-label={`استلام ${s.name}`} className="rounded-lg bg-teal-600 px-2 py-1 text-xs font-semibold text-white hover:bg-teal-700">استلام</button>
+                        </div>
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => setMove({ item: s, sign: 1 })} aria-label={`إضافة إلى ${s.name}`} title="إضافة"
+                            className="grid size-8 place-items-center rounded-lg border border-teal-300 text-teal-800 hover:bg-teal-50"><Plus className="size-4" /></button>
+                          <button onClick={() => setMove({ item: s, sign: -1 })} aria-label={`صرف من ${s.name}`} title="صرف"
+                            className="grid size-8 place-items-center rounded-lg border border-amber-300 text-amber-800 hover:bg-amber-50"><Minus className="size-4" /></button>
+                          <Link href={`/store/moves?item=${s.id}`} aria-label={`سجل حركة ${s.name}`} title="سجل الحركة" className="grid size-8 place-items-center rounded-lg text-muted hover:bg-surface hover:text-ink"><History className="size-4" /></Link>
+                          <Link href={`/store/items?edit=${s.id}`} aria-label={`تعديل ${s.name}`} title="تعديل الصنف" className="grid size-8 place-items-center rounded-lg text-muted hover:bg-surface hover:text-ink"><Pencil className="size-4" /></Link>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 

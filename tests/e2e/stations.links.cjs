@@ -68,7 +68,7 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   ok(await settled(async () => (await after())[1] === 8), `a visit with Hb + WBC: one reagent per test (10 → 8)`);
   ok((await after())[0] === 10, `the tube is left to the examiner (still 10) — got ${JSON.stringify(await after())}`);
   await p.goto(B + '/store/inventory'); await p.waitForTimeout(1000);
-  ok((await p.locator('li[data-stock="كاشف CBC"] [data-testid="stock-tests"]').innerText()).includes('2 فحص'), 'the stock room shows the linked tests');
+  ok((await p.locator('tr[data-stock="كاشف CBC"] [data-testid="stock-tests"]').innerText()).includes('2 فحص'), 'the stock room shows the linked tests');
 
   // The side menu folds with the small mark at its top, stays folded in every station, and opens again.
   await p.goto(B + '/station'); await p.waitForSelector('[data-testid="side-collapse"]', { timeout: 20000 });

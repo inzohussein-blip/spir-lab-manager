@@ -202,6 +202,22 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   ok(await p.locator('[data-testid="stock-qty"]').count() > 0 && await p.locator('[data-testid="purchases-log"]').count() === 0, 'the «المخزن» tab shows the stock room under the purchase form');
   await p.click('[data-testid="view-purchases"]');
   ok(await p.locator('[data-testid="purchases-log"]').count() === 1, 'and the log comes back');
+  // /store/inventory: the same page, opening on the stock and its prices
+  await p.goto(B + '/store/inventory'); await p.waitForSelector('[data-testid="stock-list"]', { timeout: 20000 });
+  ok(await p.locator('[data-testid="purchase-form"]').count() === 1 && await p.locator('[data-testid="view-stock"][aria-selected="true"]').count() === 1, '/store/inventory is the same page, opening on «المخزن والأسعار»');
+  ok(await p.locator('aside a[href="/store"][aria-current="page"]').count() >= 1, 'the side menu marks «المشتريات والمخزن والأسعار» as the open page');
+  const gq = async () => (await stock()).find((s) => s.name === 'كاشف الصفراء')?.qty;
+  const before = await gq();
+  await p.fill('input[aria-label="استلام كمية كاشف الصفراء"]', '4'); await p.click('button[aria-label="استلام كاشف الصفراء"]');
+  ok(await settled(async () => (await gq()) === before + 4), `«استلام كمية» beside the item adds to it (${before} → ${before + 4})`);
+  // «رصيد افتتاحي / تسوية»: into the stock only, not a purchase
+  const nPur = ((await kv(p, 'purchasing.purchases.v1')) || []).length;
+  await p.click('[data-testid="entry-kind-opening"]');
+  ok(await p.locator('input[aria-label="المورّد"]').count() === 0 && await p.locator('[data-testid="purchase-ordered"]').count() === 0, 'an opening balance asks for no supplier and no payment');
+  await p.fill('input[placeholder="الصنف"]', 'كاشف الصفراء'); await p.locator('input[aria-label="العدد"]').first().fill('2');
+  await p.click('button:has-text("حفظ الإدخال")');
+  ok(await settled(async () => (await gq()) === before + 6) && ((await kv(p, 'purchasing.purchases.v1')) || []).length === nPur, 'it enters the stock (+2) and records no purchase');
+  ok(((await kv(p, 'station.stockMoves.v1')) || [])[0]?.reason === 'add', 'and is logged as an addition');
 
   ok(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.slice(0, 3).join(' | ') : ''));
   await b.close();

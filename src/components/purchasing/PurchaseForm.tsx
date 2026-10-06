@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Plus, X, Copy, Package, Boxes } from "lucide-react";
+import { Plus, X, Copy, Package, Boxes, ShoppingCart, PackagePlus } from "lucide-react";
 import {
   addPurchase, addToStock, deviceNames, getKits, getPurchases, getSettings, getSuppliers, lineTotal, savePurchases, stockMatch, uid,
   type Kit, type Purchase, type PurchaseItem, type PurchasingSettings, type Supplier,
@@ -41,6 +41,9 @@ export function PurchaseForm({ onSaved }: { onSaved?: (msg: string) => void }) {
   const [paid, setPaid] = useState(false);
   const [paidAmount, setPaidAmount] = useState(0);
   const [ordered, setOrdered] = useState(false);
+  /** «شراء من مورّد» (a purchase) or «رصيد افتتاحي / تسوية» (into the stock room only, as in the supplier station). */
+  const [entry, setEntry] = useState<"purchase" | "opening">("purchase");
+  const purchase = entry === "purchase";
   const [toStock, setToStock] = useState(true);
   const [notes, setNotes] = useState("");
   const [rows, setRows] = useState<Row[]>([blank()]);
@@ -66,8 +69,8 @@ export function PurchaseForm({ onSaved }: { onSaved?: (msg: string) => void }) {
   const kitText = (k: Kit, times = 1) => k.parts.map((p) => `${nameOf(p.stockId)} × ${p.qty * times}`).join("، ");
   const total = rows.reduce((t, r) => t + (Number(r.total) || 0), 0);
   const purchaseDebts = opts.debts === true;
-  const showSupplier = opts.supplierFields === true || purchaseDebts;
-  const showDate = opts.showDate === true;
+  const showSupplier = purchase && (opts.supplierFields === true || purchaseDebts);
+  const showDate = purchase && opts.showDate === true;
 
   const set = (i: number, patch: Partial<Row>) => setRows((rs) => rs.map((r, j) => {
     if (j !== i) return r;
@@ -141,6 +144,13 @@ export function PurchaseForm({ onSaved }: { onSaved?: (msg: string) => void }) {
       };
     });
     const sum = lines.reduce((t, it) => t + lineTotal(it), 0);
+    if (!purchase) {
+      // An opening balance / adjustment: into the stock room only — not a purchase, spending or debt.
+      const added = addToStock(lines, notes.trim() ? `رصيد افتتاحي / تسوية — ${notes.trim().slice(0, 80)}` : "رصيد افتتاحي / تسوية", "add");
+      onSaved?.(`دخلت ${added.length} مادة إلى المخزن (رصيد افتتاحي / تسوية).`);
+      setRows([blank()]); setNotes(""); setScanMsg(""); load();
+      return;
+    }
     // Supplier debts: what is paid now; the rest stays owed. An ordered purchase has paid nothing yet.
     const payNow = purchaseDebts && !ordered ? Math.min(Number(paidAmount) || 0, sum) : 0;
     const p: Purchase = {
@@ -165,6 +175,13 @@ export function PurchaseForm({ onSaved }: { onSaved?: (msg: string) => void }) {
 
   return (
     <div data-testid="purchase-form" ref={box}>
+      <div className="mb-3 flex w-fit overflow-hidden rounded-lg border border-line text-sm" role="tablist" aria-label="نوع الإدخال">
+        {([["purchase", "شراء من مورّد", ShoppingCart], ["opening", "رصيد افتتاحي / تسوية", PackagePlus]] as const).map(([k, l, Icon]) => (
+          <button key={k} type="button" role="tab" aria-selected={entry === k} data-testid={`entry-kind-${k}`} onClick={() => setEntry(k)}
+            className={`inline-flex items-center gap-1.5 px-4 py-2 ${entry === k ? "bg-amber-600 font-semibold text-white" : "bg-surface hover:bg-canvas"}`}><Icon className="size-4" /> {l}</button>
+        ))}
+      </div>
+      {purchase ? <>
       <div className={`grid items-end gap-3 ${showSupplier ? (showDate ? "sm:grid-cols-[1.4fr_1fr_0.9fr_auto]" : "sm:grid-cols-[1.4fr_1fr_auto]") : showDate ? "sm:grid-cols-[0.9fr_auto]" : "sm:grid-cols-[auto]"}`}>
         {showSupplier && <>
           <label className="text-sm font-medium">اسم المورّد
@@ -186,6 +203,10 @@ export function PurchaseForm({ onSaved }: { onSaved?: (msg: string) => void }) {
           <label className="flex items-center gap-2 pb-2 text-sm font-medium"><input type="checkbox" checked={paid} onChange={(e) => setPaid(e.target.checked)} aria-label="مدفوعة" className="size-4" /> مدفوعة</label>
         )}
       </div>
+
+      </> : (
+        <p className="rounded-lg bg-canvas px-3 py-2 text-xs text-muted">يدخل المخزن فقط — لا يُسجَّل شراءً ولا مصروفاً ولا ديناً لمورّد. للبضاعة المشتراة استعمل «شراء من مورّد».</p>
+      )}
 
       {opts.barcode && (
         <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -262,14 +283,16 @@ export function PurchaseForm({ onSaved }: { onSaved?: (msg: string) => void }) {
       <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="ملاحظات (اختياري)" aria-label="ملاحظات" className={`mt-3 ${inp}`} />
       {err && <p className="mt-2 text-sm text-red-600" role="alert">{err}</p>}
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <div className="text-sm">إجمالي الشراء: <b className="tabular-nums text-amber-700" data-testid="purchase-total">{money(total)} د.ع</b></div>
-        <label className="inline-flex items-center gap-1.5 text-xs text-muted">
-          <input type="checkbox" checked={ordered} onChange={(e) => setOrdered(e.target.checked)} aria-label="طلبية بانتظار الاستلام" data-testid="purchase-ordered" /> طلبية لم تصل بعد
-        </label>
-        <label className={`inline-flex items-center gap-1.5 text-xs text-muted ${ordered ? "opacity-50" : ""}`}>
-          <input type="checkbox" checked={toStock && !ordered} disabled={ordered} onChange={(e) => setToStock(e.target.checked)} aria-label="إضافة الكميات إلى المخزن" /> إضافة البنود إلى المخزن عند الحفظ
-        </label>
-        <button type="button" onClick={save} data-testid="purchase-save" className="ms-auto inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700"><Plus className="size-4" /> حفظ العملية</button>
+        <div className="text-sm">{purchase ? "إجمالي الشراء" : "قيمة الإدخال"}: <b className="tabular-nums text-amber-700" data-testid="purchase-total">{money(total)} د.ع</b></div>
+        {purchase && <>
+          <label className="inline-flex items-center gap-1.5 text-xs text-muted">
+            <input type="checkbox" checked={ordered} onChange={(e) => setOrdered(e.target.checked)} aria-label="طلبية بانتظار الاستلام" data-testid="purchase-ordered" /> طلبية لم تصل بعد
+          </label>
+          <label className={`inline-flex items-center gap-1.5 text-xs text-muted ${ordered ? "opacity-50" : ""}`}>
+            <input type="checkbox" checked={toStock && !ordered} disabled={ordered} onChange={(e) => setToStock(e.target.checked)} aria-label="إضافة الكميات إلى المخزن" /> إضافة البنود إلى المخزن عند الحفظ
+          </label>
+        </>}
+        <button type="button" onClick={save} data-testid="purchase-save" className="ms-auto inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700"><Plus className="size-4" /> {purchase ? "حفظ العملية" : "حفظ الإدخال"}</button>
       </div>
     </div>
   );

@@ -213,7 +213,7 @@ export function stockMatch(name: string): { id: string; name: string; qty: numbe
   if (!k) return null;
   return getStock().find((s) => key(s.name) === k) ?? null;
 }
-function changeStock(moves: { id: string; qty: number }[], reason: "purchase" | "purchase-del", ref?: string, prices?: Map<string, number>): void {
+function changeStock(moves: { id: string; qty: number }[], reason: "purchase" | "purchase-del" | "add", ref?: string, prices?: Map<string, number>): void {
   const by = new Map<string, number>();
   for (const m of moves) by.set(m.id, (by.get(m.id) ?? 0) + m.qty);
   saveStock(getStock().map((s) => (by.has(s.id)
@@ -223,7 +223,7 @@ function changeStock(moves: { id: string; qty: number }[], reason: "purchase" | 
 /** Put bought quantities in the stock room: onto the item of the same name, or as a new item
  *  (with no quantity yet, then the purchase's); a kit's parts, each times the kits bought. The
  *  item's unit price follows the purchase (a kit's, when it holds one item). Returns what was added. */
-export function addToStock(items: PurchaseItem[], ref?: string): { id: string; qty: number }[] {
+export function addToStock(items: PurchaseItem[], ref?: string, reason: "purchase" | "add" = "purchase"): { id: string; qty: number }[] {
   const lines = items.map((it) => ({ name: it.name.trim(), qty: Number(it.qty) || 0, price: Number(it.unitPrice) || 0, kitId: it.kitId, expiry: it.expiry, lot: it.lot, gtin: it.gtin, device: it.device?.trim() }))
     .filter((x) => x.name && x.qty > 0);
   if (!lines.length) return [];
@@ -261,7 +261,7 @@ export function addToStock(items: PurchaseItem[], ref?: string): { id: string; q
     return [{ id: item.id, qty: x.qty }];
   });
   if (fresh.length) saveStock([...stock, ...fresh]);
-  changeStock(added, "purchase", ref, prices);
+  changeStock(added, reason, ref, prices);
   if (kitCodes.size) saveKits(kits.map((k) => (kitCodes.has(k.id) ? { ...k, barcode: kitCodes.get(k.id) } : k)));
   if (codes.size || devices.size) saveStock(getStock().map((s) => (codes.has(s.id) || devices.has(s.id)
     ? { ...s, ...(codes.has(s.id) ? { barcode: codes.get(s.id) } : {}), ...(devices.has(s.id) ? { device: devices.get(s.id) } : {}) } : s)), "edit", ref);
