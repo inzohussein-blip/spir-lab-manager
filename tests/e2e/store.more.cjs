@@ -83,10 +83,30 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
 
   // ── Options: all off at first ──
   await p.goto(B + '/store/settings#extras'); await p.waitForSelector('[data-testid="store-extras"]', { timeout: 20000 });
-  ok((await Promise.all(['ديون الموردين', 'الأسعار وقيمة المخزن', 'الباركود'].map((l) => sw(l).getAttribute('aria-checked')))).every((x) => x === 'false'), 'debts, prices and barcode: off by default');
+  ok((await Promise.all(['اسم المورّد ورقم الفاتورة', 'تاريخ الشراء', 'ديون الموردين', 'الأسعار وقيمة المخزن', 'الباركود'].map((l) => sw(l).getAttribute('aria-checked')))).every((x) => x === 'false'), 'supplier, date, debts, prices and barcode: off by default');
   await p.goto(B + '/store'); await p.waitForSelector('[data-testid="purchase-form"]', { timeout: 20000 });
   await p.waitForSelector('input[placeholder="الصنف"]');
   ok(await p.locator('input[aria-label="المدفوع الآن"]').count() === 0 && await p.locator('[data-testid="scan-box"]').count() === 0, 'purchases as before (no payments, no scanning)');
+  ok(await p.locator('input[aria-label="المورّد"]').count() === 0 && await p.locator('input[aria-label="رقم فاتورة المورّد"]').count() === 0 && await p.locator('input[aria-label="تاريخ الشراء"]').count() === 0, 'the supplier, his invoice number and the date are hidden by default');
+  ok(await p.locator('input[aria-label="الجهاز"]').count() === 1, 'the device has its own column, apart from the material');
+  // The date: today's when hidden; shown by its option.
+  const today = await p.evaluate(() => new Date().toLocaleDateString('en-CA'));
+  await p.fill('input[aria-label="الجهاز"]', 'محلل الكيمياء'); await p.fill('input[placeholder="الصنف"]', 'كاشف الكوليسترول');
+  await p.click('button:has-text("حفظ العملية")'); // no price: the stock value checked further on stays as it is
+  const chol = async () => ((await kv(p, 'purchasing.purchases.v1')) || []).find((x) => x.items.some((it) => it.name === 'كاشف الكوليسترول'));
+  ok(await settled(async () => !!(await chol())) && (await chol()).date === today && !(await chol()).supplierName, 'saved with today\'s date and no supplier');
+  ok((await chol()).items[0].device === 'محلل الكيمياء' && (await stock()).find((s) => s.name === 'كاشف الكوليسترول')?.device === 'محلل الكيمياء', 'the line keeps its device, and the new stock item gets it');
+  ok((await p.locator('tr[data-purchase]').first().innerText()).includes('محلل الكيمياء — كاشف الكوليسترول'), 'the log shows device — material');
+  await p.fill('input[placeholder="الصنف"]', 'كاشف الكوليسترول');
+  ok(await p.locator('input[aria-label="الجهاز"]').inputValue() === 'محلل الكيمياء', 'a known material brings its device');
+  await p.goto(B + '/store/settings#extras'); await p.waitForSelector('[data-testid="store-extras"]', { timeout: 20000 });
+  await sw('اسم المورّد ورقم الفاتورة').click(); await sw('تاريخ الشراء').click();
+  ok(await settled(async () => { const x = await kv(p, 'purchasing.settings.v1'); return x?.supplierFields === true && x?.showDate === true; }), 'supplier and date switched on');
+  await p.goto(B + '/store'); await p.waitForSelector('input[aria-label="تاريخ الشراء"]', { timeout: 20000 });
+  ok(await p.locator('input[aria-label="المورّد"]').count() === 1 && await p.locator('input[aria-label="رقم فاتورة المورّد"]').count() === 1, 'switched on: the supplier, his invoice number and the date show');
+  await p.goto(B + '/store/settings#extras'); await p.waitForSelector('[data-testid="store-extras"]', { timeout: 20000 });
+  await sw('اسم المورّد ورقم الفاتورة').click(); await sw('تاريخ الشراء').click();
+  ok(await settled(async () => { const x = await kv(p, 'purchasing.settings.v1'); return !x?.supplierFields && !x?.showDate; }), 'and off again');
 
   // ── Supplier debts ──
   await p.goto(B + '/store/settings#extras'); await p.waitForSelector('[data-testid="store-extras"]', { timeout: 20000 });

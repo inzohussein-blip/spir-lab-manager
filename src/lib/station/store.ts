@@ -122,6 +122,8 @@ export interface StockItem {
   price?: number;
   /** The package's barcode — «… ← الباركود». */
   barcode?: string;
+  /** The device it is used on (written with the purchase that brought it, «المشتريات ← الجهاز»). */
+  device?: string;
 }
 /** A supply the examiner issues by hand (see StockItem.byHand). */
 export const isByHand = (s: StockItem): boolean => s.byHand === true || s.perVisit === true;

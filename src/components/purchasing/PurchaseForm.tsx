@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Plus, X, Copy, Package, Boxes } from "lucide-react";
 import {
-  addPurchase, addToStock, getKits, getPurchases, getSettings, getSuppliers, lineTotal, savePurchases, stockMatch, uid,
+  addPurchase, addToStock, deviceNames, getKits, getPurchases, getSettings, getSuppliers, lineTotal, savePurchases, stockMatch, uid,
   type Kit, type Purchase, type PurchaseItem, type PurchasingSettings, type Supplier,
 } from "@/lib/purchasing/store";
 import { getStock, type StockItem } from "@/lib/station/store";
@@ -21,20 +21,21 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 /** A line being typed: a stock item or a kit (two separate lists), how many, expiry and lot (optional),
  *  the price of one and the line's total (either one fills the other). */
 type LineKind = "item" | "kit";
-interface Row { kind: LineKind; name: string; qty: number; expiry: string; lot: string; unit: number; total: number; gtin?: string }
-const blank = (kind: LineKind = "item"): Row => ({ kind, name: "", qty: 1, expiry: "", lot: "", unit: 0, total: 0 });
+interface Row { kind: LineKind; device: string; name: string; qty: number; expiry: string; lot: string; unit: number; total: number; gtin?: string }
+const blank = (kind: LineKind = "item", device = ""): Row => ({ kind, device, name: "", qty: 1, expiry: "", lot: "", unit: 0, total: 0 });
 
 /**
  * «عملية شراء جديدة» — the entry into the lab's stock room, on the page itself (as in the supplier
- * station), as a table of lines: supplier (his invoice number, the date, paid or not, or an ordered
- * purchase that arrives later), then each line's kind (item / kit) · material · count · expiry · lot
- * (optional) · price of one · total. A known material shows its balance; a new one is added to the
+ * station), as a table of lines: paid or not (or an ordered purchase that arrives later), then each
+ * line's kind (item / kit) · device · material · count · expiry · lot (optional) · price of one ·
+ * total. The supplier with his invoice number, and the date (otherwise today's), show only when
+ * switched on in the station's settings («خيارات إضافية»); supplier debts always show the supplier. A known material shows its balance; a new one is added to the
  * stock room on saving; a kit adds its contents. A GS1 box code (scanner or camera) fills the lot and
  * expiry (Settings → «الباركود»). Supplier debts (Settings → «ديون الموردين») replace «مدفوعة» with
  * «المدفوع الآن».
  */
 export function PurchaseForm({ onSaved }: { onSaved?: (msg: string) => void }) {
-  const [date, setDate] = useState(today());
+  const [dateTyped, setDate] = useState(today());
   const [supplier, setSupplier] = useState("");
   const [supplierRef, setSupplierRef] = useState("");
   const [paid, setPaid] = useState(false);
@@ -46,12 +47,13 @@ export function PurchaseForm({ onSaved }: { onSaved?: (msg: string) => void }) {
   const [err, setErr] = useState("");
   const [scanMsg, setScanMsg] = useState("");
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [devices, setDevices] = useState<string[]>([]);
   const [stock, setStock] = useState<StockItem[]>([]);
   const [kits, setKits] = useState<Kit[]>([]);
   const [opts, setOpts] = useState<PurchasingSettings>({ orgName: "" });
   const box = useRef<HTMLDivElement>(null);
 
-  const load = () => { setSuppliers(getSuppliers()); setStock(getStock()); setKits(getKits()); setOpts(getSettings()); };
+  const load = () => { setDevices(deviceNames()); setSuppliers(getSuppliers()); setStock(getStock()); setKits(getKits()); setOpts(getSettings()); };
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- this device's data (browser storage) is read once the page is on screen, never while rendering on the server
     load();
@@ -64,15 +66,24 @@ export function PurchaseForm({ onSaved }: { onSaved?: (msg: string) => void }) {
   const kitText = (k: Kit, times = 1) => k.parts.map((p) => `${nameOf(p.stockId)} × ${p.qty * times}`).join("، ");
   const total = rows.reduce((t, r) => t + (Number(r.total) || 0), 0);
   const purchaseDebts = opts.debts === true;
+  const showSupplier = opts.supplierFields === true || purchaseDebts;
+  const showDate = opts.showDate === true;
 
-  const set = (i: number, patch: Partial<Row>) => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  const set = (i: number, patch: Partial<Row>) => setRows((rs) => rs.map((r, j) => {
+    if (j !== i) return r;
+    const next = { ...r, ...patch };
+    // A known item typed without its device: the device written on it.
+    if (patch.name !== undefined && next.kind === "item" && !next.device.trim()) next.device = itemOf(next.name)?.device ?? "";
+    return next;
+  }));
   /** The count, the price of one and the total stay in step: a changed count keeps the price of one. */
   const setQty = (i: number, qty: number) => setRows((rs) => rs.map((r, j) => (j !== i ? r : { ...r, qty, ...(r.unit > 0 ? { total: round2(r.unit * qty) } : { unit: qty > 0 ? round2(r.total / qty) : 0 }) })));
   const setUnit = (i: number, unit: number) => setRows((rs) => rs.map((r, j) => (j !== i ? r : { ...r, unit, total: round2(unit * (Number(r.qty) || 0)) })));
   const setTotal = (i: number, t: number) => setRows((rs) => rs.map((r, j) => (j !== i ? r : { ...r, total: t, unit: Number(r.qty) > 0 ? round2(t / Number(r.qty)) : r.unit })));
   function addRow(after?: number) {
     setRows((rs) => {
-      const row = blank(after != null ? rs[after].kind : "item");
+      // «سطر آخر» after a line: the same kind and device.
+      const row = after != null ? blank(rs[after].kind, rs[after].device) : blank();
       return after == null ? [...rs, row] : [...rs.slice(0, after + 1), row, ...rs.slice(after + 1)];
     });
     setTimeout(() => box.current?.querySelectorAll<HTMLInputElement>("input[data-line-name]").forEach((el, i, all) => { if (i === (after == null ? all.length - 1 : after + 1)) el.focus(); }), 30);
@@ -118,11 +129,13 @@ export function PurchaseForm({ onSaved }: { onSaved?: (msg: string) => void }) {
     if (unknownKit) return setErr(`«${unknownKit.name.trim()}» ليس كتاً معرَّفاً — عرّفه في «الأصناف ← كت جديد»، أو اختر «صنف».`);
     const kitAsItem = clean.find((r) => r.kind === "item" && kitOf(r.name));
     if (kitAsItem) return setErr(`«${kitAsItem.name.trim()}» اسم كت — اختر «كت» لهذا البند.`);
-    const sup = suppliers.find((s) => same(s.name, supplier));
+    const sup = showSupplier ? suppliers.find((s) => same(s.name, supplier)) : undefined;
+    const date = showDate && dateTyped ? dateTyped : today();
     const lines = clean.map((r): PurchaseItem => {
       const kit = r.kind === "kit" ? kitOf(r.name) : undefined;
       const qty = Number(r.qty) || 0, t = Number(r.total) || 0;
       return {
+        ...(r.device.trim() ? { device: r.device.trim().slice(0, 120) } : {}),
         name: kit?.name ?? stockMatch(r.name)?.name ?? r.name.trim(), qty, unitPrice: qty > 0 ? round2(t / qty) : 0, total: t, ...(kit ? { kitId: kit.id } : {}),
         ...(r.expiry ? { expiry: r.expiry } : {}), ...(r.lot.trim() ? { lot: r.lot.trim() } : {}), ...(r.gtin ? { gtin: r.gtin } : {}),
       };
@@ -132,8 +145,8 @@ export function PurchaseForm({ onSaved }: { onSaved?: (msg: string) => void }) {
     const payNow = purchaseDebts && !ordered ? Math.min(Number(paidAmount) || 0, sum) : 0;
     const p: Purchase = {
       id: uid(), created_at: Date.now(), date,
-      supplierId: sup?.id, supplierName: sup?.name || supplier.trim() || undefined,
-      ...(supplierRef.trim() ? { supplierRef: supplierRef.trim().slice(0, 60) } : {}), ...(ordered ? { ordered: true } : {}),
+      supplierId: sup?.id, supplierName: showSupplier ? sup?.name || supplier.trim() || undefined : undefined,
+      ...(showSupplier && supplierRef.trim() ? { supplierRef: supplierRef.trim().slice(0, 60) } : {}), ...(ordered ? { ordered: true } : {}),
       items: lines, total: sum, paid: ordered ? false : purchaseDebts ? payNow >= sum : paid, notes: notes.trim() || undefined,
       ...(payNow > 0 ? { payments: [{ id: uid(), date, amount: payNow }] } : {}),
     };
@@ -152,23 +165,25 @@ export function PurchaseForm({ onSaved }: { onSaved?: (msg: string) => void }) {
 
   return (
     <div data-testid="purchase-form" ref={box}>
-      <div className="grid gap-3 sm:grid-cols-[1.4fr_1fr_0.9fr_auto]">
-        <label className="text-sm font-medium">اسم المورّد
-          <input value={supplier} onChange={(e) => setSupplier(e.target.value)} list="pf-suppliers" placeholder="اختر أو اكتب اسم المورّد" aria-label="المورّد" className={`mt-1 ${inp}`} />
-          <datalist id="pf-suppliers">{suppliers.map((s) => <option key={s.id} value={s.name} />)}</datalist>
-        </label>
-        <label className="text-sm font-medium">رقم فاتورة المورّد <span className="font-normal text-muted">(اختياري)</span>
-          <input value={supplierRef} onChange={(e) => setSupplierRef(e.target.value)} dir="ltr" aria-label="رقم فاتورة المورّد" className={`mt-1 ${inp}`} />
-        </label>
-        <label className="text-sm font-medium">التاريخ<input type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-label="تاريخ الشراء" className={`mt-1 ${inp}`} /></label>
+      <div className={`grid items-end gap-3 ${showSupplier ? (showDate ? "sm:grid-cols-[1.4fr_1fr_0.9fr_auto]" : "sm:grid-cols-[1.4fr_1fr_auto]") : showDate ? "sm:grid-cols-[0.9fr_auto]" : "sm:grid-cols-[auto]"}`}>
+        {showSupplier && <>
+          <label className="text-sm font-medium">اسم المورّد
+            <input value={supplier} onChange={(e) => setSupplier(e.target.value)} list="pf-suppliers" placeholder="اختر أو اكتب اسم المورّد" aria-label="المورّد" className={`mt-1 ${inp}`} />
+            <datalist id="pf-suppliers">{suppliers.map((s) => <option key={s.id} value={s.name} />)}</datalist>
+          </label>
+          <label className="text-sm font-medium">رقم فاتورة المورّد <span className="font-normal text-muted">(اختياري)</span>
+            <input value={supplierRef} onChange={(e) => setSupplierRef(e.target.value)} dir="ltr" aria-label="رقم فاتورة المورّد" className={`mt-1 ${inp}`} />
+          </label>
+        </>}
+        {showDate && <label className="text-sm font-medium">التاريخ<input type="date" value={dateTyped} onChange={(e) => setDate(e.target.value)} aria-label="تاريخ الشراء" className={`mt-1 ${inp}`} /></label>}
         {ordered ? (
-          <span className="self-end pb-2 text-xs text-amber-700">طلبية — لا مصروف ولا دين حتى «استلام»</span>
+          <span className="pb-2 text-xs text-amber-700">طلبية — لا مصروف ولا دين حتى «استلام»</span>
         ) : purchaseDebts ? (
           <label className="text-sm font-medium">المدفوع الآن
             <NumberInput value={paidAmount} onValue={(v) => setPaidAmount(Number(v) || 0)} group zeroEmpty placeholder="0" aria-label="المدفوع الآن" className={`mt-1 ${num} w-32`} />
           </label>
         ) : (
-          <label className="flex items-center gap-2 self-end pb-2 text-sm font-medium"><input type="checkbox" checked={paid} onChange={(e) => setPaid(e.target.checked)} aria-label="مدفوعة" className="size-4" /> مدفوعة</label>
+          <label className="flex items-center gap-2 pb-2 text-sm font-medium"><input type="checkbox" checked={paid} onChange={(e) => setPaid(e.target.checked)} aria-label="مدفوعة" className="size-4" /> مدفوعة</label>
         )}
       </div>
 
@@ -180,15 +195,16 @@ export function PurchaseForm({ onSaved }: { onSaved?: (msg: string) => void }) {
         </div>
       )}
 
+      <datalist id="pf-devices">{devices.map((d) => <option key={d} value={d} />)}</datalist>
       <datalist id="pf-stock">{stock.map((s) => <option key={s.id} value={s.name} />)}</datalist>
       <datalist id="pf-kits">{kits.map((k) => <option key={k.id} value={k.name}>{kitText(k)}</option>)}</datalist>
       <div className="mt-3 overflow-x-auto">
-        <table className="w-full min-w-[980px] text-sm" data-testid="purchase-lines">
+        <table className="w-full min-w-[940px] text-sm" data-testid="purchase-lines">
           <thead className="text-right text-xs text-muted">
             <tr>
-              <th className="w-8 pb-1 font-medium">ت</th><th className="w-28 pb-1 font-medium">النوع</th><th className="min-w-48 pb-1 font-medium">اسم الجهاز / المادة *</th>
-              <th className="w-20 pb-1 font-medium">العدد</th><th className="w-36 pb-1 font-medium">الإكسباير <span className="font-normal">(اختياري)</span></th><th className="w-28 pb-1 font-medium">اللوت <span className="font-normal">(اختياري)</span></th>
-              <th className="w-28 pb-1 font-medium">سعر الواحد</th><th className="w-32 pb-1 font-medium">المجموع</th><th className="w-20" />
+              <th className="w-8 pb-1 font-medium">ت</th><th className="w-24 pb-1 font-medium">النوع</th><th className="min-w-28 pb-1 font-medium">الجهاز <span className="font-normal">(اختياري)</span></th><th className="min-w-36 pb-1 font-medium">المادة *</th>
+              <th className="w-16 pb-1 font-medium">العدد</th><th className="w-36 pb-1 font-medium">الإكسباير <span className="font-normal">(اختياري)</span></th><th className="w-24 pb-1 font-medium">اللوت <span className="font-normal">(اختياري)</span></th>
+              <th className="w-24 pb-1 font-medium">سعر الواحد</th><th className="w-28 pb-1 font-medium">المجموع</th><th className="w-20" />
             </tr>
           </thead>
           <tbody>
@@ -208,6 +224,7 @@ export function PurchaseForm({ onSaved }: { onSaved?: (msg: string) => void }) {
                       ))}
                     </div>
                   </td>
+                  <td className="pe-1.5 pb-2"><input value={r.device} onChange={(e) => set(i, { device: e.target.value })} list="pf-devices" placeholder="الجهاز" aria-label="الجهاز" className={inp} /></td>
                   <td className="pe-1.5 pb-2">
                     <input value={r.name} onChange={(e) => set(i, { name: e.target.value })} data-line-name list={r.kind === "kit" ? "pf-kits" : "pf-stock"}
                       placeholder={r.kind === "kit" ? "الكت" : "الصنف"} aria-label={r.kind === "kit" ? "الكت" : "الصنف"} className={inp} />
@@ -229,7 +246,7 @@ export function PurchaseForm({ onSaved }: { onSaved?: (msg: string) => void }) {
                   </td>
                   <td className="pb-2">
                     <div className="flex gap-1">
-                      <button type="button" onClick={() => addRow(i)} title="سطر آخر" aria-label={`سطر آخر بعد السطر ${i + 1}`} className="grid size-8 place-items-center rounded-lg border border-line text-muted hover:bg-canvas"><Copy className="size-3.5" /></button>
+                      <button type="button" onClick={() => addRow(i)} title="مادة أخرى لنفس الجهاز" aria-label={`سطر آخر بعد السطر ${i + 1}`} className="grid size-8 place-items-center rounded-lg border border-line text-muted hover:bg-canvas"><Copy className="size-3.5" /></button>
                       <button type="button" onClick={() => removeRow(i)} title="حذف السطر" aria-label={`حذف السطر ${i + 1}`} className="grid size-8 place-items-center rounded-lg border border-line text-red-600 hover:bg-red-50"><X className="size-4" /></button>
                     </div>
                   </td>

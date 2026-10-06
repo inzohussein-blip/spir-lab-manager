@@ -104,7 +104,7 @@ export function PurchasesLog({ purchases, stock, kits, opts, onChanged, onMsg }:
             {shown.length === 0 && <tr><td colSpan={7} className="px-4 py-8 text-center text-muted">{purchases.length === 0 ? "لا عمليات شراء بعد — اكتب أول عملية في الأعلى." : "لا عمليات مطابقة."}</td></tr>}
             {shown.map((p) => {
               const paid = isPaid(p);
-              const lines = p.items.map((it) => `${it.name}${it.kitId ? " (كت)" : ""} × ${it.qty}${it.lot ? ` (${it.lot}${it.expiry ? ` · ${it.expiry}` : ""})` : it.expiry ? ` (${it.expiry})` : ""}`);
+              const lines = p.items.map((it) => `${it.device ? `${it.device} — ` : ""}${it.name}${it.kitId ? " (كت)" : ""} × ${it.qty}${it.lot ? ` (${it.lot}${it.expiry ? ` · ${it.expiry}` : ""})` : it.expiry ? ` (${it.expiry})` : ""}`);
               return (
                 <Fragment key={p.id}>
                   <tr data-purchase={p.id} className={`border-b border-line last:border-0 hover:bg-canvas ${checked.has(p.id) ? "bg-amber-50" : ""}`}>
@@ -151,7 +151,7 @@ export function PurchasesLog({ purchases, stock, kits, opts, onChanged, onMsg }:
                           <tbody>
                             {p.items.map((it, i) => (
                               <tr key={i} className="border-t border-line/60 align-top">
-                                <td className="py-1.5">{it.name}{it.kitId && <span className="ms-1 rounded-full bg-violet-50 px-1.5 text-[10px] text-violet-700">كت</span>}</td>
+                                <td className="py-1.5">{it.device && <span className="text-muted">{it.device} — </span>}{it.name}{it.kitId && <span className="ms-1 rounded-full bg-violet-50 px-1.5 text-[10px] text-violet-700">كت</span>}</td>
                                 <td className="py-1.5 tabular-nums">{it.qty}</td>
                                 <td className="py-1.5 text-xs" data-testid="line-batch"><span dir="ltr">{[it.expiry, it.lot && `LOT ${it.lot}`].filter(Boolean).join(" · ") || "—"}</span></td>
                                 <td className="py-1.5 tabular-nums" data-testid="line-price">

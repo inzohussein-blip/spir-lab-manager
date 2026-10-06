@@ -25,6 +25,7 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
     && await p.locator('aside a[href="/store/items"]:has-text("الأصناف")').count() === 1, 'purchases, stock and items: each in the side menu');
 
   // ── A purchase: typed amounts and the stock link ──
+  await kvPut(p, 'purchasing.settings.v1', { orgName: 'المخزن والمشتريات', supplierFields: true }); // the supplier's name is an option
   await p.goto(B + '/store'); await p.waitForSelector('[data-testid="purchase-form"]', { timeout: 20000 });
   await p.fill('input[aria-label="المورّد"]', 'مورّد المخزن');
   await p.fill('input[placeholder="الصنف"]', 'كاشف السكر');
