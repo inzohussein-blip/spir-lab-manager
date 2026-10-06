@@ -1,5 +1,6 @@
 "use server";
 
+import { hasRole } from "@/lib/auth/guard";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { query, queryOne } from "@/lib/db";
@@ -61,6 +62,7 @@ async function recompute(invoiceId: string): Promise<void> {
 
 /** Raise an invoice from a test order (lines = ordered tests). */
 export async function createInvoiceFromOrder(orderId: string): Promise<void> {
+  if (!(await hasRole("reception"))) return; // the role's pages only (see lib/nav.ts)
   const existing = await queryOne<{ id: string }>(
     `select id from invoices where order_id = $1 and status <> 'void' limit 1`,
     [orderId]
@@ -115,6 +117,7 @@ export async function createInvoiceFromOrder(orderId: string): Promise<void> {
 }
 
 export async function updateInvoiceTerms(formData: FormData): Promise<void> {
+  if (!(await hasRole("reception"))) return; // the role's pages only (see lib/nav.ts)
   const id = String(formData.get("invoice_id") || "");
   if (!id) return;
   await query(`update invoices set discount=$1, tax_rate=$2, notes=$3 where id=$4`, [
@@ -128,6 +131,7 @@ export async function updateInvoiceTerms(formData: FormData): Promise<void> {
 }
 
 export async function recordPayment(formData: FormData): Promise<void> {
+  if (!(await hasRole("reception"))) return; // the role's pages only (see lib/nav.ts)
   const id = String(formData.get("invoice_id") || "");
   const amount = Number(formData.get("amount") || 0);
   if (!id || !amount) return;
@@ -141,6 +145,7 @@ export async function recordPayment(formData: FormData): Promise<void> {
 }
 
 export async function voidInvoice(formData: FormData): Promise<void> {
+  if (!(await hasRole("reception"))) return; // the role's pages only (see lib/nav.ts)
   const id = String(formData.get("invoice_id") || "");
   if (!id) return;
   await query(`update invoices set status='void' where id=$1`, [id]);

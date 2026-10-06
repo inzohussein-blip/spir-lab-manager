@@ -1,5 +1,6 @@
 "use server";
 
+import { hasRole } from "@/lib/auth/guard";
 import Anthropic from "@anthropic-ai/sdk";
 import { query, queryOne } from "@/lib/db";
 
@@ -14,6 +15,7 @@ const DISCLAIMER =
 export async function analyzeOrder(
   orderId: string
 ): Promise<{ summary?: string; error?: string; disclaimer: string }> {
+  if (!(await hasRole("technician", "reception"))) return { error: "لا تملك الصلاحية.", disclaimer: DISCLAIMER }; // the role's pages only (see lib/nav.ts)
   if (!process.env.ANTHROPIC_API_KEY) {
     return {
       error:

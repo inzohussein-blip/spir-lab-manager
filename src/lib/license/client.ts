@@ -141,12 +141,16 @@ export async function evaluate(module?: LicenseModule): Promise<LicenseState> {
   return { kind: "need" };
 }
 
+/** Fired when this device's lab code changes (entered, renewed, refreshed): open cards re-check. */
+export const LICENSE_EVENT = "local-license-change";
+
 function store(d: { token: string; pub: JsonWebKey; now?: number; message?: string; sync?: DeviceSync | null; pin?: PinOp | null; pins?: PinPolicy | null }) {
   write(LIC_KEY, JSON.stringify({ token: d.token, pub: d.pub, checkedAt: Date.now(), message: d.message || "", version: APP_VERSION, sync: d.sync ?? null } satisfies Stored));
   applyPinOp(d.pin); // the owner's old «رمز دخول المحطات» change, once
   applyPinPolicy(d.pins); // the owner's «رموز الدخول (PIN)»: hidden or shown, and each station's PINs
   write(ACT_KEY, "activated");
   if (d.now) write(SEEN_KEY, String(d.now)); // the server's clock resets a wrongly set one
+  try { window.dispatchEvent(new Event(LICENSE_EVENT)); } catch { /* not in a browser */ }
 }
 
 export type ActivateResult = { ok: true } | { ok: false; error: string; lab?: string };

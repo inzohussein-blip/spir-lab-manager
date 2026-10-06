@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Home } from "lucide-react";
 import { navForRole } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 
@@ -81,6 +82,11 @@ export function Sidebar({ role, lab, badges = {} }: { role: string; lab: { name:
           </div>
         ))}
       </nav>
+      <div className="mt-auto border-t border-line px-3 py-3">
+        <a href="/welcome" className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted hover:bg-canvas hover:text-ink" data-testid="sidebar-home">
+          <Home className="size-4.5 shrink-0" /> الصفحة الرئيسية
+        </a>
+      </div>
     </aside>
   );
 }

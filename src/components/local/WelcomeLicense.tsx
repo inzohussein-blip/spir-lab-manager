@@ -3,7 +3,9 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Lock, ArrowLeft, LayoutDashboard } from "lucide-react";
+import { useState } from "react";
 import { useLicense } from "@/components/local/ActivationGate";
+import { refreshLicense } from "@/lib/license/client";
 import type { LicenseModule } from "@/lib/license/modules";
 
 /** A station card on the Welcome page — greyed out when the lab code does not include it. */
@@ -26,10 +28,22 @@ export function LicensedLink({ module, href, className, children }: { module: Li
 export function AdminPanelCard() {
   const { state } = useLicense("admin");
   const open = state?.kind === "ok";
+  const [going, setGoing] = useState(false);
+  // The panel opens with the device's admin cookie, renewed with the lab code each time (a cookie
+  // cleared by the browser or past its week would otherwise send the device back here); then a
+  // full page load, since the panel has its own frame.
+  async function enter(e: React.MouseEvent) {
+    e.preventDefault();
+    if (going) return;
+    setGoing(true);
+    await Promise.race([refreshLicense(true).catch(() => undefined), new Promise((r) => setTimeout(r, 6000))]);
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- a full load on purpose (see above)
+    window.location.assign("/login");
+  }
   const why = !state || state.kind === "off" ? "مقفلة حالياً" : "غير مفعّلة في رمزك";
   if (open) {
     return (
-      <Link href="/login" className="group flex flex-col rounded-2xl border-2 border-violet-300 bg-surface p-6 shadow-[var(--shadow-card)] transition-colors hover:border-violet-500">
+      <a href="/login" onClick={enter} aria-busy={going} data-testid="admin-card" className="group flex flex-col rounded-2xl border-2 border-violet-300 bg-surface p-6 shadow-[var(--shadow-card)] transition-colors hover:border-violet-500">
         <span className="grid size-12 place-items-center rounded-xl bg-gradient-to-br from-violet-500 to-violet-700 text-white shadow-sm">
           <LayoutDashboard className="size-6" />
         </span>
@@ -38,7 +52,7 @@ export function AdminPanelCard() {
         <span className="mt-5 inline-flex items-center justify-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white group-hover:bg-violet-700">
           الدخول <ArrowLeft className="size-4" />
         </span>
-      </Link>
+      </a>
     );
   }
   return (

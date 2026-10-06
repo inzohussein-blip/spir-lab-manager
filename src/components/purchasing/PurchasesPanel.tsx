@@ -134,12 +134,13 @@ export function PurchasesPanel() {
                   {open === p.id && (
                     <div className="border-t border-line bg-canvas/60 px-4 py-3 text-sm" data-testid="purchase-details">
                       <table className="w-full max-w-2xl">
-                        <thead className="text-right text-xs text-muted"><tr><th className="py-1 font-medium">البند</th><th className="font-medium">الكمية</th><th className="font-medium">السعر</th></tr></thead>
+                        <thead className="text-right text-xs text-muted"><tr><th className="py-1 font-medium">البند</th><th className="font-medium">العدد</th><th className="font-medium">الاكسباير / اللوت</th><th className="font-medium">السعر</th></tr></thead>
                         <tbody>
                           {p.items.map((it, i) => (
                             <tr key={i} className="border-t border-line/60 align-top">
                               <td className="py-1.5">{it.name}{it.kitId && <span className="ms-1 rounded-full bg-violet-50 px-1.5 text-[10px] text-violet-700">كت</span>}</td>
                               <td className="py-1.5 tabular-nums">{it.qty}</td>
+                              <td className="py-1.5 text-xs" data-testid="line-batch"><span dir="ltr">{[it.expiry, it.lot && `LOT ${it.lot}`].filter(Boolean).join(" · ") || "—"}</span></td>
                               <td className="py-1.5 tabular-nums" data-testid="line-price">
                                 <div className="font-semibold">{money(lineTotal(it))}</div>
                                 <div className="text-[11px] text-muted">{oneOf(it)}</div>
@@ -178,11 +179,13 @@ export function PurchasesPanel() {
 
 /** A line being typed: a stock item or a kit (two separate lists), how many, and the line's total. */
 type LineKind = "item" | "kit";
-type Line = { kind: LineKind; name: string; qty: number; total: number };
-const emptyLine = (kind: LineKind = "item"): Line => ({ kind, name: "", qty: 1, total: 0 });
+type Line = { kind: LineKind; name: string; qty: number; unit: number; total: number; expiry: string; lot: string };
+const emptyLine = (kind: LineKind = "item"): Line => ({ kind, name: "", qty: 1, unit: 0, total: 0, expiry: "", lot: "" });
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-/** «عملية شراء جديدة»: date and supplier, the lines (Enter in the price adds the next line), total, paid. */
+/** «عملية شراء جديدة»: the supplier, then for each line the device or material, the count, its expiry and
+ *  lot (optional), the price of one and the line's total (either one fills the other); Enter in the
+ *  total adds the next line. Then the purchase total and what is paid. */
 function PurchaseDialog({ suppliers, stock, kits, opts, onClose, onSaved }: {
   suppliers: Supplier[]; stock: StockItem[]; kits: Kit[]; opts: PurchasingSettings; onClose: () => void; onSaved: (p: Purchase) => void;
 }) {
@@ -204,12 +207,17 @@ function PurchaseDialog({ suppliers, stock, kits, opts, onClose, onSaved }: {
   const total = items.reduce((t, it) => t + (Number(it.total) || 0), 0);
 
   function setItem(i: number, patch: Partial<Line>) { setItems((arr) => arr.map((it, j) => (j === i ? { ...it, ...patch } : it))); }
+  /** The count, the price of one and the total stay in step: a changed count keeps the price of one. */
+  function setQty(i: number, qty: number) {
+    setItems((arr) => arr.map((it, j) => (j !== i ? it : { ...it, qty, ...(it.unit > 0 ? { total: round2(it.unit * qty) } : { unit: qty > 0 ? round2(it.total / qty) : 0 }) })));
+  }
+  const setUnit = (i: number, unit: number) => setItems((arr) => arr.map((it, j) => (j !== i ? it : { ...it, unit, total: round2(unit * (Number(it.qty) || 0)) })));
+  const setTotal = (i: number, total: number) => setItems((arr) => arr.map((it, j) => (j !== i ? it : { ...it, total, unit: Number(it.qty) > 0 ? round2(total / Number(it.qty)) : it.unit })));
   function addLine() {
     setItems((a) => [...a, emptyLine()]);
     setTimeout(() => box.current?.querySelectorAll<HTMLInputElement>("input[data-line-name]").forEach((el, i, all) => { if (i === all.length - 1) el.focus(); }), 30);
   }
-  /** Under the total: the price of one — of the item, or, for a kit, of one unit it holds (a kit of
-   *  one item, e.g. 60,000 ÷ 30 reagents) or of one kit (a kit of several items). */
+  /** For a kit of one item, the price of one unit it holds (e.g. 60,000 ÷ 30 reagents). */
   function unitLine(it: Line): string | null {
     const t = Number(it.total) || 0, q = Number(it.qty) || 0;
     if (!(t > 0) || !(q > 0)) return null;
@@ -218,8 +226,7 @@ function PurchaseDialog({ suppliers, stock, kits, opts, onClose, onSaved }: {
       const n = kit.parts[0].qty * q;
       return `سعر الواحد (${nameOf(kit.parts[0].stockId)}): ${money(round2(t / n))} د.ع (${money(t)} ÷ ${n})`;
     }
-    if (kit) return `سعر الكت الواحد: ${money(round2(t / q))} د.ع`;
-    return `سعر الواحد: ${money(round2(t / q))} د.ع${q > 1 ? ` (${money(t)} ÷ ${q})` : ""}`;
+    return null;
   }
   /** Settings → «الباركود»: a scanned item or kit becomes a line (or one more of it). */
   function onScan(code: string): string {
@@ -229,7 +236,7 @@ function PurchaseDialog({ suppliers, stock, kits, opts, onClose, onSaved }: {
     const kind: LineKind = k ? "kit" : "item";
     setItems((arr) => {
       const i = arr.findIndex((it) => it.kind === kind && same(it.name, hit));
-      if (i >= 0) return arr.map((it, j) => (j === i ? { ...it, qty: (Number(it.qty) || 0) + 1 } : it));
+      if (i >= 0) return arr.map((it, j) => { if (j !== i) return it; const qty = (Number(it.qty) || 0) + 1; return { ...it, qty, ...(it.unit > 0 ? { total: round2(it.unit * qty) } : {}) }; });
       const blank = arr.findIndex((it) => !it.name.trim());
       return blank >= 0 ? arr.map((it, j) => (j === blank ? { ...it, kind, name: hit, qty: 1 } : it)) : [...arr, { ...emptyLine(kind), name: hit }];
     });
@@ -247,7 +254,10 @@ function PurchaseDialog({ suppliers, stock, kits, opts, onClose, onSaved }: {
     const lines = clean.map((it): PurchaseItem => {
       const kit = it.kind === "kit" ? kitOf(it.name) : undefined;
       const qty = Number(it.qty) || 0, t = Number(it.total) || 0;
-      return { name: kit?.name ?? stockMatch(it.name)?.name ?? it.name.trim(), qty, unitPrice: qty > 0 ? round2(t / qty) : 0, total: t, ...(kit ? { kitId: kit.id } : {}) };
+      return {
+        name: kit?.name ?? stockMatch(it.name)?.name ?? it.name.trim(), qty, unitPrice: qty > 0 ? round2(t / qty) : 0, total: t, ...(kit ? { kitId: kit.id } : {}),
+        ...(it.expiry ? { expiry: it.expiry } : {}), ...(it.lot.trim() ? { lot: it.lot.trim() } : {}),
+      };
     });
     const sum = lines.reduce((t, it) => t + lineTotal(it), 0);
     // Supplier debts: what is paid now; the rest stays owed.
@@ -266,24 +276,21 @@ function PurchaseDialog({ suppliers, stock, kits, opts, onClose, onSaved }: {
     onSaved(p);
   }
 
-  const cols = "grid grid-cols-[112px_minmax(0,1fr)_76px_130px_32px] gap-2";
+  const lbl = "mb-0.5 block text-[11px] font-medium text-muted";
   return (
     <Modal title="عملية شراء جديدة" onClose={onClose} testid="purchase-form" wide>
       <div ref={box} className="flex flex-col gap-4">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="text-sm font-medium">التاريخ<input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={`mt-1 ${inp}`} /></label>
-          <label className="text-sm font-medium">المورّد
-            <input value={supplier} onChange={(e) => setSupplier(e.target.value)} list="supplier-list" placeholder="اختر أو اكتب اسم المورّد" aria-label="المورّد" className={`mt-1 ${inp}`} />
+        <div className="grid gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          <label className="text-sm font-medium">اسم المورّد
+            <input value={supplier} onChange={(e) => setSupplier(e.target.value)} list="supplier-list" placeholder="اختر أو اكتب اسم المورّد" aria-label="المورّد" className={`mt-1 ${inp}`} autoFocus />
             <datalist id="supplier-list">{suppliers.map((s) => <option key={s.id} value={s.name} />)}</datalist>
           </label>
+          <label className="text-sm font-medium">التاريخ<input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={`mt-1 ${inp}`} /></label>
         </div>
 
         {opts.barcode && <ScanBox onScan={onScan} hint="امسح باركود الصنف أو الكت ليُضاف بنداً…" />}
 
         <div>
-          <div className={`mb-1 ${cols} px-1 text-xs font-medium text-muted`}>
-            <span>النوع</span><span>الاسم</span><span>الكمية</span><span>السعر الإجمالي</span><span />
-          </div>
           <div className="flex flex-col gap-2">
             {items.map((it, i) => {
               const kit = it.kind === "kit" ? kitOf(it.name) : undefined;
@@ -293,35 +300,49 @@ function PurchaseDialog({ suppliers, stock, kits, opts, onClose, onSaved }: {
                   className={`flex-1 px-2 py-2 text-xs font-semibold ${it.kind === k ? (k === "kit" ? "bg-violet-600 text-white" : "bg-amber-600 text-white") : "text-muted hover:bg-canvas"}`}>{text}</button>
               );
               return (
-                <div key={i} data-line={i} className="rounded-xl border border-line/70 p-2">
-                  <div className={`${cols} items-start`}>
-                    <div className="flex overflow-hidden rounded-lg border border-line" role="group" aria-label="نوع البند">
-                      {kindBtn("item", "صنف")}{kindBtn("kit", "كت")}
+                <div key={i} data-line={i} className="rounded-xl border border-line/70 p-2.5">
+                  <div className="grid grid-cols-[96px_minmax(0,1fr)_32px] items-end gap-2">
+                    <div>
+                      <span className={lbl}>النوع</span>
+                      <div className="flex overflow-hidden rounded-lg border border-line" role="group" aria-label="نوع البند">
+                        {kindBtn("item", "صنف")}{kindBtn("kit", "كت")}
+                      </div>
                     </div>
-                    <div className="relative">
+                    <label className="relative">
+                      <span className={lbl}>{it.kind === "kit" ? "اسم الكت" : "اسم الجهاز / المادة"}</span>
                       <input value={it.name} onChange={(e) => setItem(i, { name: e.target.value })} data-line-name
                         placeholder={it.kind === "kit" ? "الكت" : "الصنف"} list={it.kind === "kit" ? "kit-names" : "stock-names"} aria-label={it.kind === "kit" ? "الكت" : "الصنف"}
-                        className={`${inp} pe-16`} autoFocus={i === 0} />
+                        className={`${inp} pe-16`} />
                       {it.name.trim() && (it.kind === "kit" ? (kit ? (
-                        <span data-testid="line-kit" className="pointer-events-none absolute end-2 top-1/2 inline-flex -translate-y-1/2 items-center gap-1 rounded-full bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700"><Package className="size-3" /> كت</span>
+                        <span data-testid="line-kit" className="pointer-events-none absolute bottom-2.5 end-2 inline-flex items-center gap-1 rounded-full bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700"><Package className="size-3" /> كت</span>
                       ) : (
-                        <span className="pointer-events-none absolute end-2 top-1/2 -translate-y-1/2 rounded-full bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">غير معرَّف</span>
+                        <span className="pointer-events-none absolute bottom-2.5 end-2 rounded-full bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">غير معرَّف</span>
                       )) : inStock(it.name) ? (
-                        <span title="صنف في المخزن — تُضاف الكمية إليه" className="pointer-events-none absolute end-2 top-1/2 inline-flex -translate-y-1/2 items-center gap-1 rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700"><Boxes className="size-3" /> مخزن</span>
+                        <span title="صنف في المخزن — تُضاف الكمية إليه" className="pointer-events-none absolute bottom-2.5 end-2 inline-flex items-center gap-1 rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700"><Boxes className="size-3" /> مخزن</span>
                       ) : (
-                        <span title="صنف جديد — يُضاف إلى المخزن عند الحفظ" className="pointer-events-none absolute end-2 top-1/2 inline-flex -translate-y-1/2 items-center gap-1 rounded-full bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700"><Plus className="size-3" /> جديد</span>
+                        <span title="صنف جديد — يُضاف إلى المخزن عند الحفظ" className="pointer-events-none absolute bottom-2.5 end-2 inline-flex items-center gap-1 rounded-full bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700"><Plus className="size-3" /> جديد</span>
                       ))}
-                    </div>
-                    <div>
-                      <NumberInput value={it.qty} onValue={(v) => setItem(i, { qty: Number(v) || 0 })} aria-label="الكمية" className={inp} />
-                      <div className="mt-0.5 text-center text-[10px] text-muted">{it.kind === "kit" ? "كت" : "وحدة"}</div>
-                    </div>
-                    <div>
-                      <NumberInput value={it.total} onValue={(v) => setItem(i, { total: Number(v) || 0 })} group zeroEmpty placeholder="0" aria-label="السعر الإجمالي" className={`${inp} font-semibold`}
-                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (i === items.length - 1) addLine(); } }} />
-                    </div>
+                    </label>
                     <button type="button" onClick={() => setItems((a) => (a.length > 1 ? a.filter((_, j) => j !== i) : [emptyLine()]))} aria-label="حذف البند"
-                      className="grid size-8 place-items-center rounded-lg text-muted hover:bg-red-50 hover:text-red-600"><X className="size-4" /></button>
+                      className="grid size-9 place-items-center rounded-lg text-muted hover:bg-red-50 hover:text-red-600"><X className="size-4" /></button>
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-[80px_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
+                    <label><span className={lbl}>العدد{it.kind === "kit" ? " (كت)" : ""}</span>
+                      <NumberInput value={it.qty} onValue={(v) => setQty(i, Number(v) || 0)} aria-label="العدد" className={inp} />
+                    </label>
+                    <label><span className={lbl}>الاكسباير <span className="font-normal">(اختياري)</span></span>
+                      <input type="date" value={it.expiry} onChange={(e) => setItem(i, { expiry: e.target.value })} aria-label="الاكسباير" className={inp} />
+                    </label>
+                    <label><span className={lbl}>اللوت <span className="font-normal">(اختياري)</span></span>
+                      <input value={it.lot} onChange={(e) => setItem(i, { lot: e.target.value })} dir="ltr" aria-label="اللوت" placeholder="LOT" className={inp} />
+                    </label>
+                    <label><span className={lbl}>سعر الواحد</span>
+                      <NumberInput value={it.unit} onValue={(v) => setUnit(i, Number(v) || 0)} group zeroEmpty placeholder="0" aria-label="سعر الواحد" className={inp} />
+                    </label>
+                    <label><span className={lbl}>المجموع</span>
+                      <NumberInput value={it.total} onValue={(v) => setTotal(i, Number(v) || 0)} group zeroEmpty placeholder="0" aria-label="المجموع" className={`${inp} font-semibold`}
+                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (i === items.length - 1) addLine(); } }} />
+                    </label>
                   </div>
                   {(kit || unit) && (
                     <div className="mt-1 flex flex-wrap justify-between gap-x-4 gap-y-0.5 px-1 text-[11px]">
@@ -336,7 +357,7 @@ function PurchaseDialog({ suppliers, stock, kits, opts, onClose, onSaved }: {
           <datalist id="stock-names">{stock.map((s) => <option key={s.id} value={s.name} />)}</datalist>
           <datalist id="kit-names">{kits.map((k) => <option key={k.id} value={k.name}>{kitText(k)}</option>)}</datalist>
           <button type="button" onClick={addLine} className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-amber-700 hover:underline"><Plus className="size-4" /> بند آخر</button>
-          <span className="ms-2 text-[11px] text-muted">(أو Enter في خانة السعر)</span>
+          <span className="ms-2 text-[11px] text-muted">(أو Enter في خانة المجموع)</span>
           {kits.length === 0 && <span className="ms-2 text-[11px] text-muted">— لا كتات معرَّفة بعد (تُعرَّف في «الأصناف»).</span>}
         </div>
 

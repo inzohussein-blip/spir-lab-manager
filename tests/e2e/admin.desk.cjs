@@ -26,6 +26,9 @@ const TAG = Date.now().toString(36).slice(-5);
   for (const [href, label] of [['/collect', 'نافذة ساحب الدم'], ['/lab', 'نافذة المختبر']]) {
     ok(await a.locator(`aside a[href="${href}"]:has-text("${label}")`).count() === 1, `menu: «${label}»`);
   }
+  ok(await a.locator('header a[href="/welcome"][data-testid="admin-home"]').count() === 1 && await a.locator('aside a[href="/welcome"]').count() === 1, '«الصفحة الرئيسية» in the top bar and the side menu');
+  await a.click('[data-testid="admin-home"]');
+  ok(await a.waitForURL((u) => u.pathname === '/welcome', { timeout: 20000 }).then(() => true, () => false), '…it opens the welcome page');
   const addUser = async (username, name, role) => {
     await a.goto(B + '/users');
     await a.fill('input[name="full_name"]', name); await a.fill('input[name="username"]', username); await a.fill('input[name="password"]', 'pass1234');
@@ -47,7 +50,7 @@ const TAG = Date.now().toString(36).slice(-5);
   // ── The collector ──
   const c = await login('col' + TAG, 'pass1234');
   ok(new URL(c.url()).pathname === '/collect', 'the collector starts at his window');
-  ok(await c.locator('aside a[href]').evaluateAll((l) => l.map((x) => x.getAttribute('href')).filter((h) => h !== '/collect' && h.startsWith('/')).length) === 0, '…and his menu has only his window');
+  ok(await c.locator('aside a[href]').evaluateAll((l) => l.map((x) => x.getAttribute('href')).filter((h) => h !== '/collect' && h !== '/welcome' && h.startsWith('/')).length) === 0, '…and his menu has only his window (and the home page)');
   await c.goto(B + '/patients');
   ok(await c.locator('text=لا تملك صلاحية الوصول').count() === 1, '…other pages are closed to him');
   await c.goto(B + '/'); await c.waitForURL((u) => u.pathname === '/collect', { timeout: 15000 });

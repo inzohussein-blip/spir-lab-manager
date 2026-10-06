@@ -1,10 +1,12 @@
 "use server";
 
+import { hasRole } from "@/lib/auth/guard";
 import { revalidatePath } from "next/cache";
 import { query } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
 
 export async function addReferrer(formData: FormData): Promise<void> {
+  if (!(await hasRole("technician", "reception"))) return; // the role's pages only (see lib/nav.ts)
   const name = String(formData.get("name") || "").trim();
   if (!name) return;
   await query(
@@ -17,6 +19,7 @@ export async function addReferrer(formData: FormData): Promise<void> {
 }
 
 export async function createAppointment(formData: FormData): Promise<void> {
+  if (!(await hasRole("technician", "reception"))) return; // the role's pages only (see lib/nav.ts)
   const scheduledAt = String(formData.get("scheduled_at") || "");
   const patientId = (formData.get("patient_id") as string) || null;
   const patientName = (formData.get("patient_name") as string) || null;
@@ -37,6 +40,7 @@ export async function createAppointment(formData: FormData): Promise<void> {
 }
 
 export async function setAppointmentStatus(formData: FormData): Promise<void> {
+  if (!(await hasRole("technician", "reception"))) return; // the role's pages only (see lib/nav.ts)
   const id = String(formData.get("appointment_id") || "");
   const status = String(formData.get("status") || "");
   if (!id || !status) return;

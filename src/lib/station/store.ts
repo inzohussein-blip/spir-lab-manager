@@ -107,6 +107,8 @@ export interface StockItem {
   qty: number;
   minQty?: number;
   expiry?: string; // YYYY-MM-DD
+  /** The lot (batch) number of the last purchase — «المخزن والمشتريات ← عملية شراء». */
+  lot?: string;
   /** The lab station's tests that use this item. */
   testIds?: string[];
   /** Issued by the examiner from «المخزن» (tubes, syringes, containers, gloves…), never taken with

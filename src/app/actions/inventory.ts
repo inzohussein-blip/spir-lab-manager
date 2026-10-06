@@ -1,9 +1,11 @@
 "use server";
 
+import { hasRole } from "@/lib/auth/guard";
 import { revalidatePath } from "next/cache";
 import { query } from "@/lib/db";
 
 export async function addReagent(formData: FormData): Promise<void> {
+  if (!(await hasRole("technician"))) return; // the role's pages only (see lib/nav.ts)
   const name = String(formData.get("name") || "").trim();
   if (!name) return;
   await query(
@@ -23,6 +25,7 @@ export async function addReagent(formData: FormData): Promise<void> {
 
 /** Restock: add quantity and log a stock movement. */
 export async function restock(formData: FormData): Promise<void> {
+  if (!(await hasRole("technician"))) return; // the role's pages only (see lib/nav.ts)
   const productId = String(formData.get("product_id") || "");
   const amount = Number(formData.get("amount") || 0);
   if (!productId || !amount) return;

@@ -9,6 +9,7 @@ import { ensureOps } from "@/lib/desk/schema";
 
 /** Manual stock adjustment (+/-) with a reason; logs a movement + audit. */
 export async function adjustStock(formData: FormData): Promise<void> {
+  if (!(await hasRole("technician"))) return; // the role's pages only (see lib/nav.ts)
   const productId = String(formData.get("product_id") || "");
   const delta = Number(formData.get("delta") || 0);
   const reason = String(formData.get("reason") || "adjustment");
@@ -26,6 +27,7 @@ export async function adjustStock(formData: FormData): Promise<void> {
 /** Reconciliation: set the physically counted quantity; records the variance
  *  as a movement so the ledger stays truthful. */
 export async function reconcileStock(formData: FormData): Promise<void> {
+  if (!(await hasRole("technician"))) return; // the role's pages only (see lib/nav.ts)
   const productId = String(formData.get("product_id") || "");
   const counted = Number(formData.get("counted") || 0);
   if (!productId) return;

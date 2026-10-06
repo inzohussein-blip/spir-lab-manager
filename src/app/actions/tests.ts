@@ -1,10 +1,12 @@
 "use server";
 
+import { hasRole } from "@/lib/auth/guard";
 import { revalidatePath } from "next/cache";
 import { query } from "@/lib/db";
 import { ensureDesk } from "@/lib/desk/schema";
 
 export async function addTest(formData: FormData): Promise<void> {
+  if (!(await hasRole("technician"))) return; // the role's pages only (see lib/nav.ts)
   const name_ar = String(formData.get("name_ar") || "").trim();
   if (!name_ar) return;
   const num = (k: string) => {
@@ -35,6 +37,7 @@ export async function addTest(formData: FormData): Promise<void> {
 /** Set (or clear) a test's price. An empty value means "unpriced" (stored as
  *  0), so a lab can keep some tests without a set price. */
 export async function setTestPrice(formData: FormData): Promise<void> {
+  if (!(await hasRole("technician"))) return; // the role's pages only (see lib/nav.ts)
   const id = String(formData.get("test_id") || "");
   if (!id) return;
   const raw = formData.get("price");
@@ -48,6 +51,7 @@ export async function setTestPrice(formData: FormData): Promise<void> {
 /** «القيم الحرجة» (a result below low or above high is reported at once) and the minutes a sample
  *  with this test may take before it shows as late in «نافذة المختبر». Empty = none. */
 export async function setTestLimits(formData: FormData): Promise<void> {
+  if (!(await hasRole("technician"))) return; // the role's pages only (see lib/nav.ts)
   const id = String(formData.get("test_id") || "");
   if (!id) return;
   const num = (k: string) => {
@@ -66,6 +70,7 @@ export async function setTestLimits(formData: FormData): Promise<void> {
 
 /** The stock item a test uses and how much per test: deducted automatically when the test is ordered. */
 export async function setTestReagent(formData: FormData): Promise<void> {
+  if (!(await hasRole("technician"))) return; // the role's pages only (see lib/nav.ts)
   const id = String(formData.get("test_id") || "");
   if (!id) return;
   const productId = String(formData.get("product_id") || "") || null;

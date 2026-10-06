@@ -1,5 +1,6 @@
 "use server";
 
+import { hasRole } from "@/lib/auth/guard";
 import { revalidatePath } from "next/cache";
 import { query, queryOne } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
@@ -17,6 +18,7 @@ function accessionNo(): string {
  *  automatically by the DB trigger on each inserted order item (section 3).
  *  Returns the new order id (no redirect, so it is offline-replayable). */
 export async function createOrder(formData: FormData): Promise<{ orderId: string } | null> {
+  if (!(await hasRole("technician", "reception"))) return null; // the role's pages only (see lib/nav.ts)
   const patientId = String(formData.get("patient_id") || "");
   const testIds = formData.getAll("test_ids").map(String).filter(Boolean);
   if (!patientId || testIds.length === 0) return null;
@@ -69,6 +71,7 @@ export async function createOrder(formData: FormData): Promise<{ orderId: string
 
 /** Save (upsert) a single test result. Flag H/L/N is computed by a DB trigger. */
 export async function saveResult(formData: FormData): Promise<void> {
+  if (!(await hasRole("technician"))) return; // the role's pages only (see lib/nav.ts)
   const orderItemId = String(formData.get("order_item_id") || "");
   const orderId = String(formData.get("order_id") || "");
   const patientId = String(formData.get("patient_id") || "");
@@ -128,6 +131,7 @@ export async function saveResult(formData: FormData): Promise<void> {
 /** Quick payment update from the reception/release desk — records how the
  *  visit was paid on the order itself, without opening a full invoice. */
 export async function setOrderPayment(formData: FormData): Promise<void> {
+  if (!(await hasRole("reception"))) return; // the role's pages only (see lib/nav.ts)
   const orderId = String(formData.get("order_id") || "");
   const statusRaw = String(formData.get("payment_status") || "");
   const status = ["unpaid", "paid", "partial"].includes(statusRaw) ? statusRaw : null;
@@ -147,6 +151,7 @@ export async function setOrderPayment(formData: FormData): Promise<void> {
 
 /** Mark an order status (e.g. completed / delivered). */
 export async function setOrderStatus(formData: FormData): Promise<void> {
+  if (!(await hasRole("technician", "reception"))) return; // the role's pages only (see lib/nav.ts)
   const orderId = String(formData.get("order_id") || "");
   const status = String(formData.get("status") || "");
   if (!orderId || !status) return;

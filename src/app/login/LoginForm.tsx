@@ -20,7 +20,13 @@ function SubmitBtn() {
 
 /** The sign-in form; `demo` shows the demo account (the site's own database only). */
 export function LoginForm({ demo, name, logo }: { demo: boolean; name: string; logo: string }) {
-  const [state, action] = useFormState(loginAction, {});
+  // Signed in: the panel opens with a full page load (its frame differs from this page's), at once —
+  // the page behind this form changes as soon as the account exists.
+  const [state, action] = useFormState(async (prev: { error?: string; to?: string; username?: string }, fd: FormData) => {
+    const r = await loginAction(prev, fd);
+    if (r.to) window.location.replace(r.to);
+    return r;
+  }, {});
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-canvas p-4">
       <div className="pointer-events-none absolute -top-24 -right-24 size-72 rounded-full bg-brand/15 blur-3xl" />
@@ -45,7 +51,8 @@ export function LoginForm({ demo, name, logo }: { demo: boolean; name: string; l
               name="username"
               autoComplete="username"
               className="mt-1 w-full rounded-lg border border-line px-3 py-2 outline-none focus:border-brand"
-              defaultValue="admin"
+              defaultValue={state.username ?? (demo ? "admin" : "")}
+              autoFocus={!demo}
             />
           </label>
           <label className="text-sm font-medium">

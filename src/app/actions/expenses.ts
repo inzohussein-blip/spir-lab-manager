@@ -1,9 +1,11 @@
 "use server";
 
+import { hasRole } from "@/lib/auth/guard";
 import { revalidatePath } from "next/cache";
 import { query } from "@/lib/db";
 
 export async function addExpense(formData: FormData): Promise<void> {
+  if (!(await hasRole("reception"))) return; // the role's pages only (see lib/nav.ts)
   const title = String(formData.get("title") || "").trim();
   if (!title) return;
   await query(
@@ -21,6 +23,7 @@ export async function addExpense(formData: FormData): Promise<void> {
 }
 
 export async function addSupplier(formData: FormData): Promise<void> {
+  if (!(await hasRole("technician", "reception"))) return; // the role's pages only (see lib/nav.ts)
   const name = String(formData.get("name") || "").trim();
   if (!name) return;
   await query(`insert into suppliers (name, phone) values ($1, $2)`, [
@@ -31,6 +34,7 @@ export async function addSupplier(formData: FormData): Promise<void> {
 }
 
 export async function addPurchaseOrder(formData: FormData): Promise<void> {
+  if (!(await hasRole("technician", "reception"))) return; // the role's pages only (see lib/nav.ts)
   const supplierId = (formData.get("supplier_id") as string) || null;
   const total = Number(formData.get("total_amount") || 0);
   await query(
