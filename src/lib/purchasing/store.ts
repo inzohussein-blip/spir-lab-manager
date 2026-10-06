@@ -28,6 +28,9 @@ export interface PurchaseItem {
   total?: number;
   /** A kit bought (its contents go to the stock room, see Kit). */
   kitId?: string;
+  /** A material bought by the kit, not a defined kit: how many units one kit holds (qty kits ×
+   *  perKit units go to the stock room; unitPrice stays the price of one kit). */
+  perKit?: number;
   /** Optional: the batch's expiry date (YYYY-MM-DD) and lot number, also noted on the stock item. */
   expiry?: string;
   lot?: string;
@@ -239,7 +242,7 @@ function changeStock(moves: { id: string; qty: number }[], reason: "purchase" | 
  *  (with no quantity yet, then the purchase's); a kit's parts, each times the kits bought. The
  *  item's unit price follows the purchase (a kit's, when it holds one item). Returns what was added. */
 export function addToStock(items: PurchaseItem[], ref?: string, reason: "purchase" | "add" = "purchase"): { id: string; qty: number }[] {
-  const lines = items.map((it) => ({ name: it.name.trim(), qty: Number(it.qty) || 0, price: Number(it.unitPrice) || 0, kitId: it.kitId, expiry: it.expiry, lot: it.lot, gtin: it.gtin, device: it.device?.trim() }))
+  const lines = items.map((it) => ({ name: it.name.trim(), qty: Number(it.qty) || 0, price: Number(it.unitPrice) || 0, kitId: it.kitId, perKit: Number(it.perKit) || 0, expiry: it.expiry, lot: it.lot, gtin: it.gtin, device: it.device?.trim() }))
     .filter((x) => x.name && x.qty > 0);
   if (!lines.length) return [];
   const stock = getStock();
@@ -269,11 +272,13 @@ export function addToStock(items: PurchaseItem[], ref?: string, reason: "purchas
     }
     let item = stock.find((s) => key(s.name) === key(x.name)) ?? fresh.find((s) => key(s.name) === key(x.name));
     if (!item) { item = { id: uid(), name: x.name, qty: 0 }; fresh.push(item); }
-    if (x.price > 0) prices.set(item.id, x.price);
+    // Bought by the kit: the units it holds, and the price of one unit.
+    const per = !x.kitId && x.perKit > 0 ? x.perKit : 1;
+    if (x.price > 0) prices.set(item.id, Math.round((x.price / per) * 100) / 100);
     note(item.id, x);
     if (x.gtin && !item.barcode) codes.set(item.id, x.gtin);
     if (x.device && !item.device) devices.set(item.id, x.device);
-    return [{ id: item.id, qty: x.qty }];
+    return [{ id: item.id, qty: x.qty * per }];
   });
   if (fresh.length) saveStock([...stock, ...fresh]);
   changeStock(added, reason, ref, prices);

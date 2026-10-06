@@ -43,6 +43,8 @@ export function PurchasesLog({ purchases, stock, kits, opts, onChanged, onMsg }:
     const part = kit?.parts.length === 1 ? kit.parts[0] : undefined;
     const n = part ? part.qty * (Number(it.qty) || 0) : 0;
     if (part && n > 0) return `الواحد (${stock.find((x) => x.id === part.stockId)?.name ?? "؟"}) ${money(Math.round((lineTotal(it) / n) * 100) / 100)}`;
+    const units = (Number(it.perKit) || 0) * (Number(it.qty) || 0);
+    if (units > 0) return `الكت ${money(it.unitPrice)} · الواحد ${money(Math.round((lineTotal(it) / units) * 100) / 100)}`;
     return `${kit ? "الكت الواحد" : "الواحد"} ${money(it.unitPrice)}`;
   }
   function remove(ids: string[]) {
@@ -104,7 +106,7 @@ export function PurchasesLog({ purchases, stock, kits, opts, onChanged, onMsg }:
             {shown.length === 0 && <tr><td colSpan={7} className="px-4 py-8 text-center text-muted">{purchases.length === 0 ? "لا عمليات شراء بعد — اكتب أول عملية في الأعلى." : "لا عمليات مطابقة."}</td></tr>}
             {shown.map((p) => {
               const paid = isPaid(p);
-              const lines = p.items.map((it) => `${it.device ? `${it.device} — ` : ""}${it.name}${it.kitId ? " (كت)" : ""} × ${it.qty}${it.lot ? ` (${it.lot}${it.expiry ? ` · ${it.expiry}` : ""})` : it.expiry ? ` (${it.expiry})` : ""}`);
+              const lines = p.items.map((it) => `${it.device ? `${it.device} — ` : ""}${it.name}${it.kitId ? " (كت)" : it.perKit ? ` (كت × ${it.perKit})` : ""} × ${it.qty}${it.lot ? ` (${it.lot}${it.expiry ? ` · ${it.expiry}` : ""})` : it.expiry ? ` (${it.expiry})` : ""}`);
               return (
                 <Fragment key={p.id}>
                   <tr data-purchase={p.id} className={`border-b border-line last:border-0 hover:bg-canvas ${checked.has(p.id) ? "bg-amber-50" : ""}`}>
@@ -151,7 +153,7 @@ export function PurchasesLog({ purchases, stock, kits, opts, onChanged, onMsg }:
                           <tbody>
                             {p.items.map((it, i) => (
                               <tr key={i} className="border-t border-line/60 align-top">
-                                <td className="py-1.5">{it.device && <span className="text-muted">{it.device} — </span>}{it.name}{it.kitId && <span className="ms-1 rounded-full bg-violet-50 px-1.5 text-[10px] text-violet-700">كت</span>}</td>
+                                <td className="py-1.5">{it.device && <span className="text-muted">{it.device} — </span>}{it.name}{(it.kitId || it.perKit) && <span className="ms-1 rounded-full bg-violet-50 px-1.5 text-[10px] text-violet-700">{it.perKit ? `كت × ${it.perKit}` : "كت"}</span>}</td>
                                 <td className="py-1.5 tabular-nums">{it.qty}</td>
                                 <td className="py-1.5 text-xs" data-testid="line-batch"><span dir="ltr">{[it.expiry, it.lot && `LOT ${it.lot}`].filter(Boolean).join(" · ") || "—"}</span></td>
                                 <td className="py-1.5 tabular-nums" data-testid="line-price">

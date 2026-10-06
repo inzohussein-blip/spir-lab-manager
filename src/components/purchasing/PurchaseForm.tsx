@@ -21,8 +21,8 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 /** A line being typed: a stock item or a kit (two separate lists), how many, expiry and lot (optional),
  *  the price of one and the line's total (either one fills the other). */
 type LineKind = "item" | "kit";
-interface Row { kind: LineKind; device: string; name: string; qty: number; expiry: string; lot: string; unit: number; total: number; gtin?: string }
-const blank = (kind: LineKind = "item", device = ""): Row => ({ kind, device, name: "", qty: 1, expiry: "", lot: "", unit: 0, total: 0 });
+interface Row { kind: LineKind; device: string; name: string; qty: number; perKit: number; expiry: string; lot: string; unit: number; total: number; gtin?: string }
+const blank = (kind: LineKind = "item", device = ""): Row => ({ kind, device, name: "", qty: 1, perKit: 0, expiry: "", lot: "", unit: 0, total: 0 });
 
 /**
  * «عملية شراء جديدة» — the entry into the lab's stock room, on the page itself (as in the supplier
@@ -67,6 +67,13 @@ export function PurchaseForm({ onSaved }: { onSaved?: (msg: string) => void }) {
   const itemOf = (name: string) => (name.trim() ? stock.find((s) => same(s.name, name)) : undefined);
   const nameOf = (id: string) => stock.find((s) => s.id === id)?.name ?? "؟";
   const kitText = (k: Kit, times = 1) => k.parts.map((p) => `${nameOf(p.stockId)} × ${p.qty * times}`).join("، ");
+  /** The materials offered on a line: those saved for its device (all of them while it has none);
+   *  a new material is still typed by hand. */
+  const stockFor = (device: string) => (device.trim() ? stock.filter((s) => same(s.device ?? "", device)) : stock);
+  /** The kits offered: those holding a material of that device (all of them while it has none). */
+  const kitsFor = (device: string) => (device.trim() ? kits.filter((k) => k.parts.some((p) => same(stock.find((s) => s.id === p.stockId)?.device ?? "", device))) : kits);
+  /** A defined kit of one material: the units it holds. */
+  const kitUnits = (k: Kit) => (k.parts.length === 1 ? k.parts[0].qty : 0);
   const total = rows.reduce((t, r) => t + (Number(r.total) || 0), 0);
   const purchaseDebts = opts.debts === true;
   const showSupplier = purchase && (opts.supplierFields === true || purchaseDebts);
@@ -128,8 +135,9 @@ export function PurchaseForm({ onSaved }: { onSaved?: (msg: string) => void }) {
     setErr("");
     const clean = rows.filter((r) => r.name.trim());
     if (!clean.length) return setErr("اكتب صنفاً أو كتاً واحداً على الأقل.");
-    const unknownKit = clean.find((r) => r.kind === "kit" && !kitOf(r.name));
-    if (unknownKit) return setErr(`«${unknownKit.name.trim()}» ليس كتاً معرَّفاً — عرّفه في «الأصناف ← كت جديد»، أو اختر «صنف».`);
+    // A kit line: a defined kit, or a material bought by the kit with how many units one kit holds.
+    const unknownKit = clean.find((r) => r.kind === "kit" && !kitOf(r.name) && !(Number(r.perKit) > 0));
+    if (unknownKit) return setErr(`اكتب «عدد في الكت» لـ «${unknownKit.name.trim()}» — كم وحدة في الكت الواحد.`);
     const kitAsItem = clean.find((r) => r.kind === "item" && kitOf(r.name));
     if (kitAsItem) return setErr(`«${kitAsItem.name.trim()}» اسم كت — اختر «كت» لهذا البند.`);
     const sup = showSupplier ? suppliers.find((s) => same(s.name, supplier)) : undefined;
@@ -139,7 +147,8 @@ export function PurchaseForm({ onSaved }: { onSaved?: (msg: string) => void }) {
       const qty = Number(r.qty) || 0, t = Number(r.total) || 0;
       return {
         ...(r.device.trim() ? { device: r.device.trim().slice(0, 120) } : {}),
-        name: kit?.name ?? stockMatch(r.name)?.name ?? r.name.trim(), qty, unitPrice: qty > 0 ? round2(t / qty) : 0, total: t, ...(kit ? { kitId: kit.id } : {}),
+        name: kit?.name ?? stockMatch(r.name)?.name ?? r.name.trim(), qty, unitPrice: qty > 0 ? round2(t / qty) : 0, total: t,
+        ...(kit ? { kitId: kit.id } : r.kind === "kit" && Number(r.perKit) > 0 ? { perKit: Math.round(Number(r.perKit)) } : {}),
         ...(r.expiry ? { expiry: r.expiry } : {}), ...(r.lot.trim() ? { lot: r.lot.trim() } : {}), ...(r.gtin ? { gtin: r.gtin } : {}),
       };
     });
@@ -217,8 +226,6 @@ export function PurchaseForm({ onSaved }: { onSaved?: (msg: string) => void }) {
       )}
 
       <datalist id="pf-devices">{devices.map((d) => <option key={d} value={d} />)}</datalist>
-      <datalist id="pf-stock">{stock.map((s) => <option key={s.id} value={s.name} />)}</datalist>
-      <datalist id="pf-kits">{kits.map((k) => <option key={k.id} value={k.name}>{kitText(k)}</option>)}</datalist>
       <div className="mt-3 overflow-x-auto">
         <table className="w-full min-w-[940px] text-sm" data-testid="purchase-lines">
           <thead className="text-right text-xs text-muted">
@@ -232,8 +239,13 @@ export function PurchaseForm({ onSaved }: { onSaved?: (msg: string) => void }) {
             {rows.map((r, i) => {
               const kit = r.kind === "kit" ? kitOf(r.name) : undefined;
               const item = r.kind === "item" ? itemOf(r.name) : undefined;
-              const one = kit && kit.parts.length === 1 && kit.parts[0].qty > 0 && r.total > 0 && r.qty > 0
-                ? `سعر الواحد (${nameOf(kit.parts[0].stockId)}): ${money(round2(r.total / (kit.parts[0].qty * r.qty)))} د.ع` : null;
+              // A kit: the units one kit holds — from its definition, or typed for a material bought by the kit.
+              const per = kit ? kitUnits(kit) : r.kind === "kit" ? Number(r.perKit) || 0 : 0;
+              const unitName = kit ? (kit.parts.length === 1 ? nameOf(kit.parts[0].stockId) : "") : r.name.trim();
+              const one = per > 0 && r.total > 0 && r.qty > 0 ? `سعر الواحد (${unitName}): ${money(round2(r.total / (per * r.qty)))} د.ع` : null;
+              const options = r.kind === "kit"
+                ? [...kitsFor(r.device).map((k) => ({ id: k.id, name: k.name, hint: kitText(k) })), ...stockFor(r.device).map((s) => ({ id: s.id, name: s.name, hint: "مادة — اكتب عدد في الكت" }))]
+                : stockFor(r.device).map((s) => ({ id: s.id, name: s.name, hint: "" }));
               return (
                 <tr key={i} data-line={i} className="align-top">
                   <td className="pe-1.5 pb-2 pt-2 text-center text-xs tabular-nums text-muted">{i + 1}</td>
@@ -247,16 +259,27 @@ export function PurchaseForm({ onSaved }: { onSaved?: (msg: string) => void }) {
                   </td>
                   <td className="pe-1.5 pb-2"><input value={r.device} onChange={(e) => set(i, { device: e.target.value })} list="pf-devices" placeholder="الجهاز" aria-label="الجهاز" className={inp} /></td>
                   <td className="pe-1.5 pb-2">
-                    <input value={r.name} onChange={(e) => set(i, { name: e.target.value })} data-line-name list={r.kind === "kit" ? "pf-kits" : "pf-stock"}
+                    <datalist id={`pf-names-${i}`} data-testid="line-options">{options.map((o) => <option key={o.id} value={o.name}>{o.hint}</option>)}</datalist>
+                    <input value={r.name} onChange={(e) => set(i, { name: e.target.value })} data-line-name list={`pf-names-${i}`}
                       placeholder={r.kind === "kit" ? "الكت" : "الصنف"} aria-label={r.kind === "kit" ? "الكت" : "الصنف"} className={inp} />
                     {r.name.trim() && (r.kind === "kit" ? (kit
                       ? <div className="mt-0.5 flex items-center gap-1 text-[10px] text-violet-700" data-testid="kit-contents"><span data-testid="line-kit" className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-1.5 py-0.5 font-semibold"><Package className="size-3" /> كت</span> يُضاف إلى المخزن: {kitText(kit, Number(r.qty) || 0)}</div>
-                      : <div className="mt-0.5 text-[10px] font-semibold text-red-700">كت غير معرَّف</div>)
+                      : <div className="mt-0.5 flex items-center gap-1 text-[10px] text-violet-700" data-testid="kit-contents"><span data-testid="line-kit" className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-1.5 py-0.5 font-semibold"><Package className="size-3" /> كت</span>
+                          {per > 0 ? <>يُضاف إلى المخزن: {r.name.trim()} × {per * (Number(r.qty) || 0)}</> : <span className="font-semibold text-red-700">اكتب «عدد في الكت»</span>}</div>)
                       : item
                         ? <div className="mt-0.5 flex items-center gap-1 text-[10px] text-muted" data-testid="line-known"><Boxes className="size-3 text-amber-700" /> في المخزن · الرصيد {item.qty}{item.expiry ? ` · الإكسباير ${item.expiry}` : ""}</div>
                         : <div className="mt-0.5 text-[10px] font-semibold text-sky-700" data-testid="line-new">صنف جديد — يُضاف إلى المخزن عند الحفظ</div>)}
                   </td>
-                  <td className="pe-1.5 pb-2"><NumberInput value={r.qty} onValue={(v) => setQty(i, Number(v) || 0)} aria-label="العدد" className={num} /></td>
+                  <td className="pe-1.5 pb-2">
+                    <NumberInput value={r.qty} onValue={(v) => setQty(i, Number(v) || 0)} aria-label="العدد" className={num} />
+                    {r.kind === "kit" && (
+                      <label className="mt-1 block text-[10px] text-violet-700">عدد في الكت
+                        {kit
+                          ? <span className="block rounded-lg border border-line bg-canvas px-2 py-1.5 text-center text-sm tabular-nums text-ink" data-testid="kit-units">{per || "—"}</span>
+                          : <NumberInput value={r.perKit} onValue={(v) => set(i, { perKit: Number(v) || 0 })} zeroEmpty placeholder="0" aria-label="عدد في الكت" className={num} />}
+                      </label>
+                    )}
+                  </td>
                   <td className="pe-1.5 pb-2"><input type="date" value={r.expiry} onChange={(e) => set(i, { expiry: e.target.value })} aria-label="الاكسباير" className={inp} /></td>
                   <td className="pe-1.5 pb-2"><input value={r.lot} onChange={(e) => set(i, { lot: e.target.value })} dir="ltr" placeholder="LOT" aria-label="اللوت" className={inp} /></td>
                   <td className="pe-1.5 pb-2"><NumberInput value={r.unit} onValue={(v) => setUnit(i, Number(v) || 0)} group zeroEmpty placeholder="0" aria-label="سعر الواحد" className={num} /></td>
@@ -279,7 +302,7 @@ export function PurchaseForm({ onSaved }: { onSaved?: (msg: string) => void }) {
       </div>
       <button type="button" onClick={() => addRow()} data-testid="purchase-add-row" className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-amber-700 hover:underline"><Plus className="size-3.5" /> سطر جديد</button>
       <span className="ms-2 text-[11px] text-muted">(أو Enter في خانة المجموع)</span>
-      {kits.length === 0 && <span className="ms-2 text-[11px] text-muted">— لا كتات معرَّفة بعد (تُعرَّف في «الأصناف»).</span>}
+      <span className="ms-2 text-[11px] text-muted">— للكت: اختر كتاً معرَّفاً في «الأصناف»، أو مادة واكتب «عدد في الكت».</span>
       <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="ملاحظات (اختياري)" aria-label="ملاحظات" className={`mt-3 ${inp}`} />
       {err && <p className="mt-2 text-sm text-red-600" role="alert">{err}</p>}
       <div className="mt-4 flex flex-wrap items-center gap-3">

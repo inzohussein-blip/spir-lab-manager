@@ -238,6 +238,29 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   ok(await settled(async () => (await gq()) === before + 6) && ((await kv(p, 'purchasing.purchases.v1')) || []).length === nPur, 'it enters the stock (+2) and records no purchase');
   ok(((await kv(p, 'station.stockMoves.v1')) || [])[0]?.reason === 'add', 'and is logged as an addition');
 
+  // ── The device narrows the materials offered; a material bought by the kit, with «عدد في الكت» ──
+  await p.goto(B + '/store'); await p.waitForSelector('[data-testid="purchase-form"]', { timeout: 20000 });
+  const offered = async () => p.locator('[data-line="0"] datalist option').evaluateAll((os) => os.map((o) => o.value));
+  ok((await offered()).includes('كاشف السكر'), 'no device yet: every saved material is offered');
+  await p.fill('[data-line="0"] input[aria-label="الجهاز"]', 'محلل الكيمياء');
+  const forDev = await offered();
+  ok(forDev.includes('كاشف الكوليسترول') && !forDev.includes('كاشف السكر'), `a device chosen: only its materials are offered (${forDev.join('، ')})`);
+  await p.click('[data-line="0"] button[data-line-kind="kit"]');
+  ok(await p.locator('[data-line="0"] input[aria-label="عدد في الكت"]').count() === 1, '«كت» chosen: «عدد في الكت» shows');
+  await p.fill('[data-line="0"] input[data-line-name]', 'كاشف الكوليسترول');
+  await p.click('button:has-text("حفظ العملية")');
+  ok((await p.locator('[data-testid="purchase-form"] [role=alert]').innerText()).includes('عدد في الكت'), 'a material bought by the kit needs «عدد في الكت»');
+  await p.fill('[data-line="0"] input[aria-label="عدد في الكت"]', '50');
+  await p.locator('[data-line="0"] input[aria-label="العدد"]').fill('2');
+  await p.locator('[data-line="0"] input[aria-label="المجموع"]').fill('100000');
+  ok((await p.locator('[data-line="0"] [data-testid="kit-contents"]').innerText()).includes('× 100') && (await p.locator('[data-line="0"] [data-testid="line-unit"]').innerText()).includes('1,000'), '2 kits of 50 → 100 units, 1,000 each');
+  const cholQty = async () => (await stock()).find((s) => s.name === 'كاشف الكوليسترول')?.qty ?? 0;
+  const c0 = await cholQty();
+  await p.click('button:has-text("حفظ العملية")');
+  ok(await settled(async () => (await cholQty()) === c0 + 100), `the stock gets the units (${c0} → ${c0 + 100})`);
+  const kp2 = ((await kv(p, 'purchasing.purchases.v1')) || []).find((x) => x.items.some((it) => it.perKit === 50));
+  ok(kp2 && kp2.items[0].unitPrice === 50000 && (await stock()).find((s) => s.name === 'كاشف الكوليسترول')?.price === 1000, 'the purchase keeps the kit price (50,000); the item its unit price (1,000)');
+
   ok(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.slice(0, 3).join(' | ') : ''));
   await b.close();
   done();
