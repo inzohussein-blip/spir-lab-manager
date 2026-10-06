@@ -25,8 +25,7 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
     && await p.locator('aside a[href="/store/items"]:has-text("الأصناف")').count() === 1, 'purchases, stock and items: each in the side menu');
 
   // ── A purchase: typed amounts and the stock link ──
-  await p.goto(B + '/store'); await p.waitForSelector('[data-testid="purchase-new"]', { timeout: 20000 });
-  await p.click('[data-testid="purchase-new"]');
+  await p.goto(B + '/store'); await p.waitForSelector('[data-testid="purchase-form"]', { timeout: 20000 });
   await p.fill('input[aria-label="المورّد"]', 'مورّد المخزن');
   await p.fill('input[placeholder="الصنف"]', 'كاشف السكر');
   const qty = p.locator('input[aria-label="العدد"]'); const price = p.locator('input[aria-label="المجموع"]');
@@ -35,7 +34,7 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   ok(await price.inputValue() === '75,000', `total price typed in Arabic digits shows as 75,000 (got ${await price.inputValue()})`);
   ok(await p.inputValue('input[aria-label="سعر الواحد"]') === '25,000', 'the price of one fills itself: 75,000 ÷ 3 = 25,000');
   await p.fill('input[aria-label="الاكسباير"]', '2027-03-31'); await p.fill('input[aria-label="اللوت"]', 'L-4471');
-  ok(await p.locator('span:has-text("مخزن")').count() >= 1, 'the line is marked as a stock item');
+  ok(await p.locator('[data-testid="line-known"]').count() === 1, 'the line is marked as a stock item');
   await p.click('button:has-text("حفظ العملية")');
   ok(await settled(async () => ((await kv(p, 'station.stock.v1')) || []).find((s) => s.name === 'كاشف السكر')?.qty === 8), 'buying 3 adds them to the stock room (5 → 8)');
   const pur = ((await kv(p, 'purchasing.purchases.v1')) || [])[0];
@@ -43,15 +42,14 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   ok(pur.items[0].expiry === '2027-03-31' && pur.items[0].lot === 'L-4471', 'the line keeps its expiry and lot');
   const sg = ((await kv(p, 'station.stock.v1')) || []).find((s) => s.name === 'كاشف السكر');
   ok(sg?.lot === 'L-4471' && sg?.expiry === '2027-03-31', 'the stock item gets the batch\'s lot and expiry');
-  await p.reload(); await p.waitForSelector('li[data-purchase]');
-  await p.locator('li[data-purchase]', { hasText: 'مورّد المخزن' }).locator('button[aria-label="حذف العملية"]').click();
+  await p.reload(); await p.waitForSelector('tr[data-purchase]');
+  await p.locator('tr[data-purchase]', { hasText: 'مورّد المخزن' }).locator('button[aria-label="حذف العملية"]').click();
   ok(await settled(async () => ((await kv(p, 'station.stock.v1')) || []).find((s) => s.name === 'كاشف السكر')?.qty === 5), 'deleting the purchase takes its quantity back (8 → 5)');
   // A line not yet in the stock room becomes a new item there.
-  await p.click('[data-testid="purchase-new"]');
   await p.fill('input[placeholder="الصنف"]', 'قفازات جديدة');
   await qty.fill(''); await qty.pressSequentially('4');
   await price.click(); await price.pressSequentially('1000'); await price.press('Tab');
-  ok(await p.locator('span:has-text("جديد")').count() >= 1, 'a new line is marked «جديد»');
+  ok(await p.locator('[data-testid="line-new"]').count() === 1, 'a new line is marked «جديد»');
   // The price of one typed instead: the total follows, and a changed count keeps the price of one.
   await p.fill('input[aria-label="سعر الواحد"]', '250');
   ok(await price.inputValue() === '1,000', `the price of one × the count = the total (${await price.inputValue()})`);

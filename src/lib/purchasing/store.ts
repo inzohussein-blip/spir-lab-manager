@@ -29,6 +29,8 @@ export interface PurchaseItem {
   /** Optional: the batch's expiry date (YYYY-MM-DD) and lot number, also noted on the stock item. */
   expiry?: string;
   lot?: string;
+  /** The GS1 product code scanned from the box: kept as the item's (or kit's) barcode. */
+  gtin?: string;
 }
 
 /** A kit: one purchasable package holding several stock items, e.g. «كت السكر» = 4 × «كاشف
@@ -49,10 +51,15 @@ export interface Purchase {
   date: string; // YYYY-MM-DD
   supplierId?: string;
   supplierName?: string;
+  /** The supplier's own invoice number. */
+  supplierRef?: string;
   items: PurchaseItem[];
   total: number;
   paid: boolean;
   notes?: string;
+  /** Ordered and not received yet: nothing is in the stock room, and it is neither spending nor a
+   *  debt, until «استلام» (receivePurchase). */
+  ordered?: boolean;
   /** Quantities this purchase added to the stock room (taken back if it is deleted). */
   stockAdded?: { id: string; qty: number }[];
   /** Payments made so far (Settings → «ديون الموردين»); `paid` is set once they cover the total. */
@@ -148,7 +155,7 @@ export function applyCount(counted: Record<string, number>): StockCount | null {
 /** Paid so far: the payments, or the whole total for a purchase marked paid without them. */
 export const paidOf = (p: Purchase): number =>
   p.payments?.length ? p.payments.reduce((t, x) => t + (Number(x.amount) || 0), 0) : p.paid ? Number(p.total) || 0 : 0;
-export const dueOf = (p: Purchase): number => Math.max(0, (Number(p.total) || 0) - paidOf(p));
+export const dueOf = (p: Purchase): number => p.ordered ? 0 : Math.max(0, (Number(p.total) || 0) - paidOf(p));
 /** Record a payment; the purchase counts as paid once they cover its total. */
 export function addPayment(purchaseId: string, amount: number, note?: string): void {
   const all = getPurchases();
@@ -210,7 +217,7 @@ function changeStock(moves: { id: string; qty: number }[], reason: "purchase" | 
  *  (with no quantity yet, then the purchase's); a kit's parts, each times the kits bought. The
  *  item's unit price follows the purchase (a kit's, when it holds one item). Returns what was added. */
 export function addToStock(items: PurchaseItem[], ref?: string): { id: string; qty: number }[] {
-  const lines = items.map((it) => ({ name: it.name.trim(), qty: Number(it.qty) || 0, price: Number(it.unitPrice) || 0, kitId: it.kitId, expiry: it.expiry, lot: it.lot }))
+  const lines = items.map((it) => ({ name: it.name.trim(), qty: Number(it.qty) || 0, price: Number(it.unitPrice) || 0, kitId: it.kitId, expiry: it.expiry, lot: it.lot, gtin: it.gtin }))
     .filter((x) => x.name && x.qty > 0);
   if (!lines.length) return [];
   const stock = getStock();
@@ -224,6 +231,9 @@ export function addToStock(items: PurchaseItem[], ref?: string): { id: string; q
     const b = batch.get(id) ?? {};
     batch.set(id, { expiry: x.expiry && (!b.expiry || x.expiry < b.expiry) ? x.expiry : b.expiry, lot: x.lot || b.lot });
   };
+  // A scanned GS1 code becomes the barcode of the item or kit that has none, for the next scan.
+  const codes = new Map<string, string>();
+  const kitCodes = new Map<string, string>();
   const added = lines.flatMap((x) => {
     // Only a line bought as a kit is opened into its contents.
     const kit = x.kitId ? kits.find((k) => k.id === x.kitId) ?? kits.find((k) => key(k.name) === key(x.name)) : undefined;
@@ -231,16 +241,20 @@ export function addToStock(items: PurchaseItem[], ref?: string): { id: string; q
       const parts = kit.parts.filter((p) => stock.some((s) => s.id === p.stockId) && p.qty > 0);
       if (parts.length === 1 && x.price > 0) prices.set(parts[0].stockId, Math.round((x.price / parts[0].qty) * 100) / 100);
       for (const p of parts) note(p.stockId, x);
+      if (x.gtin && !kit.barcode) kitCodes.set(kit.id, x.gtin);
       return parts.map((p) => ({ id: p.stockId, qty: p.qty * x.qty }));
     }
     let item = stock.find((s) => key(s.name) === key(x.name)) ?? fresh.find((s) => key(s.name) === key(x.name));
     if (!item) { item = { id: uid(), name: x.name, qty: 0 }; fresh.push(item); }
     if (x.price > 0) prices.set(item.id, x.price);
     note(item.id, x);
+    if (x.gtin && !item.barcode) codes.set(item.id, x.gtin);
     return [{ id: item.id, qty: x.qty }];
   });
   if (fresh.length) saveStock([...stock, ...fresh]);
   changeStock(added, "purchase", ref, prices);
+  if (kitCodes.size) saveKits(kits.map((k) => (kitCodes.has(k.id) ? { ...k, barcode: kitCodes.get(k.id) } : k)));
+  if (codes.size) saveStock(getStock().map((s) => (codes.has(s.id) ? { ...s, barcode: codes.get(s.id) } : s)), "edit", ref);
   if (batch.size) {
     saveStock(getStock().map((s) => {
       const b = batch.get(s.id);
@@ -252,6 +266,16 @@ export function addToStock(items: PurchaseItem[], ref?: string): { id: string; q
     }), "edit", ref);
   }
   return added;
+}
+/** An ordered purchase arrived: its date becomes today's and its lines go into the stock room.
+ *  Returns how many stock items were added to. */
+export function receivePurchase(id: string): number {
+  const p = getPurchase(id);
+  if (!p || !p.ordered) return 0;
+  const date = new Date().toLocaleDateString("en-CA");
+  const added = addToStock(p.items, [p.supplierName, date].filter(Boolean).join(" · "));
+  updatePurchase({ ...p, ordered: false, date, ...(added.length ? { stockAdded: added } : {}) });
+  return added.length;
 }
 export function getPurchase(id: string): Purchase | null {
   return getPurchases().find((p) => p.id === id) ?? null;
