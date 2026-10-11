@@ -261,6 +261,28 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   const kp2 = ((await kv(p, 'purchasing.purchases.v1')) || []).find((x) => x.items.some((it) => it.perKit === 50));
   ok(kp2 && kp2.items[0].unitPrice === 50000 && (await stock()).find((s) => s.name === 'كاشف الكوليسترول')?.price === 1000, 'the purchase keeps the kit price (50,000); the item its unit price (1,000)');
 
+  // ── «التحاليل التي تستعمله» under each line: set on the stock item, as in «الأصناف», so results deduct it ──
+  const hbT = (await kv(p, 'station.tests.v1')).find((t) => t.code === 'HB');
+  await p.goto(B + '/store'); await p.waitForSelector('[data-testid="purchase-form"]', { timeout: 20000 });
+  await p.fill('[data-line="0"] input[data-line-name]', 'كاشف الهيموغلوبين الجديد');
+  ok((await p.locator('[data-line-tests="0"] [data-testid="line-tests"]').innerText()).includes('لن يُخصم'), 'a new material: no tests yet (it would not be deducted)');
+  await p.click('[data-line-tests="0"] [data-testid="line-tests"]');
+  await p.fill('[data-line-tests="0"] input[aria-label="بحث في الفحوصات"]', hbT.name_ar);
+  await p.check(`[data-line-tests="0"] input[aria-label="${hbT.name_ar}"]`);
+  ok((await p.locator('[data-line-tests="0"] [data-testid="line-tests"]').innerText()).includes(hbT.name_ar), 'the chosen test shows on the line');
+  await p.locator('[data-line="0"] input[aria-label="العدد"]').fill('10');
+  await p.click('button:has-text("حفظ العملية")');
+  const hbItem = async () => (await stock()).find((s) => s.name === 'كاشف الهيموغلوبين الجديد');
+  ok(await settled(async () => (await hbItem())?.testIds?.includes(hbT.id)) && (await hbItem()).qty === 10, 'the new stock item is linked to the test (as in «الأصناف»)');
+  await p.goto(B + '/store/items'); await p.waitForSelector('[data-testid="items-list"]', { timeout: 20000 });
+  await p.click('button[role=tab]:has-text("التحاليل وموادها")'); await p.waitForSelector('tr[data-test="HB"] [data-testid="test-materials"]', { timeout: 20000 });
+  ok((await p.locator('tr[data-test="HB"] [data-testid="test-materials"]').innerText()).includes('كاشف الهيموغلوبين الجديد'), '«الأصناف» shows it under the test: one link');
+  // The next purchase of the material brings its tests along
+  await p.goto(B + '/store'); await p.waitForSelector('[data-testid="purchase-form"]', { timeout: 20000 });
+  await p.fill('[data-line="0"] input[data-line-name]', 'كاشف الهيموغلوبين الجديد');
+  ok((await p.locator('[data-line-tests="0"] [data-testid="line-tests"]').innerText()).includes(hbT.name_ar), 'a known material shows its tests');
+  // The lab's result deducts it
+
   ok(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.slice(0, 3).join(' | ') : ''));
   await b.close();
   done();

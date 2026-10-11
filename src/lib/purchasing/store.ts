@@ -36,6 +36,9 @@ export interface PurchaseItem {
   lot?: string;
   /** The GS1 product code scanned from the box: kept as the item's (or kit's) barcode. */
   gtin?: string;
+  /** The lab's tests that use the material (as in «الأصناف»): set on the stock item, so the lab
+   *  station deducts it with their results. Not for a defined kit (its parts are linked in «الأصناف»). */
+  testIds?: string[];
 }
 
 /** A kit: one purchasable package holding several stock items, e.g. «كت السكر» = 4 × «كاشف
@@ -242,7 +245,7 @@ function changeStock(moves: { id: string; qty: number }[], reason: "purchase" | 
  *  (with no quantity yet, then the purchase's); a kit's parts, each times the kits bought. The
  *  item's unit price follows the purchase (a kit's, when it holds one item). Returns what was added. */
 export function addToStock(items: PurchaseItem[], ref?: string, reason: "purchase" | "add" = "purchase"): { id: string; qty: number }[] {
-  const lines = items.map((it) => ({ name: it.name.trim(), qty: Number(it.qty) || 0, price: Number(it.unitPrice) || 0, kitId: it.kitId, perKit: Number(it.perKit) || 0, expiry: it.expiry, lot: it.lot, gtin: it.gtin, device: it.device?.trim() }))
+  const lines = items.map((it) => ({ name: it.name.trim(), qty: Number(it.qty) || 0, price: Number(it.unitPrice) || 0, kitId: it.kitId, testIds: it.testIds, perKit: Number(it.perKit) || 0, expiry: it.expiry, lot: it.lot, gtin: it.gtin, device: it.device?.trim() }))
     .filter((x) => x.name && x.qty > 0);
   if (!lines.length) return [];
   const stock = getStock();
@@ -259,6 +262,7 @@ export function addToStock(items: PurchaseItem[], ref?: string, reason: "purchas
   // A scanned GS1 code becomes the barcode of the item or kit that has none, for the next scan.
   const codes = new Map<string, string>();
   const devices = new Map<string, string>();
+  const tests = new Map<string, string[]>();
   const kitCodes = new Map<string, string>();
   const added = lines.flatMap((x) => {
     // Only a line bought as a kit is opened into its contents.
@@ -278,13 +282,15 @@ export function addToStock(items: PurchaseItem[], ref?: string, reason: "purchas
     note(item.id, x);
     if (x.gtin && !item.barcode) codes.set(item.id, x.gtin);
     if (x.device && !item.device) devices.set(item.id, x.device);
+    if (Array.isArray(x.testIds)) tests.set(item.id, x.testIds);
     return [{ id: item.id, qty: x.qty * per }];
   });
   if (fresh.length) saveStock([...stock, ...fresh]);
   changeStock(added, reason, ref, prices);
   if (kitCodes.size) saveKits(kits.map((k) => (kitCodes.has(k.id) ? { ...k, barcode: kitCodes.get(k.id) } : k)));
-  if (codes.size || devices.size) saveStock(getStock().map((s) => (codes.has(s.id) || devices.has(s.id)
-    ? { ...s, ...(codes.has(s.id) ? { barcode: codes.get(s.id) } : {}), ...(devices.has(s.id) ? { device: devices.get(s.id) } : {}) } : s)), "edit", ref);
+  if (codes.size || devices.size || tests.size) saveStock(getStock().map((s) => (codes.has(s.id) || devices.has(s.id) || tests.has(s.id)
+    ? { ...s, ...(codes.has(s.id) ? { barcode: codes.get(s.id) } : {}), ...(devices.has(s.id) ? { device: devices.get(s.id) } : {}),
+      ...(tests.has(s.id) ? { testIds: tests.get(s.id)!.length ? tests.get(s.id) : undefined, linkedTestId: undefined } : {}) } : s)), "edit", ref);
   if (batch.size) {
     saveStock(getStock().map((s) => {
       const b = batch.get(s.id);

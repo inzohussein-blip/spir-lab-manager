@@ -1,17 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Plus, X, Copy, Package, Boxes, ShoppingCart, PackagePlus } from "lucide-react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { Plus, X, Copy, Package, Boxes, ShoppingCart, PackagePlus, FlaskConical } from "lucide-react";
 import {
   addPurchase, addToStock, deviceNames, getKits, getPurchases, getSettings, getSuppliers, lineTotal, savePurchases, stockMatch, uid,
   type Kit, type Purchase, type PurchaseItem, type PurchasingSettings, type Supplier,
 } from "@/lib/purchasing/store";
-import { getStock, type StockItem } from "@/lib/station/store";
+import { getStock, getTests, stockTestIds, type StockItem, type StationTest } from "@/lib/station/store";
 import { parseGs1 } from "@/lib/purchasing/gs1";
 import { CameraScan } from "@/components/local/CameraScan";
 import { NumberInput } from "@/components/local/NumberInput";
 import { money } from "@/lib/utils";
-import { ScanBox } from "./stockParts";
+import { ScanBox, TestPicker } from "./stockParts";
 
 const inp = "w-full rounded-lg border border-line bg-surface px-2.5 py-2 text-sm outline-none focus:border-brand";
 const num = `${inp} tabular-nums text-left`;
@@ -21,8 +21,8 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 /** A line being typed: a stock item or a kit (two separate lists), how many, expiry and lot (optional),
  *  the price of one and the line's total (either one fills the other). */
 type LineKind = "item" | "kit";
-interface Row { kind: LineKind; device: string; name: string; qty: number; perKit: number; expiry: string; lot: string; unit: number; total: number; gtin?: string }
-const blank = (kind: LineKind = "item", device = ""): Row => ({ kind, device, name: "", qty: 1, perKit: 0, expiry: "", lot: "", unit: 0, total: 0 });
+interface Row { kind: LineKind; device: string; name: string; qty: number; perKit: number; testIds: string[]; testsTouched?: boolean; expiry: string; lot: string; unit: number; total: number; gtin?: string }
+const blank = (kind: LineKind = "item", device = ""): Row => ({ kind, device, name: "", qty: 1, perKit: 0, testIds: [], expiry: "", lot: "", unit: 0, total: 0 });
 
 /**
  * «عملية شراء جديدة» — the entry into the lab's stock room, on the page itself (as in the supplier
@@ -49,14 +49,16 @@ export function PurchaseForm({ onSaved }: { onSaved?: (msg: string) => void }) {
   const [rows, setRows] = useState<Row[]>([blank()]);
   const [err, setErr] = useState("");
   const [scanMsg, setScanMsg] = useState("");
+  const [openTests, setOpenTests] = useState<Record<number, boolean>>({});
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [devices, setDevices] = useState<string[]>([]);
+  const [tests, setTests] = useState<StationTest[]>([]);
   const [stock, setStock] = useState<StockItem[]>([]);
   const [kits, setKits] = useState<Kit[]>([]);
   const [opts, setOpts] = useState<PurchasingSettings>({ orgName: "" });
   const box = useRef<HTMLDivElement>(null);
 
-  const load = () => { setDevices(deviceNames()); setSuppliers(getSuppliers()); setStock(getStock()); setKits(getKits()); setOpts(getSettings()); };
+  const load = () => { setTests(getTests()); setDevices(deviceNames()); setSuppliers(getSuppliers()); setStock(getStock()); setKits(getKits()); setOpts(getSettings()); };
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- this device's data (browser storage) is read once the page is on screen, never while rendering on the server
     load();
@@ -84,6 +86,8 @@ export function PurchaseForm({ onSaved }: { onSaved?: (msg: string) => void }) {
     const next = { ...r, ...patch };
     // A known item typed without its device: the device written on it.
     if (patch.name !== undefined && next.kind === "item" && !next.device.trim()) next.device = itemOf(next.name)?.device ?? "";
+    // Its tests (as in «الأصناف») come with a known material, until changed here.
+    if (patch.name !== undefined && !next.testsTouched) { const it = itemOf(next.name); next.testIds = it ? stockTestIds(it) : []; }
     return next;
   }));
   /** The count, the price of one and the total stay in step: a changed count keeps the price of one. */
@@ -150,6 +154,8 @@ export function PurchaseForm({ onSaved }: { onSaved?: (msg: string) => void }) {
         name: kit?.name ?? stockMatch(r.name)?.name ?? r.name.trim(), qty, unitPrice: qty > 0 ? round2(t / qty) : 0, total: t,
         ...(kit ? { kitId: kit.id } : r.kind === "kit" && Number(r.perKit) > 0 ? { perKit: Math.round(Number(r.perKit)) } : {}),
         ...(r.expiry ? { expiry: r.expiry } : {}), ...(r.lot.trim() ? { lot: r.lot.trim() } : {}), ...(r.gtin ? { gtin: r.gtin } : {}),
+        // The tests that use the material: set on the stock item (a defined kit's parts are linked in «الأصناف»).
+        ...(!kit && (r.testsTouched || r.testIds.length) ? { testIds: r.testIds } : {}),
       };
     });
     const sum = lines.reduce((t, it) => t + lineTotal(it), 0);
@@ -157,7 +163,7 @@ export function PurchaseForm({ onSaved }: { onSaved?: (msg: string) => void }) {
       // An opening balance / adjustment: into the stock room only — not a purchase, spending or debt.
       const added = addToStock(lines, notes.trim() ? `رصيد افتتاحي / تسوية — ${notes.trim().slice(0, 80)}` : "رصيد افتتاحي / تسوية", "add");
       onSaved?.(`دخلت ${added.length} مادة إلى المخزن (رصيد افتتاحي / تسوية).`);
-      setRows([blank()]); setNotes(""); setScanMsg(""); load();
+      setRows([blank()]); setOpenTests({}); setNotes(""); setScanMsg(""); load();
       return;
     }
     // Supplier debts: what is paid now; the rest stays owed. An ordered purchase has paid nothing yet.
@@ -178,7 +184,7 @@ export function PurchaseForm({ onSaved }: { onSaved?: (msg: string) => void }) {
       if (added.length) savePurchases(getPurchases().map((x) => (x.id === p.id ? { ...x, stockAdded: added } : x)));
     }
     onSaved?.(`حُفظت العملية: ${money(sum)} د.ع${ordered ? " — بانتظار الاستلام" : n ? ` — وأُضيفت ${n} مادة إلى المخزن` : ""}`);
-    setRows([blank()]); setNotes(""); setPaid(false); setPaidAmount(0); setSupplierRef(""); setOrdered(false); setScanMsg("");
+    setRows([blank()]); setOpenTests({}); setNotes(""); setPaid(false); setPaidAmount(0); setSupplierRef(""); setOrdered(false); setScanMsg("");
     load();
   }
 
@@ -247,7 +253,8 @@ export function PurchaseForm({ onSaved }: { onSaved?: (msg: string) => void }) {
                 ? [...kitsFor(r.device).map((k) => ({ id: k.id, name: k.name, hint: kitText(k) })), ...stockFor(r.device).map((s) => ({ id: s.id, name: s.name, hint: "مادة — اكتب عدد في الكت" }))]
                 : stockFor(r.device).map((s) => ({ id: s.id, name: s.name, hint: "" }));
               return (
-                <tr key={i} data-line={i} className="align-top">
+                <Fragment key={i}>
+                <tr data-line={i} className="align-top">
                   <td className="pe-1.5 pb-2 pt-2 text-center text-xs tabular-nums text-muted">{i + 1}</td>
                   <td className="pe-1.5 pb-2">
                     <div className="flex overflow-hidden rounded-lg border border-line" role="group" aria-label="نوع البند">
@@ -295,6 +302,27 @@ export function PurchaseForm({ onSaved }: { onSaved?: (msg: string) => void }) {
                     </div>
                   </td>
                 </tr>
+                {r.name.trim() && (
+                  <tr data-line-tests={i}>
+                    <td />
+                    <td colSpan={9} className="pb-3 pe-1.5">
+                      {kit ? (
+                        <p className="text-[11px] text-muted">التحاليل: تُربط أصناف الكت من «الأصناف».</p>
+                      ) : (
+                        <details className="rounded-lg border border-line/70" open={openTests[i] ?? false} onToggle={(e) => { const o = (e.currentTarget as HTMLDetailsElement).open; setOpenTests((m) => ({ ...m, [i]: o })); }}>
+                          <summary className="flex cursor-pointer items-center gap-1.5 px-2.5 py-1.5 text-xs" data-testid="line-tests">
+                            <FlaskConical className="size-3.5 text-amber-700" /> التحاليل التي تستعمله
+                            {r.testIds.length > 0
+                              ? <span className="text-amber-700">({r.testIds.length}): {r.testIds.slice(0, 4).map((id) => tests.find((t) => t.id === id)?.name_ar).filter(Boolean).join("، ")}{r.testIds.length > 4 ? "…" : ""}</span>
+                              : <span className="text-muted">— لا تحاليل: لن يُخصم مع النتائج</span>}
+                          </summary>
+                          <div className="p-2"><TestPicker tests={tests} value={r.testIds} onChange={(ids) => set(i, { testIds: ids, testsTouched: true })} /></div>
+                        </details>
+                      )}
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               );
             })}
           </tbody>
