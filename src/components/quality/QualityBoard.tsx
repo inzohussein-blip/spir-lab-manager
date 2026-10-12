@@ -9,6 +9,7 @@ import {
 } from "@/app/actions/quality";
 import { evaluateAnalyte, RULES, FREQ, tempOk, type Analyte, type QcResult, type TempUnit, type TempReading, type Device, type QcLevel, type Freq, type Evaluation } from "@/lib/qc/store";
 import { LJChart, qcStats } from "@/components/qc/LJChart";
+import { newId } from "@/lib/local/util";
 
 const inp = "rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-brand";
 const TABS = [
@@ -308,7 +309,7 @@ function DeviceForm({ d, busy, onClose, run }: { d: Device; busy: boolean; onClo
           <button type="button" onClick={() => setTasks(tasks.filter((_, j) => j !== i))} aria-label="حذف المهمة" className="px-2 text-red-600"><Trash2 className="size-4" /></button>
         </div>
       ))}
-      <button type="button" onClick={() => setTasks([...tasks, { id: crypto.randomUUID(), name: "", freq: "daily" }])} className="mt-1 text-xs font-semibold text-brand-dark">+ مهمة</button>
+      <button type="button" onClick={() => setTasks([...tasks, { id: newId(), name: "", freq: "daily" }])} className="mt-1 text-xs font-semibold text-brand-dark">+ مهمة</button>
       <div className="mt-3 flex justify-end gap-2">
         <button type="button" onClick={onClose} className="rounded-lg border border-line px-3 py-1.5 text-sm">إلغاء</button>
         <button type="button" disabled={busy} data-testid="device-save"
@@ -320,7 +321,7 @@ function DeviceForm({ d, busy, onClose, run }: { d: Device; busy: boolean; onClo
 }
 
 function Setup({ analytes, units, busy, run }: { analytes: Analyte[]; units: TempUnit[]; busy: boolean; run: Run }) {
-  const blank = () => ({ id: "", name: "", unit: "", device: "", active: true, levels: [{ id: crypto.randomUUID(), label: "Level 1", lot: "", mean: "", sd: "" }] });
+  const blank = () => ({ id: "", name: "", unit: "", device: "", active: true, levels: [{ id: newId(), label: "Level 1", lot: "", mean: "", sd: "" }] });
   const [a, setA] = useState<ReturnType<typeof blank> | null>(null);
   const [u, setU] = useState({ name: "", kind: "", min: "", max: "" });
   return (
@@ -344,7 +345,7 @@ function Setup({ analytes, units, busy, run }: { analytes: Analyte[]; units: Tem
               </div>
             ))}
             <div className="mt-2 flex flex-wrap justify-between gap-2">
-              <button type="button" onClick={() => setA({ ...a, levels: [...a.levels, { id: crypto.randomUUID(), label: `Level ${a.levels.length + 1}`, lot: "", mean: "", sd: "" }] })} className="text-xs font-semibold text-brand-dark">+ مستوى</button>
+              <button type="button" onClick={() => setA({ ...a, levels: [...a.levels, { id: newId(), label: `Level ${a.levels.length + 1}`, lot: "", mean: "", sd: "" }] })} className="text-xs font-semibold text-brand-dark">+ مستوى</button>
               <span className="flex gap-2">
                 <button type="button" onClick={() => setA(null)} className="rounded-lg border border-line px-3 py-1 text-sm">إلغاء</button>
                 <button type="button" disabled={busy} data-testid="qc-save"
