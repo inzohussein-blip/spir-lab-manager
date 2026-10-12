@@ -107,6 +107,8 @@ const DAY = 86400000;
   await o.waitForSelector('[data-testid="renew-code"]', { timeout: 10000 });
   const renew = await o.locator('[data-testid="renew-code"]').inputValue();
   ok(renew.startsWith('SPIR-RENEW.'), 'the owner gets a renewal text');
+  const wa = await o.getAttribute('[data-testid="renew-whatsapp"]', 'href');
+  ok(wa.startsWith('https://wa.me/?text=') && decodeURIComponent(wa.split('text=')[1]).includes(renew), '«إرسال بواتساب» carries the whole renewal text');
   const L = dev2.p;
   await L.fill('input[aria-label="رمز المختبر"]', renew.slice(0, -3) + 'abc'); await L.click('button:has-text("تفعيل رمز جديد")'); await L.waitForTimeout(800);
   ok((await L.locator('div[role=dialog]').innerText()).includes('رمز التجديد غير صحيح'), 'a changed renewal text is refused');
@@ -130,6 +132,23 @@ const DAY = 86400000;
   ok((await o.locator('[data-testid="key-backup"]').innerText()).includes('استُعيد مفتاح التوقيع'), 'the right passphrase restores it');
   await forceRefresh(); await openStation();
   ok(await d.locator('div[role=dialog]').count() === 0 && payload((await lic()).token).lid === p0.lid, 'after the restore the device still refreshes from the site');
+
+  // ── «ضمان الاستمرارية» for new codes, and for every code at once ──
+  const licenses = async () => (await o.evaluate(async () => (await fetch('/api/license/admin')).json())).licenses;
+  await o.reload(); await o.waitForTimeout(700); await go('settings');
+  await o.fill('input[aria-label="ضمان الاستمرارية الافتراضي"]', '45');
+  await o.click('[data-testid="prefs-card"] button:has-text("حفظ الإعدادات")'); await o.waitForTimeout(800);
+  const api = (body) => o.evaluate(async (body) => (await fetch('/api/license/admin', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })).json(), body);
+  const fresh = await api({ op: 'create', lab: 'مختبر الضمان الافتراضي', days: 30 });
+  const trial = await api({ op: 'create', lab: 'مختبر تجريبي للضمان', days: 7, trial: true });
+  let all = await licenses();
+  ok(all.find((r) => r.id === fresh.row.id)?.continuity_days === 45, 'a new code starts with the default continuity (45 days)');
+  ok(all.find((r) => r.id === trial.row.id)?.continuity_days === 0, 'a trial code does not');
+  await go('settings');
+  await o.fill('input[aria-label="ضمان الاستمرارية الافتراضي"]', '20');
+  await o.click('[data-testid="continuity-all"]'); await o.waitForTimeout(1200);
+  all = await licenses();
+  ok(all.filter((r) => !r.is_trial).every((r) => r.continuity_days === 20) && all.find((r) => r.id === trial.row.id)?.continuity_days === 0, '«تطبيقه على كل الرموز الحالية»: every paid code now 20 days, the trial left alone');
 
   ok(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.slice(0, 3).join(' | ') : ''));
   await b.close();

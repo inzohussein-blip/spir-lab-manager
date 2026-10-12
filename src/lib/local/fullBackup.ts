@@ -12,12 +12,21 @@
  * «الحفظ التلقائي»: the browser keeps a folder the lab chose (Chrome / Edge, with the user's
  * permission) and a station writes a new file there once a day or a week when it opens; the last
  * KEEP_FILES stay. Without the permission (or the feature) a reminder asks for a backup instead.
+ *
+ * «كلمة مرور النسخ» (optional, per device): every full backup made here is then sealed with it
+ * (PBKDF2-SHA256 → XChaCha20-Poly1305, from @noble: works on a lab computer's http://192.168.…
+ * address too, where the browser offers no crypto.subtle). The device keeps the derived key, not
+ * the password; a restore asks for the password.
  */
 
 import { kvReady, kvDataEntries, kvIsDataKey, kvSet, kvRemove, kvFlush } from "./kv";
 import { exportImages, importImages, type MediaExport } from "@/lib/training/media";
 import { UI_KEY, UI_COLOR_KEY } from "./uiScript";
 import { thisDevice } from "./fileSync";
+import { xchacha20poly1305 } from "@noble/ciphers/chacha";
+import { sha256 } from "@noble/hashes/sha2";
+import { pbkdf2Async } from "@noble/hashes/pbkdf2";
+import { randomBytes, utf8ToBytes } from "@noble/hashes/utils";
 
 export const FULL_APP = "spir-lab-full";
 export interface FullBackup {
@@ -30,6 +39,19 @@ export interface FullBackup {
   settings: Record<string, string>;
   images: MediaExport[];
 }
+
+/** A full backup sealed with «كلمة مرور النسخ»: the same file, its content unreadable without it. */
+export interface SealedBackup {
+  app: typeof FULL_APP;
+  v: 1;
+  at: number;
+  from?: string;
+  enc: { alg: "xchacha20poly1305"; kdf: "pbkdf2-sha256"; iter: number; salt: string };
+  nonce: string;
+  box: string;
+}
+const ITER = 210_000;
+const KEY_STORE = "local.backup.key.v1";
 
 /** Station data that stays with this computer (its sync identity and log). */
 const NOT_IN_BACKUP = new Set(["station.syncDevice.v1", "station.syncClock.v1", "station.syncLog.v1"]);
@@ -123,8 +145,66 @@ export function hasData(): boolean {
   return kvDataEntries().some(([k, v]) => !k.endsWith(".theme.v1") && !NOT_IN_BACKUP.has(k) && v.length > 2 && !/(settings|seeded|catalogVersion|backupAt|deviceTag|unlocked)/i.test(k));
 }
 
+// ── «كلمة مرور النسخ» ──
+
+/** base64 in chunks (a backup with images is tens of MB). */
+function toB64(b: Uint8Array): string {
+  let s = "";
+  for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode(...b.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+function fromB64(s: string): Uint8Array {
+  const bin = atob(s);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+const derive = (pass: string, salt: Uint8Array, iter: number) => pbkdf2Async(sha256, utf8ToBytes(pass.normalize("NFC")), salt, { c: iter, dkLen: 32 });
+
+interface StoredKey { salt: string; key: string; iter: number }
+function storedKey(): StoredKey | null {
+  try { const k = JSON.parse(localStorage.getItem(KEY_STORE) ?? "null") as StoredKey | null; return k?.key && k.salt ? k : null; } catch { return null; }
+}
+export const hasBackupPassword = () => !!storedKey();
+export const MIN_PASSWORD = 6;
+/** Set (or with "" remove) the password every full backup made on this device is sealed with. */
+export async function setBackupPassword(pass: string): Promise<void> {
+  if (!pass) { try { localStorage.removeItem(KEY_STORE); } catch { /* ignore */ } }
+  else {
+    const salt = randomBytes(16);
+    const key = await derive(pass, salt, ITER);
+    try { localStorage.setItem(KEY_STORE, JSON.stringify({ salt: toB64(salt), key: toB64(key), iter: ITER })); } catch { /* ignore */ }
+  }
+  window.dispatchEvent(new Event(BACKUP_EVENT));
+}
+
+export function isSealedBackup(x: unknown): x is SealedBackup {
+  const b = x as Partial<SealedBackup> | null;
+  return !!b && b.app === FULL_APP && b.v === 1 && typeof b.box === "string" && typeof b.nonce === "string" && b.enc?.alg === "xchacha20poly1305";
+}
+/** The file's text: sealed when this device has a backup password. */
+async function backupText(): Promise<string> {
+  const b = await makeFullBackup();
+  const k = storedKey();
+  if (!k) return JSON.stringify(b);
+  const nonce = randomBytes(24);
+  const inner = utf8ToBytes(JSON.stringify({ data: b.data, settings: b.settings, images: b.images }));
+  const box = xchacha20poly1305(fromB64(k.key), nonce).encrypt(inner);
+  const sealed: SealedBackup = { app: FULL_APP, v: 1, at: b.at, from: b.from, enc: { alg: "xchacha20poly1305", kdf: "pbkdf2-sha256", iter: k.iter, salt: k.salt }, nonce: toB64(nonce), box: toB64(box) };
+  return JSON.stringify(sealed);
+}
+/** Open a sealed backup with its password (null: wrong password or a damaged file). */
+export async function openSealed(f: SealedBackup, pass: string): Promise<FullBackup | null> {
+  try {
+    const key = await derive(pass, fromB64(f.enc.salt), f.enc.iter);
+    const inner = JSON.parse(new TextDecoder().decode(xchacha20poly1305(key, fromB64(f.nonce)).decrypt(fromB64(f.box)))) as Pick<FullBackup, "data" | "settings" | "images">;
+    const b: FullBackup = { app: FULL_APP, v: 1, at: f.at, from: f.from, data: inner.data, settings: inner.settings ?? {}, images: inner.images ?? [] };
+    return isFullBackup(b) ? b : null;
+  } catch { return null; }
+}
+
 export async function downloadFullBackup(): Promise<void> {
-  const blob = new Blob([JSON.stringify(await makeFullBackup())], { type: "application/json" });
+  const blob = new Blob([await backupText()], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob); a.download = backupFileName(); a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
@@ -189,7 +269,7 @@ async function saveToFolder(h: DirHandle): Promise<boolean> {
   try {
     const f = await h.getFileHandle(backupFileName(), { create: true });
     const w = await f.createWritable();
-    await w.write(JSON.stringify(await makeFullBackup()));
+    await w.write(await backupText());
     await w.close();
     // Keep the last KEEP_FILES backups (the names sort by date).
     const names: string[] = [];

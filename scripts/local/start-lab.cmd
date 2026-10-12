@@ -10,6 +10,8 @@ if not exist .next\BUILD_ID (call npm run build || goto :fail)
 if "%PORT%"=="" set PORT=3000
 if "%PGLITE_DATA_DIR%"=="" set PGLITE_DATA_DIR=%CD%\lab-data
 set NEXT_TELEMETRY_DISABLED=1
+rem Other computers of the lab can sign in to the admin panel over http://192.168.x.x too.
+set LAB_LOCAL_HTTP=1
 start "" cmd /c "timeout /t 8 >nul & start http://localhost:%PORT%/welcome"
 call npm start
 exit /b 0

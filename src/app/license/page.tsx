@@ -5,7 +5,7 @@ import {
   KeyRound, LogOut, Plus, Copy, Check, Ban, Play, MonitorSmartphone, RefreshCw, Trash2, Pencil, ShieldAlert,
   FlaskConical, Download, ChevronDown, MessageSquare, History, Wallet, MessageSquareText, Database, Upload, ShieldCheck, Smartphone, Phone,
   Server, Menu, X, ChevronLeft, HardDrive, Settings, Search, Bug, FileSpreadsheet, Lock, LayoutGrid, Wifi, AlarmClock, CircleDollarSign, MessagesSquare,
-  type LucideIcon,
+  Send, type LucideIcon,
 } from "lucide-react";
 import { StationsOverview, ALWAYS_STATIONS } from "./stations";
 import { PinSection, type PinPolicyView } from "./pins";
@@ -51,12 +51,12 @@ interface Storage { source: "license-db" | "app-db" | "embedded"; ok: boolean; c
 interface SignIn { at: number; ok: boolean; ip: string; agent: string }
 interface TwoFactor { enabled: boolean; broken: boolean; forcedOff: boolean; canSetup: boolean }
 type Prefs = {
-  defaultDays: number; defaultModules: LicenseModule[]; trialDays: number; soonDays: number; adminNeedsOwnDb: boolean;
+  defaultDays: number; defaultModules: LicenseModule[]; trialDays: number; soonDays: number; continuityDays: number; adminNeedsOwnDb: boolean;
   multiDevice: boolean; selfSignup: boolean; errorLog: boolean; dataExport: boolean;
   connectRelay: boolean; connectPublic: boolean; doctorsOn: boolean;
 };
 const DEFAULT_PREFS: Prefs = {
-  defaultDays: 365, defaultModules: [...DEFAULT_MODULES], trialDays: 7, soonDays: 14, adminNeedsOwnDb: NEEDS_DB_GATE,
+  defaultDays: 365, defaultModules: [...DEFAULT_MODULES], trialDays: 7, soonDays: 14, continuityDays: 0, adminNeedsOwnDb: NEEDS_DB_GATE,
   multiDevice: false, selfSignup: false, errorLog: false, dataExport: false, connectRelay: false, connectPublic: true, doctorsOn: true,
 };
 type Data = { enabled: boolean; owner: boolean; needsDb?: boolean; storage?: Storage; licenses?: Row[]; events?: Ev[]; signIns?: SignIn[]; twoFactor?: TwoFactor; contact?: string; prefs?: Prefs; version?: string; now?: number };
@@ -793,6 +793,11 @@ function Continuity({ r, onChange, onReload }: { r: Row; onChange: (c: Record<st
           <button onClick={async () => { try { await navigator.clipboard.writeText(renew.code); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* ignore */ } }} className="mt-1 inline-flex items-center gap-1 rounded-md border border-line bg-surface px-2 py-1 font-semibold">
             {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />} نسخ
           </button>
+          {/* Opens WhatsApp with the message ready; the owner picks the lab's contact there. */}
+          <a href={`https://wa.me/?text=${encodeURIComponent(`رمز تجديد «${r.lab_name}» حتى ${fmt(renew.until)}.\nالصقه في خانة رمز المختبر على أجهزتكم (في شاشة القفل أو «إدخال الرمز») — يعمل بدون إنترنت:\n\n${renew.code}`)}`}
+            target="_blank" rel="noopener noreferrer" data-testid="renew-whatsapp" className="ms-1 mt-1 inline-flex items-center gap-1 rounded-md border border-emerald-400 bg-surface px-2 py-1 font-semibold text-emerald-800">
+            <Send className="size-3.5" /> إرسال بواتساب
+          </a>
         </div>
       )}
     </div>
@@ -1413,7 +1418,7 @@ function PrefsCard({ prefs, onSaved }: { prefs: Prefs; onSaved: () => void }) {
     const defaultDays = p.days === -1 ? Number(p.custom) : p.days;
     if (!defaultDays || defaultDays < 1) { setMsg("حدّد المدة."); return; }
     const d = await post({ op: "prefs", prefs: {
-      defaultDays, defaultModules: p.defaultModules, trialDays: p.trialDays, soonDays: p.soonDays, adminNeedsOwnDb: p.adminNeedsOwnDb,
+      defaultDays, defaultModules: p.defaultModules, trialDays: p.trialDays, soonDays: p.soonDays, continuityDays: p.continuityDays, adminNeedsOwnDb: p.adminNeedsOwnDb,
       multiDevice: p.multiDevice, selfSignup: p.selfSignup, errorLog: p.errorLog, dataExport: p.dataExport,
       connectRelay: prefs.connectRelay, connectPublic: prefs.connectPublic, // set in «محطة التواصل»
       doctorsOn: p.doctorsOn,
@@ -1440,6 +1445,18 @@ function PrefsCard({ prefs, onSaved }: { prefs: Prefs; onSaved: () => void }) {
         <label className="text-sm font-medium">تنبيه «قارب على الانتهاء» قبل (أيام)
           <input type="number" min={1} max={90} value={p.soonDays} onChange={(e) => setP({ ...p, soonDays: Number(e.target.value) })} aria-label="أيام التنبيه قبل الانتهاء" className={`mt-1 ${inp}`} />
         </label>
+      </div>
+      <div className="mt-3 flex flex-wrap items-end gap-2" data-testid="continuity-default">
+        <label className="text-sm font-medium">«ضمان الاستمرارية» للرمز الجديد (أيام، 0 = بلا)
+          <input type="number" min={0} max={365} value={p.continuityDays} onChange={(e) => setP({ ...p, continuityDays: Number(e.target.value) })} aria-label="ضمان الاستمرارية الافتراضي" className={`mt-1 ${inp} w-40`} />
+        </label>
+        <button type="button" onClick={async () => {
+          const n = Math.max(0, Math.min(365, Math.round(p.continuityDays || 0)));
+          if (!window.confirm(`تطبيق «ضمان الاستمرارية» ${n ? `${n} يوماً` : "بلا أيام (إيقافه)"} على كل الرموز المدفوعة الحالية؟`)) return;
+          const d = await post({ op: "continuity_all", days: n });
+          setMsg(d.ok ? `✓ طُبّق على ${(d as { changed?: number }).changed ?? 0} رمزاً` : "تعذّر التطبيق."); if (d.ok) onSaved();
+        }} className="rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas" data-testid="continuity-all">تطبيقه على كل الرموز الحالية</button>
+        <span className="basis-full text-xs text-muted">إن تعذّر على جهاز الوصول إلى الموقع 14 يوماً قبل نهاية رمزه، يبقى يعمل هذه الأيام بعدها. الرموز التجريبية بلا ضمان.</span>
       </div>
       <div className="mt-3 text-sm font-medium">المحطات المفعّلة في الرمز الجديد</div>
       <ModuleChips value={p.defaultModules} onChange={(m) => setP({ ...p, defaultModules: m })} />

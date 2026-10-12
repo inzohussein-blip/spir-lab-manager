@@ -197,6 +197,8 @@ export interface OwnerPrefs {
   trialDays: number;
   /** A code is «قارب على الانتهاء» this many days before its end. */
   soonDays: number;
+  /** «ضمان الاستمرارية» a new paid code starts with (days past its end when the site is out of reach; 0 = none). */
+  continuityDays: number;
   /** The full admin panel opens for a paid code only once it has a database of its own
    *  (trial codes work in their own section of the site's database). */
   adminNeedsOwnDb: boolean;
@@ -218,7 +220,7 @@ export interface OwnerPrefs {
   doctorsOn: boolean;
 }
 export const DEFAULT_PREFS: OwnerPrefs = {
-  defaultDays: 365, defaultModules: [...DEFAULT_MODULES], trialDays: 7, soonDays: 14, adminNeedsOwnDb: true,
+  defaultDays: 365, defaultModules: [...DEFAULT_MODULES], trialDays: 7, soonDays: 14, continuityDays: 0, adminNeedsOwnDb: true,
   multiDevice: false, selfSignup: false, errorLog: false, dataExport: false, connectRelay: false, connectPublic: true, doctorsOn: true,
 };
 const within = (v: unknown, min: number, max: number, dflt: number) => {
@@ -232,6 +234,7 @@ export function cleanPrefs(v: unknown): OwnerPrefs {
     defaultModules: Array.isArray(p.defaultModules) ? cleanModules(p.defaultModules) : [...DEFAULT_PREFS.defaultModules],
     trialDays: within(p.trialDays, 1, 60, DEFAULT_PREFS.trialDays),
     soonDays: within(p.soonDays, 1, 90, DEFAULT_PREFS.soonDays),
+    continuityDays: within(p.continuityDays, 0, 365, DEFAULT_PREFS.continuityDays),
     // Off while the owner keeps the «needs a database» screen disabled (lib/license/flags — do not switch on).
     adminNeedsOwnDb: NEEDS_DB_GATE && (typeof p.adminNeedsOwnDb === "boolean" ? p.adminNeedsOwnDb : DEFAULT_PREFS.adminNeedsOwnDb),
     multiDevice: p.multiDevice === true,
@@ -575,14 +578,27 @@ export async function createLicense(v: { lab: string; days: number; modules: unk
   const code = newCode();
   const id = randomUUID();
   const days = Math.max(1, Math.min(3650, Math.round(v.days)));
+  // A paid code starts with the owner's «ضمان الاستمرارية» (trial codes never have it).
+  const cont = v.trial ? 0 : (await getPrefs()).continuityDays;
   await query(
-    `insert into station_licenses (id, code_hash, code_hint, lab_name, note, duration_days, modules, created_at, is_trial, max_devices, source)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+    `insert into station_licenses (id, code_hash, code_hint, lab_name, note, duration_days, modules, created_at, is_trial, max_devices, source, continuity_days)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
     [id, hashCode(code), code.slice(-4), v.lab.trim().slice(0, 120), (v.note ?? "").trim().slice(0, 300), days, JSON.stringify(cleanModules(v.modules)), Date.now(), !!v.trial,
-      Math.max(1, Math.min(50, Math.round(Number(v.maxDevices) || 1))), v.source === "signup" ? "signup" : ""],
+      Math.max(1, Math.min(50, Math.round(Number(v.maxDevices) || 1))), v.source === "signup" ? "signup" : "", cont],
   );
   await logEvent(id, "created", `${v.source === "signup" ? "تسجيل ذاتي — " : ""}${v.trial ? "رمز تجريبي — " : ""}${days} يوم`);
   return { row: (await getLicense(id))!, code };
+}
+
+/** «ضمان الاستمرارية» for every paid code at once (trial codes are left as they are). Returns how many changed. */
+export async function setContinuityAll(days: number): Promise<number> {
+  await ensureTables();
+  const n = Math.max(0, Math.min(365, Math.round(Number(days) || 0)));
+  const rows = await query<{ id: string }>(`select id from station_licenses where not is_trial and continuity_days <> $1`, [n]);
+  if (!rows.length) return 0;
+  await query(`update station_licenses set continuity_days = $1 where not is_trial`, [n]);
+  for (const r of rows) await logEvent(r.id, "continuity", `${n ? `${n} يوم` : "متوقف"} — لكل الرموز`);
+  return rows.length;
 }
 
 export type LicenseAction =

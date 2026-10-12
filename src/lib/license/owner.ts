@@ -2,6 +2,7 @@ import "server-only";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { SignJWT, jwtVerify } from "jose";
+import { cookieSecure } from "@/lib/auth/cookieSecure";
 
 /** The owner's sign-in for the code manager (/license), with LICENSE_ADMIN_PASSWORD. */
 const COOKIE = "lab_lic_owner";
@@ -19,7 +20,7 @@ export function passwordMatches(given: string): boolean {
 
 export async function startOwnerSession(): Promise<void> {
   const token = await new SignJWT({ owner: true }).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("12h").sign(key());
-  (await cookies()).set(COOKIE, token, { httpOnly: true, sameSite: "strict", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 12 * 3600 });
+  (await cookies()).set(COOKIE, token, { httpOnly: true, sameSite: "strict", secure: await cookieSecure(), path: "/", maxAge: 12 * 3600 });
 }
 export async function endOwnerSession(): Promise<void> {
   (await cookies()).delete(COOKIE);

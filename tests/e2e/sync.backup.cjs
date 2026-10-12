@@ -10,7 +10,7 @@ const DAY = 86400000;
   const errs = [];
   const dev = async () => {
     const ctx = await b.newContext({ viewport: { width: 1300, height: 900 }, acceptDownloads: true });
-    const p = await ctx.newPage(); p.on('pageerror', (e) => errs.push(e.message.slice(0, 140))); p.on('dialog', (d) => d.accept());
+    const p = await ctx.newPage(); p.on('pageerror', (e) => errs.push(e.message.slice(0, 140))); p.on('crash', () => errs.push('the page crashed: ' + p.url())); p.on('dialog', (d) => d.accept());
     return { ctx, p };
   };
 
@@ -50,6 +50,31 @@ const DAY = 86400000;
   ok(pats.length === 1 && pats[0].id === patient.id, 'restored: the backup\'s patients replace the device\'s');
   ok((await kv(c, 'qc.devices.v1')) === null && (await kv(c, 'roster.staff.v1'))?.[0]?.name === 'موظف النسخة', 'what is not in the backup is gone, the rest is there');
   ok(await c.evaluate(() => localStorage.getItem('station.theme.v1')) === 'dark', 'the look came with it');
+
+  // ── «كلمة مرور النسخ»: the file is sealed, and opens only with it ──
+  await a.goto(B + '/sync/backup'); await a.waitForSelector('[data-testid="backup-password"]', { timeout: 20000 });
+  await a.fill('input[aria-label="كلمة مرور النسخ"]', 'lab-pass-77'); await a.fill('input[aria-label="تأكيد كلمة مرور النسخ"]', 'lab-pass-70');
+  await a.click('[data-testid="backup-password-save"]'); await a.waitForTimeout(300);
+  ok((await a.locator('[data-testid="full-backup-msg"]').innerText()).includes('غير متطابقتين'), 'the two passwords must match');
+  await a.fill('input[aria-label="تأكيد كلمة مرور النسخ"]', 'lab-pass-77');
+  await a.click('[data-testid="backup-password-save"]'); await a.waitForSelector('[data-testid="backup-password"] >> text=مفعّلة', { timeout: 20000 });
+  ok(!(await a.evaluate(() => JSON.stringify(localStorage))).includes('lab-pass-77'), 'the password itself is not kept on the device');
+  const [dl3] = await Promise.all([a.waitForEvent('download'), a.click('[data-testid="full-backup-download"]')]);
+  const sealedPath = await dl3.path();
+  const sealedText = fs.readFileSync(sealedPath, 'utf8');
+  ok(JSON.parse(sealedText).box && !sealedText.includes(patient.name) && !sealedText.includes('roster.staff'), 'the file is sealed: no patient name or station inside');
+  await c.goto(B + '/sync/backup'); await c.waitForSelector('[data-testid="full-backup-pick"]', { timeout: 20000 });
+  await c.setInputFiles('[data-testid="full-backup-file"]', sealedPath);
+  await c.waitForSelector('[data-testid="full-backup-sealed"]');
+  await c.fill('input[aria-label="كلمة مرور النسخة"]', 'wrong-pass'); await c.click('[data-testid="full-backup-unseal"]');
+  await c.waitForSelector('[data-testid="full-backup-msg"]', { timeout: 20000 });
+  ok((await c.locator('[data-testid="full-backup-msg"]').innerText()).includes('غير صحيحة') && await c.locator('[data-testid="full-backup-preview"]').count() === 0, 'a wrong password does not open it');
+  await c.fill('input[aria-label="كلمة مرور النسخة"]', 'lab-pass-77'); await c.click('[data-testid="full-backup-unseal"]');
+  await c.waitForSelector('[data-testid="full-backup-preview"]', { timeout: 20000 });
+  ok((await c.locator('[data-testid="full-backup-preview"]').innerText()).includes('محطة المختبر'), 'the right password opens it for restoring');
+  await c.click('[data-testid="full-backup-restore"]');
+  await c.waitForTimeout(2500); await c.waitForSelector('[data-testid="full-backup-pick"]', { timeout: 20000 });
+  ok((await kv(c, 'station.patients.v1'))?.[0]?.id === patient.id, 'and restores it');
 
   // ── The reminder in the stations ──
   await c.evaluate((t) => localStorage.setItem('local.backup.v1', JSON.stringify({ last: t })), Date.now() - 3 * DAY);
@@ -91,12 +116,18 @@ const DAY = 86400000;
     return JSON.parse(await (await (await d.getFileHandle(n)).getFile()).text());
   }, today);
   ok(saved.app === 'spir-lab-full' && JSON.parse(saved.data['station.patients.v1'])[0].id === patient.id, 'the saved file is the full backup');
-  // Due again (a day later): a station saves by itself when it opens.
-  await f.evaluate(async (n) => { const s = JSON.parse(localStorage.getItem('local.backup.v1')); s.last = Date.now() - 2 * 86400000; localStorage.setItem('local.backup.v1', JSON.stringify(s));
-    await (await (await navigator.storage.getDirectory()).getDirectoryHandle('lab-backups')).removeEntry(n); }, today);
+  // Due again (two days on): a station saves by itself when it opens — today's file is written again.
+  // (Nothing is deleted in the browser's private folder here: a newer headless Chromium closed the
+  // page when a file was removed from it before the next page opened.)
+  const savedAt = saved.at;
+  await f.evaluate(() => { const s = JSON.parse(localStorage.getItem('local.backup.v1')); s.last = Date.now() - 2 * 86400000; localStorage.setItem('local.backup.v1', JSON.stringify(s)); });
+  await f.waitForTimeout(50);
   await f.goto(B + '/qc'); await f.waitForSelector('aside nav a', { timeout: 20000 }); await f.waitForTimeout(2000);
-  names = await files();
-  ok(names.includes(today) && await f.evaluate(() => Date.now() - JSON.parse(localStorage.getItem('local.backup.v1')).last < 60000), 'when due, opening a station saves to the folder by itself');
+  const again = await f.evaluate(async (n) => {
+    const d = await (await navigator.storage.getDirectory()).getDirectoryHandle('lab-backups');
+    return JSON.parse(await (await (await d.getFileHandle(n)).getFile()).text());
+  }, today);
+  ok(again.at > savedAt && await f.evaluate(() => Date.now() - JSON.parse(localStorage.getItem('local.backup.v1')).last < 60000), 'when due, opening a station saves to the folder by itself');
   ok(await f.locator('[data-testid="backup-reminder"]').count() === 0, 'no reminder while the folder keeps the backups');
 
   ok(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.slice(0, 3).join(' | ') : ''));

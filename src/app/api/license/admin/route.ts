@@ -3,7 +3,7 @@ import {
   licensingEnabled, passwordSet, durableStorage, storageStatus, attemptsBlocked, noteAttempt, clearAttempts,
   logOwnerSignIn, ownerSignIns, signingKeySealed,
   twoFactorStatus, twoFactorRequired, checkOwnerCode, startTwoFactorSetup, confirmTwoFactor, disableTwoFactor, exportCodes, importCodes, listLicenses, listEvents, createLicense, updateLicense, getContact, setContact, type LicenseAction,
-  getSyncConfig, setSyncConfig, cleanSyncConfig, getAdminDb, getPrefs, setPrefs, listErrors, clearErrors,
+  getSyncConfig, setSyncConfig, cleanSyncConfig, getAdminDb, getPrefs, setPrefs, setContinuityAll, listErrors, clearErrors,
   renewalCode, exportSigningKey, importSigningKey,
 } from "@/lib/license/server";
 import { LabDbError, probe } from "@/lib/sync/pg";
@@ -108,6 +108,7 @@ export async function POST(req: NextRequest) {
   if (b.op === "totp_enable") return (await confirmTwoFactor(String(b.code ?? ""))) ? json({ ok: true }) : json({ ok: false, error: "wrong_code" }, 400);
   if (b.op === "totp_disable") return (await disableTwoFactor(String(b.code ?? ""))) ? json({ ok: true }) : json({ ok: false, error: "wrong_code" }, 400);
   if (b.op === "contact") { await setContact(String(b.contact ?? "")); return json({ ok: true }); }
+  if (b.op === "continuity_all") return json({ ok: true, changed: await setContinuityAll(Number(b.days)) });
   if (b.op === "prefs") { const prefs = await setPrefs(b.prefs); forgetAdminDb(); forgetConnectInfo(); forgetDoctorsInfo(); return json({ ok: true, prefs }); }
   // «محطة التواصل»: the public chat's messages with the lab behind each name; delete; stop a lab.
   if (b.op === "connect_list") return json({ ok: true, ...(await publicForOwner()) });

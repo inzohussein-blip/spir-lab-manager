@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { signRefusal, type DeviceResult } from "@/lib/license/server";
 import { signAdminCookie, ADMIN_COOKIE_MAX_MS } from "@/lib/license/adminCookie";
 import { ADMIN_LICENSE_COOKIE } from "@/lib/license/modules";
+import { cookieSecure } from "@/lib/auth/cookieSecure";
 
 /** Device reply: the signed license, and the admin-panel cookie when the code includes it. A refusal
  *  to a known device (`who`) carries a proof signed with the licenses' key — the device locks only on that. */
@@ -15,7 +16,7 @@ export async function deviceReply(r: DeviceResult, status = 200, who?: { lid: st
   if (r.ok && r.row.modules.includes("admin")) {
     const until = r.row.expires_at!;
     res.cookies.set(ADMIN_LICENSE_COOKIE, await signAdminCookie({ lid: r.row.id, mods: r.row.modules, until }), {
-      httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/",
+      httpOnly: true, sameSite: "lax", secure: await cookieSecure(), path: "/",
       maxAge: Math.max(1, Math.floor(Math.min(until - Date.now(), ADMIN_COOKIE_MAX_MS) / 1000)),
     });
   } else {

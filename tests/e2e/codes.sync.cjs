@@ -98,12 +98,12 @@ const LAB = 'مختبر المزامنة ' + Date.now().toString(36);
   ok((await names(d2.p)).includes('مراجع الاستقبال'), 'device 2 has device 1\'s visit');
   // Device 2 gets its own letter in sample numbers.
   await settings(d2.p);
-  await d2.p.fill('input[aria-label="حرف الجهاز"]', 'b');
-  await d2.p.locator('[data-testid="device-tag"] button:has-text("حفظ")').click(); await d2.p.waitForTimeout(300);
+  await d2.p.fill('input[aria-label="حرف الجهاز"]', 'b'); await d2.p.waitForTimeout(300); // saved as it is typed
   await addVisit(d2.p, 'مراجع المختبر');
   await syncNow(d2.p);
   await syncNow(d1.p);
-  ok((await names(d1.p)).includes('مراجع المختبر'), 'device 1 received device 2\'s visit');
+  // «آخر مزامنة» can still show the previous round while this one runs: wait for the visit itself.
+  ok(!!(await waitFor(async () => (await names(d1.p)).includes('مراجع المختبر'), 30000, 1000)), 'device 1 received device 2\'s visit');
   const acc = [...(await kv(d1.p, 'station.visits.v1'))].map((v) => v.accession).filter(Boolean);
   ok(acc.length === 2 && new Set(acc).size === 2, `sample numbers stay unique across the devices (${acc.join(', ')})`);
   ok(acc.some((a) => /^LAB-\d{8}-B001$/.test(a)), 'device 2\'s numbers carry its letter (…-B001)');
