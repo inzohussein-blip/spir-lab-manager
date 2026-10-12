@@ -98,7 +98,16 @@ const DAY = 86400000;
 
   // ── Automatic save to a folder ──
   const { ctx: fx, p: f } = await dev();
-  await fx.addInitScript(() => { window.showDirectoryPicker = async () => (await navigator.storage.getDirectory()).getDirectoryHandle('lab-backups', { create: true }); });
+  // The browser's private folder stands in for the folder the lab picks. It is always writable, so
+  // its permission is answered here: a newer headless Chromium closed the page when asked for the
+  // permission of such a folder restored from storage (no permission prompt exists there).
+  await fx.addInitScript(() => {
+    window.showDirectoryPicker = async () => (await navigator.storage.getDirectory()).getDirectoryHandle('lab-backups', { create: true });
+    if (window.FileSystemHandle) { FileSystemHandle.prototype.queryPermission = async () => 'granted'; FileSystemHandle.prototype.requestPermission = async () => 'granted'; }
+  });
+  f.on('crash', () => console.log('the page crashed: ' + f.url()));
+  let ending = false;
+  b.on('disconnected', () => { if (!ending) console.log('the browser closed'); });
   const files = () => f.evaluate(async () => { const d = await (await navigator.storage.getDirectory()).getDirectoryHandle('lab-backups', { create: true }); const n = []; for await (const k of d.keys()) n.push(k); return n.sort(); });
   await f.goto(B + '/sync/backup'); await f.waitForSelector('[data-testid="auto-save-folder"]', { timeout: 20000 });
   await kvPut(f, 'station.patients.v1', [patient]);
@@ -131,6 +140,6 @@ const DAY = 86400000;
   ok(await f.locator('[data-testid="backup-reminder"]').count() === 0, 'no reminder while the folder keeps the backups');
 
   ok(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.slice(0, 3).join(' | ') : ''));
-  await b.close();
+  ending = true; await b.close();
   done();
 })().catch((e) => { console.error(e); process.exit(1); });

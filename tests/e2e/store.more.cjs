@@ -218,6 +218,7 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   // ── The stock room one tab away on the purchases page ──
   await p.goto(B + '/store'); await p.waitForSelector('[data-testid="purchase-form"]', { timeout: 20000 });
   await p.click('[data-testid="view-stock"]');
+  await p.waitForSelector('[data-testid="stock-qty"]', { timeout: 10000 }).catch(() => {});
   ok(await p.locator('[data-testid="stock-qty"]').count() > 0 && await p.locator('[data-testid="purchases-log"]').count() === 0, 'the «المخزن» tab shows the stock room under the purchase form');
   await p.click('[data-testid="view-purchases"]');
   ok(await p.locator('[data-testid="purchases-log"]').count() === 1, 'and the log comes back');
