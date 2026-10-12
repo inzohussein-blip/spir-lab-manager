@@ -51,7 +51,12 @@ const ERR: Record<string, string> = {
   offline: "لا يوجد اتصال بالإنترنت — التفعيل يحتاج اتصالاً.",
   bad_request: "اكتب الرمز كاملاً كما وصلك.",
   disabled: "منظومة الرموز غير مفعّلة حالياً.",
+  renew_no_code: "رمز التجديد يحتاج أن يكون هذا الجهاز مفعّلاً برمز مختبره أولاً.",
+  renew_invalid: "رمز التجديد غير صحيح — انسخه كاملاً كما وصلك من المزوّد.",
+  renew_other: "رمز التجديد لمختبر آخر، لا لرمز هذا الجهاز.",
 };
+/** «رمز تجديد بلا إنترنت» (signed text, case matters) — the lab code itself is typed in capitals. */
+const isRenewal = (v: string) => v.trim().toUpperCase().startsWith("SPIR-RENEW.");
 
 function CodeForm({ onDone, cta = "تفعيل" }: { onDone: () => void; cta?: string }) {
   const [code, setCode] = useState("");
@@ -69,7 +74,7 @@ function CodeForm({ onDone, cta = "تفعيل" }: { onDone: () => void; cta?: st
   }
   return (
     <form onSubmit={submit}>
-      <input ref={ref} value={code} onChange={(e) => { setCode(e.target.value.toUpperCase()); setErr(""); }}
+      <input ref={ref} value={code} onChange={(e) => { setCode(isRenewal(e.target.value) ? e.target.value.trim() : e.target.value.toUpperCase()); setErr(""); }}
         autoComplete="off" spellCheck={false} dir="ltr" placeholder="XXXX-XXXX-XXXX" aria-label="رمز المختبر"
         className={`w-full rounded-lg border bg-surface px-3 py-2.5 text-center font-mono text-base tracking-widest outline-none focus:border-brand ${err ? "border-red-400" : "border-line"}`} />
       <button disabled={busy || !code.trim()}
@@ -139,7 +144,7 @@ export function ActivationGate({ module }: { module?: LicenseModule }) {
     return (
       <Screen icon={state.reason === "clock" ? <Clock className="size-6" /> : <Lock className="size-6" />} title="المحطات مقفلة">
         <p className="mb-1 mt-1 text-sm text-muted">{msg}</p>
-        <p className="mb-4 text-xs text-muted">بيانات المختبر محفوظة على هذا الجهاز وتعود كاملة بعد التجديد.</p>
+        <p className="mb-4 text-xs text-muted">بيانات المختبر محفوظة على هذا الجهاز وتعود كاملة بعد التجديد. وإن لم يكن الإنترنت أو موقع المزوّد متاحاً، الصق هنا «رمز التجديد بلا إنترنت» الذي يرسله المزوّد (يبدأ بـ SPIR-RENEW).</p>
         {state.reason !== "clock" && <CodeForm onDone={done} cta="تفعيل رمز جديد" />}
         <button onClick={checkNow} disabled={checking} className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-line px-4 py-2 text-sm hover:bg-canvas disabled:opacity-60">
           <RefreshCw className={`size-4 ${checking ? "animate-spin" : ""}`} /> تحقق الآن (بعد التمديد)
@@ -165,6 +170,7 @@ export function ActivationGate({ module }: { module?: LicenseModule }) {
   const left = state.kind === "grace" || state.kind === "ok" ? Math.ceil((state.until - Date.now()) / DAY) : 0;
   const notice =
     state.kind === "grace" ? `هذا الجهاز يعمل بالتفعيل السابق حتى ${fmt(state.until)} (${left} يوم) — أدخل رمز مختبرك قبل ذلك.`
+    : state.kind === "ok" && state.cont ? `انتهت مدة رمز «${state.lab}» وموقع المزوّد غير متاح منذ مدة — يعمل الجهاز بـ«ضمان الاستمرارية» حتى ${fmt(state.until)} (${left} يوم). تواصل مع المزوّد لرمز تجديد.`
     : state.kind === "ok" && left <= WARN_DAYS ? `ينتهي رمز «${state.lab}» خلال ${left} يوم (${fmt(state.until)}) — تواصل مع المزوّد للتجديد.`
     : "";
   return (

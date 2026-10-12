@@ -1,6 +1,6 @@
 import "server-only";
 import { NEEDS_DB_GATE } from "./flags";
-import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID, scryptSync } from "node:crypto";
 import { SignJWT, exportJWK, generateKeyPair, importJWK, jwtVerify, type JWK, type KeyLike } from "jose";
 import { mainQuery as appQuery } from "@/lib/db";
 import { cleanModules, DEFAULT_MODULES, MODULE_IDS, moduleLabel, type LicenseModule, type LicensePayload } from "./modules";
@@ -90,6 +90,9 @@ export interface LicenseRow {
   admin_db_check: { at: number; ok: boolean; error: string } | null;
   /** How many devices may use the code (with «حساب واحد بعدة أجهزة» on; the first is device_id). */
   max_devices: number;
+  /** «ضمان الاستمرارية»: days the devices keep working past the end when the server could not be
+   *  reached for a long while before it (0: off). Signed into the license. */
+  continuity_days: number;
   /** The devices beyond the first one. */
   devices: ExtraDevice[];
   /** "signup": created by the lab itself («التسجيل الذاتي»); "" by the owner. */
@@ -151,6 +154,7 @@ function ensureTables() {
       "max_devices integer not null default 1", "source text not null default ''", // 0024
       "station_pin text not null default ''", // 0025
       "pin_policy text not null default ''", // 0027
+      "continuity_days integer not null default 0", // 0029 «ضمان الاستمرارية»
     ]) await query(`alter table station_licenses add column if not exists ${col}`);
     await query(`create table if not exists license_events (
       id text primary key, license_id text not null, at bigint not null, kind text not null, detail text not null default '')`);
@@ -350,6 +354,72 @@ async function signLicense(p: Omit<LicensePayload, "iat">): Promise<string> {
   return new SignJWT({ ...p }).setProtectedHeader({ alg: "ES256" }).setIssuedAt().sign(priv);
 }
 
+/** A refusal signed with the licenses' key: a device locks only on a refusal it can verify with the
+ *  key of its own license, so a server without that key (a new database, another site on the same
+ *  address) cannot lock the labs. */
+export async function signRefusal(lid: string, dev: string, err: string): Promise<string | null> {
+  try {
+    const { priv } = await signingKeys()!;
+    return await new SignJWT({ typ: "refusal", lid, dev, err, at: Date.now() }).setProtectedHeader({ alg: "ES256" }).setIssuedAt().sign(priv);
+  } catch { return null; }
+}
+
+/** «رمز تجديد بلا إنترنت»: the code's end moved to `until` here, and a signed text the lab types on
+ *  its devices to take the new end without reaching this server (any of the code's devices). */
+export const RENEW_PREFIX = "SPIR-RENEW.";
+export async function renewalCode(id: string, days: number): Promise<{ row: LicenseRow; code: string; until: number } | null> {
+  const row = await getLicense(id);
+  if (!row || !row.expires_at) return null;
+  const add = Math.max(1, Math.min(3650, Math.round(Number(days) || 0)));
+  const until = Math.max(row.expires_at, Date.now()) + add * DAY;
+  await query(`update station_licenses set expires_at = $2 where id = $1`, [id, until]);
+  await logEvent(id, "renew_offline", `+${add} يوم`);
+  const { priv } = await signingKeys()!;
+  const jwt = await new SignJWT({ typ: "renew", lid: row.id, lab: row.lab_name, mods: row.modules, until, ...(row.continuity_days ? { cont: row.continuity_days } : {}) })
+    .setProtectedHeader({ alg: "ES256" }).setIssuedAt().sign(priv);
+  return { row: (await getLicense(id))!, code: RENEW_PREFIX + jwt, until };
+}
+
+// ── The signing key's own backup («نسخة احتياطية من مفتاح التوقيع») ─────────────────
+// Sealed with a passphrase the owner chooses (scrypt + AES-256-GCM), so the file alone is useless;
+// restored on a new server, the devices' licenses keep verifying and can be renewed there.
+export interface KeyBackup { app: "lab-signing-key"; v: 1; pub: JWK; salt: string; iv: string; tag: string; data: string }
+const passKey = (pass: string, salt: Buffer) => scryptSync(pass, salt, 32, { N: 16384, r: 8, p: 1 });
+export async function exportSigningKey(pass: string): Promise<KeyBackup | null> {
+  if (pass.length < 8) return null;
+  await signingKeys();
+  const raw = await getConfig("signing_key");
+  const cur = raw ? openStored(raw, sealSecret()) : null;
+  if (!cur?.priv) return null;
+  const salt = randomBytes(16), iv = randomBytes(12);
+  const c = createCipheriv("aes-256-gcm", passKey(pass, salt), iv);
+  c.setAAD(Buffer.from(JSON.stringify(cur.pub)));
+  const data = Buffer.concat([c.update(JSON.stringify(cur.priv), "utf8"), c.final()]);
+  return { app: "lab-signing-key", v: 1, pub: cur.pub, salt: salt.toString("base64"), iv: iv.toString("base64"), tag: c.getAuthTag().toString("base64"), data: data.toString("base64") };
+}
+/** Put a backed-up key back (it must open with the passphrase and sign what its public half verifies). */
+export async function importSigningKey(file: unknown, pass: string): Promise<"ok" | "invalid" | "wrong_pass"> {
+  const b = file as Partial<KeyBackup> | null;
+  if (!b || b.app !== "lab-signing-key" || !b.pub || !b.salt || !b.iv || !b.tag || !b.data) return "invalid";
+  let priv: JWK;
+  try {
+    const d = createDecipheriv("aes-256-gcm", passKey(pass, Buffer.from(b.salt, "base64")), Buffer.from(b.iv, "base64"));
+    d.setAAD(Buffer.from(JSON.stringify(b.pub)));
+    d.setAuthTag(Buffer.from(b.tag, "base64"));
+    priv = JSON.parse(Buffer.concat([d.update(Buffer.from(b.data, "base64")), d.final()]).toString("utf8")) as JWK;
+  } catch { return "wrong_pass"; }
+  try {
+    const t = await new SignJWT({ t: 1 }).setProtectedHeader({ alg: "ES256" }).sign(await importJWK(priv, "ES256"));
+    await jwtVerify(t, await importJWK(b.pub, "ES256"), { algorithms: ["ES256"] });
+  } catch { return "invalid"; }
+  const secret = sealSecret();
+  const value = JSON.stringify(secret ? seal(priv, b.pub, secret) : { priv, pub: b.pub });
+  await ensureTables();
+  await query(`insert into license_config (key, value) values ('signing_key', $1) on conflict (key) do update set value = excluded.value`, [value]);
+  keys = null;
+  return "ok";
+}
+
 // ── Two-step sign-in for the owner (authenticator app) ────────────────────────
 // The shared secret is kept sealed with AUTH_SECRET like the signing key. LICENSE_2FA_OFF=1 in the
 // server's environment switches the second step off (lost phone); set it up again, then remove it.
@@ -420,15 +490,15 @@ type Raw = Omit<LicenseRow, "modules" | "activated_at" | "expires_at" | "last_se
   modules: string; activated_at: string | number | null; expires_at: string | number | null; last_seen_at: string | number | null; created_at: string | number;
   paid_at: string | number | null; paid: boolean | string; is_trial: boolean | string; app_version: string | null; sync_info?: string | null; admin_db_info?: string | null;
   admin_db_check_at?: string | number | null; admin_db_ok?: boolean | string | null; admin_db_error?: string | null;
-  max_devices?: string | number | null; source?: string | null; station_pin?: string | null; pin_policy?: string | null;
+  max_devices?: string | number | null; source?: string | null; station_pin?: string | null; pin_policy?: string | null; continuity_days?: string | number | null;
   sync_last_at?: string | number | null; sync_pending?: string | number | null; sync_error?: string | null; sync_reported_at?: string | number | null;
 };
 const COLS = `id, lab_name, note, code_hint, duration_days, modules, status, device_id, device_label,
   activated_at, expires_at, last_seen_at, created_at, price, paid, paid_at, message, device_name, is_trial, app_version, sync_info,
-  sync_last_at, sync_pending, sync_error, sync_reported_at, admin_db_info, admin_db_check_at, admin_db_ok, admin_db_error, max_devices, source, station_pin, pin_policy`;
+  sync_last_at, sync_pending, sync_error, sync_reported_at, admin_db_info, admin_db_check_at, admin_db_ok, admin_db_error, max_devices, source, station_pin, pin_policy, continuity_days`;
 const bool = (v: boolean | string) => v === true || v === "t" || v === "true";
 const num = (v: string | number | null) => (v == null ? null : Number(v));
-function toRow({ sync_info, admin_db_info, admin_db_check_at, admin_db_ok, admin_db_error, max_devices, source, station_pin, pin_policy, ...r }: Raw, devices: ExtraDevice[] = []): LicenseRow {
+function toRow({ sync_info, admin_db_info, admin_db_check_at, admin_db_ok, admin_db_error, max_devices, source, station_pin, pin_policy, continuity_days, ...r }: Raw, devices: ExtraDevice[] = []): LicenseRow {
   let pin: PinOp | null = null;
   try { pin = station_pin ? (JSON.parse(station_pin) as PinOp) : null; } catch { /* none */ }
   let pinPolicy: PinPolicy | null = null;
@@ -441,7 +511,7 @@ function toRow({ sync_info, admin_db_info, admin_db_check_at, admin_db_ok, admin
   try { admin_db = admin_db_info ? (JSON.parse(admin_db_info) as AdminDbInfo) : null; } catch { /* none */ }
   return {
     ...r, sync, admin_db, pin, pinPolicy,
-    max_devices: Math.max(1, Number(max_devices ?? 1) || 1), devices, source: source ?? "",
+    max_devices: Math.max(1, Number(max_devices ?? 1) || 1), devices, source: source ?? "", continuity_days: Math.max(0, Number(continuity_days ?? 0) || 0),
     admin_db_check: admin_db && admin_db_check_at != null ? { at: Number(admin_db_check_at), ok: bool(admin_db_ok ?? false), error: admin_db_error ?? "" } : null, duration_days: Number(r.duration_days), modules: cleanModules(mods),
     activated_at: num(r.activated_at), expires_at: num(r.expires_at), last_seen_at: num(r.last_seen_at), created_at: Number(r.created_at),
     paid_at: num(r.paid_at), paid: bool(r.paid), is_trial: bool(r.is_trial),
@@ -527,6 +597,7 @@ export type LicenseAction =
   | { action: "message"; text: string }
   | { action: "device_name"; name: string }
   | { action: "max_devices"; n: number }
+  | { action: "continuity"; days: number }
   | { action: "remove_device"; device: string }
   | { action: "pin"; pin: string; scope: string }
   | { action: "pin_hidden"; hidden: boolean }
@@ -631,6 +702,12 @@ export async function updateLicense(id: string, a: LicenseAction): Promise<{ row
       await logEvent(id, "max_devices", String(n));
       break;
     }
+    case "continuity": {
+      const n = Math.max(0, Math.min(365, Math.round(Number(a.days) || 0)));
+      await query(`update station_licenses set continuity_days = $2 where id = $1`, [id, n]);
+      await logEvent(id, "continuity", n ? `${n} يوم` : "متوقف");
+      break;
+    }
     case "remove_device": {
       const d = cur.devices.find((x) => x.device_id === a.device);
       if (d) {
@@ -660,7 +737,7 @@ export type DeviceResult =
   | { ok: false; error: "not_found" | "other_device" | "stopped" | "expired" | "no_modules"; row?: LicenseRow };
 
 async function issue(row: LicenseRow, device: string): Promise<DeviceResult> {
-  const token = await signLicense({ lid: row.id, lab: row.lab_name, dev: device, mods: row.modules, until: row.expires_at! });
+  const token = await signLicense({ lid: row.id, lab: row.lab_name, dev: device, mods: row.modules, until: row.expires_at!, ...(row.continuity_days ? { cont: row.continuity_days } : {}) });
   return { ok: true, token, pub: await publicKey(), row, sync: await deviceSync(row.id) };
 }
 
@@ -941,7 +1018,7 @@ export async function exportCodes(): Promise<CodesBackup> {
 const LIC_COLS = ["id", "code_hash", "code_hint", "lab_name", "note", "duration_days", "modules", "status", "device_id", "device_label",
   "activated_at", "expires_at", "last_seen_at", "created_at", "price", "paid", "paid_at", "message", "device_name", "is_trial", "app_version",
   "sync_config", "sync_info", "sync_last_at", "sync_pending", "sync_error", "sync_reported_at", "admin_db", "admin_db_info",
-  "admin_db_check_at", "admin_db_ok", "admin_db_error", "max_devices", "source", "station_pin", "pin_policy"] as const;
+  "admin_db_check_at", "admin_db_ok", "admin_db_error", "max_devices", "source", "station_pin", "pin_policy", "continuity_days"] as const;
 /** Merge a backup in: codes are added or updated by id (nothing is deleted); history is added once. */
 export async function importCodes(data: unknown): Promise<{ licenses: number; events: number }> {
   const b = data as Partial<CodesBackup>;
@@ -954,7 +1031,7 @@ export async function importCodes(data: unknown): Promise<{ licenses: number; ev
       const v = r[c];
       if (c === "paid" || c === "is_trial") return v === true || v === "t" || v === "true";
       if (c === "modules") return typeof v === "string" ? v : JSON.stringify(cleanModules(v));
-      return v ?? (["note", "code_hint", "price", "message", "device_name", "app_version", "sync_config", "sync_info", "sync_error", "admin_db", "admin_db_info", "admin_db_error", "source", "station_pin", "pin_policy"].includes(c) ? "" : c === "sync_pending" ? 0 : c === "max_devices" ? 1 : c === "status" ? "active" : null);
+      return v ?? (["note", "code_hint", "price", "message", "device_name", "app_version", "sync_config", "sync_info", "sync_error", "admin_db", "admin_db_info", "admin_db_error", "source", "station_pin", "pin_policy"].includes(c) ? "" : c === "sync_pending" || c === "continuity_days" ? 0 : c === "max_devices" ? 1 : c === "status" ? "active" : null);
     });
     await query(
       `insert into station_licenses (${LIC_COLS.join(", ")}) values (${LIC_COLS.map((_, i) => `$${i + 1}`).join(", ")})

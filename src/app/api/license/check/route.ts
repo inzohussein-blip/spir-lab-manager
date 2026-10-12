@@ -10,5 +10,5 @@ export async function POST(req: NextRequest) {
   let lid = "", device = "", version = "";
   try { const b = await req.json(); lid = String(b?.lid ?? ""); device = String(b?.device ?? ""); version = String(b?.version ?? ""); } catch { /* empty */ }
   if (!lid || !device) return NextResponse.json({ ok: false, error: "bad_request" }, { status: 400 });
-  return deviceReply(await check(lid, device, version));
+  return deviceReply(await check(lid, device, version), 200, { lid, dev: device });
 }

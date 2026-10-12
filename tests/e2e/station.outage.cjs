@@ -63,11 +63,25 @@ const close = (s) => new Promise((res) => { s.closeAllConnections?.(); s.close((
     ok(((await kv(p, 'station.visits.v1')) || []).length >= 1, `${label}: data intact`);
   };
 
+  // Every station (not only the lab one) opens from the saved copy.
+  const STATIONS = [['/welcome', '[data-testid="welcome-footer"]'], ['/store', 'aside nav a'], ['/store/reorder', 'aside nav a'], ['/training', 'aside nav a'],
+    ['/qc', 'aside nav a'], ['/roster', 'aside nav a'], ['/connect', 'aside nav a'], ['/sync', 'aside nav a'], ['/about', 'aside nav a'], ['/doctor', 'h1:has-text("نافذة الأطباء")']];
+  const allStations = async (label) => {
+    const failed = [];
+    for (const [url, sel] of STATIONS) {
+      await p.goto(B + url, { timeout: 30000 }).catch(() => {});
+      if (!(await p.waitForSelector(sel, { timeout: 20000 }).then(() => true, () => false))) failed.push(url);
+    }
+    ok(failed.length === 0, `${label}: every station opens${failed.length ? ` — not: ${failed.join(', ')}` : ''}`);
+  };
+
   await stop(next);
   await works('server off');
+  await allStations('server off');
 
   const failing = await listen((req, res) => { res.writeHead(500, { 'content-type': 'text/html' }); res.end('<h1>Internal Server Error</h1>'); });
   await works('server answering 500');
+  await allStations('server answering 500');
   await close(failing);
 
   const hanging = await listen(() => { /* never answers */ });
