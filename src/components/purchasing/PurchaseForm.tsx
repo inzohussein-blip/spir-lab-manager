@@ -8,6 +8,7 @@ import {
 } from "@/lib/purchasing/store";
 import { getStock, getTests, stockTestIds, type StockItem, type StationTest } from "@/lib/station/store";
 import { parseGs1 } from "@/lib/purchasing/gs1";
+import { LAB_MATERIALS, catalogMaterial } from "@/lib/purchasing/catalog";
 import { CameraScan } from "@/components/local/CameraScan";
 import { NumberInput } from "@/components/local/NumberInput";
 import { money } from "@/lib/utils";
@@ -74,6 +75,11 @@ export function PurchaseForm({ onSaved }: { onSaved?: (msg: string) => void }) {
   const stockFor = (device: string) => (device.trim() ? stock.filter((s) => same(s.device ?? "", device)) : stock);
   /** The kits offered: those holding a material of that device (all of them while it has none). */
   const kitsFor = (device: string) => (device.trim() ? kits.filter((k) => k.parts.some((p) => same(stock.find((s) => s.id === p.stockId)?.device ?? "", device))) : kits);
+  /** The lab's tests of these codes. */
+  const testsOf = (codes: string[]) => codes.map((c) => tests.find((t) => (t.code ?? "").toUpperCase() === c)?.id).filter(Boolean) as string[];
+  /** Suggested materials (lib/purchasing/catalog) for a device, not in the stock room yet. */
+  const suggestedFor = (device: string) => LAB_MATERIALS.filter((m) => (!device.trim() || same(m.device, device)) && !itemOf(m.name)
+    && (!m.codes.length || testsOf(m.codes).length > 0));
   /** A defined kit of one material: the units it holds. */
   const kitUnits = (k: Kit) => (k.parts.length === 1 ? k.parts[0].qty : 0);
   const total = rows.reduce((t, r) => t + (Number(r.total) || 0), 0);
@@ -86,8 +92,13 @@ export function PurchaseForm({ onSaved }: { onSaved?: (msg: string) => void }) {
     const next = { ...r, ...patch };
     // A known item typed without its device: the device written on it.
     if (patch.name !== undefined && next.kind === "item" && !next.device.trim()) next.device = itemOf(next.name)?.device ?? "";
-    // Its tests (as in «الأصناف») come with a known material, until changed here.
-    if (patch.name !== undefined && !next.testsTouched) { const it = itemOf(next.name); next.testIds = it ? stockTestIds(it) : []; }
+    // Its tests (as in «الأصناف») come with a known material, until changed here; a suggested one
+    // (lib/purchasing/catalog, not in the stock room yet) brings its device and tests.
+    if (patch.name !== undefined) {
+      const it = itemOf(next.name), cat = it ? undefined : catalogMaterial(next.name);
+      if (cat && !next.device.trim()) next.device = cat.device;
+      if (!next.testsTouched) next.testIds = it ? stockTestIds(it) : cat ? testsOf(cat.codes) : [];
+    }
     return next;
   }));
   /** The count, the price of one and the total stay in step: a changed count keeps the price of one. */
@@ -156,6 +167,8 @@ export function PurchaseForm({ onSaved }: { onSaved?: (msg: string) => void }) {
         ...(r.expiry ? { expiry: r.expiry } : {}), ...(r.lot.trim() ? { lot: r.lot.trim() } : {}), ...(r.gtin ? { gtin: r.gtin } : {}),
         // The tests that use the material: set on the stock item (a defined kit's parts are linked in «الأصناف»).
         ...(!kit && (r.testsTouched || r.testIds.length) ? { testIds: r.testIds } : {}),
+        // A suggested supply used by the day (cleaner, wash buffer…) is made «مستلزم» in the stock room.
+        ...(!kit && !itemOf(r.name) && catalogMaterial(r.name)?.byHand ? { byHand: true } : {}),
       };
     });
     const sum = lines.reduce((t, it) => t + lineTotal(it), 0);
@@ -250,8 +263,9 @@ export function PurchaseForm({ onSaved }: { onSaved?: (msg: string) => void }) {
               const unitName = kit ? (kit.parts.length === 1 ? nameOf(kit.parts[0].stockId) : "") : r.name.trim();
               const one = per > 0 && r.total > 0 && r.qty > 0 ? `سعر الواحد (${unitName}): ${money(round2(r.total / (per * r.qty)))} د.ع` : null;
               const options = r.kind === "kit"
-                ? [...kitsFor(r.device).map((k) => ({ id: k.id, name: k.name, hint: kitText(k) })), ...stockFor(r.device).map((s) => ({ id: s.id, name: s.name, hint: "مادة — اكتب عدد في الكت" }))]
-                : stockFor(r.device).map((s) => ({ id: s.id, name: s.name, hint: "" }));
+                ? [...kitsFor(r.device).map((k) => ({ id: k.id, name: k.name, hint: kitText(k) })), ...stockFor(r.device).map((s) => ({ id: s.id, name: s.name, hint: "مادة — اكتب عدد في الكت" })),
+                  ...suggestedFor(r.device).map((m) => ({ id: `cat:${m.name}`, name: m.name, hint: `مقترح — ${m.device}` }))]
+                : [...stockFor(r.device).map((s) => ({ id: s.id, name: s.name, hint: "" })), ...suggestedFor(r.device).map((m) => ({ id: `cat:${m.name}`, name: m.name, hint: `مقترح — ${m.device}` }))];
               return (
                 <Fragment key={i}>
                 <tr data-line={i} className="align-top">

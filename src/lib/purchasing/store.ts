@@ -9,6 +9,7 @@
 import { kvGet, kvSet } from "@/lib/local/kv";
 import { getStock, saveStock } from "@/lib/station/store";
 import { stockFloor } from "@/lib/local/links";
+import { LAB_DEVICES } from "./catalog";
 
 export interface Supplier {
   id: string;
@@ -39,6 +40,8 @@ export interface PurchaseItem {
   /** The lab's tests that use the material (as in «الأصناف»): set on the stock item, so the lab
    *  station deducts it with their results. Not for a defined kit (its parts are linked in «الأصناف»). */
   testIds?: string[];
+  /** A new stock item made by this line is issued by hand (a supply used by the day, «مستلزم»). */
+  byHand?: boolean;
 }
 
 /** A kit: one purchasable package holding several stock items, e.g. «كت السكر» = 4 × «كاشف
@@ -245,7 +248,7 @@ function changeStock(moves: { id: string; qty: number }[], reason: "purchase" | 
  *  (with no quantity yet, then the purchase's); a kit's parts, each times the kits bought. The
  *  item's unit price follows the purchase (a kit's, when it holds one item). Returns what was added. */
 export function addToStock(items: PurchaseItem[], ref?: string, reason: "purchase" | "add" = "purchase"): { id: string; qty: number }[] {
-  const lines = items.map((it) => ({ name: it.name.trim(), qty: Number(it.qty) || 0, price: Number(it.unitPrice) || 0, kitId: it.kitId, testIds: it.testIds, perKit: Number(it.perKit) || 0, expiry: it.expiry, lot: it.lot, gtin: it.gtin, device: it.device?.trim() }))
+  const lines = items.map((it) => ({ name: it.name.trim(), qty: Number(it.qty) || 0, price: Number(it.unitPrice) || 0, kitId: it.kitId, testIds: it.testIds, byHand: it.byHand, perKit: Number(it.perKit) || 0, expiry: it.expiry, lot: it.lot, gtin: it.gtin, device: it.device?.trim() }))
     .filter((x) => x.name && x.qty > 0);
   if (!lines.length) return [];
   const stock = getStock();
@@ -275,7 +278,7 @@ export function addToStock(items: PurchaseItem[], ref?: string, reason: "purchas
       return parts.map((p) => ({ id: p.stockId, qty: p.qty * x.qty }));
     }
     let item = stock.find((s) => key(s.name) === key(x.name)) ?? fresh.find((s) => key(s.name) === key(x.name));
-    if (!item) { item = { id: uid(), name: x.name, qty: 0 }; fresh.push(item); }
+    if (!item) { item = { id: uid(), name: x.name, qty: 0, ...(x.byHand ? { byHand: true } : {}) }; fresh.push(item); }
     // Bought by the kit: the units it holds, and the price of one unit.
     const per = !x.kitId && x.perKit > 0 ? x.perKit : 1;
     if (x.price > 0) prices.set(item.id, Math.round((x.price / per) * 100) / 100);
@@ -317,11 +320,11 @@ export function getPurchase(id: string): Purchase | null {
   return getPurchases().find((p) => p.id === id) ?? null;
 }
 
-/** Device names offered on a purchase line: those on the stock items and the quality station's
- *  devices (read as they are, without seeding them). */
+/** Device names offered on a purchase line: those on the stock items, the quality station's devices
+ *  (read as they are, without seeding them) and the lab's usual devices (lib/purchasing/catalog). */
 export function deviceNames(): string[] {
   const qc = read<{ name?: string }[]>("qc.devices.v1", []);
-  const names = [...getStock().map((s) => s.device ?? ""), ...(Array.isArray(qc) ? qc.map((d) => d?.name ?? "") : [])].map((n) => n.trim()).filter(Boolean);
+  const names = [...getStock().map((s) => s.device ?? ""), ...(Array.isArray(qc) ? qc.map((d) => d?.name ?? "") : []), ...LAB_DEVICES].map((n) => n.trim()).filter(Boolean);
   return Array.from(new Set(names)).sort((a, b) => a.localeCompare(b));
 }
 

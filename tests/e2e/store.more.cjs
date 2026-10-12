@@ -283,6 +283,30 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   ok((await p.locator('[data-line-tests="0"] [data-testid="line-tests"]').innerText()).includes(hbT.name_ar), 'a known material shows its tests');
   // The lab's result deducts it
 
+  // ── «مواد وأجهزة الفحوصات» in «الأصناف», and the same suggestions on a purchase line ──
+  const tsh = (await kv(p, 'station.tests.v1')).find((t) => t.code === 'TSH');
+  await p.goto(B + '/store'); await p.waitForSelector('[data-testid="purchase-form"]', { timeout: 20000 });
+  ok(await p.locator('#pf-devices option[value="محلل المناعة والهرمونات (CLIA / FIA)"]').count() === 1, 'the lab\'s usual devices are suggested in «الجهاز»');
+  await p.fill('[data-line="0"] input[aria-label="الجهاز"]', 'محلل المناعة والهرمونات (CLIA / FIA)');
+  const sug = await p.locator('[data-line="0"] datalist option').evaluateAll((os) => os.map((o) => o.value));
+  ok(sug.includes('كاشف TSH') && !sug.includes('كاشف اليوريا (Urea)'), 'a device chosen: its suggested materials (TSH kit, not urea)');
+  await p.fill('[data-line="0"] input[data-line-name]', 'كاشف TSH');
+  ok((await p.locator('[data-line-tests="0"] [data-testid="line-tests"]').innerText()).includes(tsh.name_ar), 'a suggested material brings its tests');
+  await p.click('button:has-text("حفظ العملية")');
+  const tshItem = async () => (await stock()).find((s) => s.name === 'كاشف TSH');
+  ok(await settled(async () => (await tshItem())?.testIds?.includes(tsh.id)) && (await tshItem()).device === 'محلل المناعة والهرمونات (CLIA / FIA)', 'saved: device and tests on the new stock item');
+  await p.goto(B + '/store/items'); await p.waitForSelector('[data-testid="items-list"]', { timeout: 20000 });
+  await p.click('[data-testid="catalog-open"]');
+  const cf = p.locator('[data-testid="catalog-form"]');
+  ok(await cf.locator('[data-catalog-device="محلل الكيمياء الحيوية"]').count() === 1 && (await cf.locator('li', { hasText: 'كاشف TSH' }).innerText()).includes('في المخزن'), 'the catalog by device; what is in stock is marked');
+  ok(!(await cf.locator('input[aria-label="كاشف TSH"]').isChecked()) && await cf.locator('input[aria-label="كاشف اليوريا (Urea)"]').isChecked(), 'what is missing starts ticked, what is there does not');
+  await cf.locator('[data-catalog-device="محلل أمراض الدم (CBC)"] button:has-text("لا شيء")').click();
+  await p.click('[data-testid="catalog-add"]');
+  const urea2 = (await kv(p, 'station.tests.v1')).find((t) => t.code === 'UREA');
+  ok(await settled(async () => (await stock()).some((s) => s.name === 'كاشف اليوريا (Urea)' && s.qty === 0 && s.device === 'محلل الكيمياء الحيوية' && s.testIds?.includes(urea2.id))), 'added: 0 in stock, with its device and its test');
+  ok((await stock()).some((s) => s.name === 'محلول الغسل (Wash Buffer) — ELISA' && s.byHand) && !(await stock()).some((s) => s.name === 'محلول التخفيف (Diluent) — CBC'), 'day-use supplies as «مستلزم»; an unticked device left out');
+  ok((await p.locator('tr[data-item="كاشف اليوريا (Urea)"] [data-testid="item-device"]').innerText()).includes('محلل الكيمياء الحيوية'), '«الأصناف» shows each item\'s device');
+
   ok(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.slice(0, 3).join(' | ') : ''));
   await b.close();
   done();
