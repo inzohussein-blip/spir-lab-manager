@@ -320,16 +320,32 @@ main > * {
   font-weight: 700;
 }
 
-/* ════════ The new green look — only with data-ui="new" (chosen on the welcome page) ════════
+/* ════════ The new look (green by default, or the accent chosen) — only with data-ui="new" (chosen on the welcome page) ════════
    The classic look is the default: none of the rules below apply to it, so it stays exactly as it
    was. Unlayered CSS beats Tailwind's utilities layer, which lets the new look reshape the pages
    (soft cards, pill buttons, rounded fields) without touching their markup. */
 /* Colours on screen only: printed documents keep their own. */
 @media screen {
+  /* The accent of the new look (welcome page → «لون الثيم»): green by default; «ألوان المحطات» keeps
+     each station's own classic accent. `--ui-a*` light, `--ui-hi*` dark mode, `--ui-deep` dark cards,
+     `--ui-on` text on the bright accent (dark mode). */
+  :root[data-ui="new"] { --ui-a: #14733f; --ui-a-dark: #0e5530; --ui-a-light: #e6f4ec; --ui-hi: #4ade80; --ui-hi-dark: #22c55e; --ui-hi-light: #12301f; --ui-deep: #06331c; --ui-on: #062613; }
+  :root[data-ui="new"][data-ui-color="blue"] { --ui-a: #1d4ed8; --ui-a-dark: #1e3a8a; --ui-a-light: #e8eefc; --ui-hi: #60a5fa; --ui-hi-dark: #3b82f6; --ui-hi-light: #132341; --ui-deep: #0f1f4d; --ui-on: #0b1a3a; }
+  :root[data-ui="new"][data-ui-color="violet"] { --ui-a: #6d28d9; --ui-a-dark: #4c1d95; --ui-a-light: #f1eafd; --ui-hi: #a78bfa; --ui-hi-dark: #8b5cf6; --ui-hi-light: #241a3d; --ui-deep: #2a0f57; --ui-on: #1b0d36; }
+  :root[data-ui="new"][data-ui-color="teal"] { --ui-a: #0f766e; --ui-a-dark: #115e59; --ui-a-light: #e3f4f2; --ui-hi: #2dd4bf; --ui-hi-dark: #14b8a6; --ui-hi-light: #0f2e2b; --ui-deep: #063a36; --ui-on: #032622; }
+  :root[data-ui="new"][data-ui-color="rose"] { --ui-a: #be123c; --ui-a-dark: #9f1239; --ui-a-light: #fde8ee; --ui-hi: #fb7185; --ui-hi-dark: #f43f5e; --ui-hi-light: #3a1420; --ui-deep: #5a0a22; --ui-on: #3a0612; }
+  :root[data-ui="new"][data-ui-color="orange"] { --ui-a: #c2410c; --ui-a-dark: #9a3412; --ui-a-light: #fdeee6; --ui-hi: #fb923c; --ui-hi-dark: #f97316; --ui-hi-light: #3a1d0f; --ui-deep: #5a1d08; --ui-on: #3a1404; }
+  :root[data-ui="new"][data-ui-color="stations"] { --ui-a: #0d9488; --ui-a-dark: #0f766e; --ui-a-light: #f0fdfa; --ui-hi: #2dd4bf; --ui-hi-dark: #14b8a6; --ui-hi-light: #0b3b36; --ui-deep: #134e4a; --ui-on: #042f2e; }
+  /* «ألوان المحطات»: the menu's dark card and the toasts follow each station's own accent. */
+  :root[data-ui="new"][data-ui-color="stations"] :is(.station, .store, .training, .qc, .roster, .connect, .doctor, .about, .sync, .panel, .welcome) {
+    --ui-a: var(--color-brand); --ui-a-dark: var(--color-brand-dark); --ui-deep: color-mix(in oklab, var(--color-brand-dark) 65%, black);
+  }
+}
+@media screen {
   :root[data-ui="new"] {
-    --color-brand: #14733f;
-    --color-brand-dark: #0e5530;
-    --color-brand-light: #e6f4ec;
+    --color-brand: var(--ui-a);
+    --color-brand-dark: var(--ui-a-dark);
+    --color-brand-light: var(--ui-a-light);
     --color-ink: #0f1f17;
     --color-muted: #75857c;
     --color-line: #e5ebe7;
@@ -339,9 +355,9 @@ main > * {
     --shadow-pop: 0 18px 44px -12px rgba(15, 40, 28, 0.28);
   }
   :root[data-ui="new"][data-theme="dark"] {
-    --color-brand: #4ade80;
-    --color-brand-dark: #22c55e;
-    --color-brand-light: #12301f;
+    --color-brand: var(--ui-hi);
+    --color-brand-dark: var(--ui-hi-dark);
+    --color-brand-light: var(--ui-hi-light);
     --color-ink: #e6efe9;
     --color-muted: #8aa095;
     --color-line: #1d2c24;
@@ -350,20 +366,20 @@ main > * {
     --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 20px -8px rgba(0, 0, 0, 0.5);
     --shadow-pop: 0 18px 44px -12px rgba(0, 0, 0, 0.7);
   }
-  /* Every station wears the same green (the classic look gives each its own accent). */
-  :root[data-ui="new"] :is(.station, .store, .training, .qc, .roster, .connect, .doctor, .about, .sync, .panel, .welcome) {
-    --color-brand: #14733f;
-    --color-brand-dark: #0e5530;
-    --color-brand-light: #e6f4ec;
+  /* Every station wears the chosen accent (the classic look gives each its own; «ألوان المحطات» keeps that). */
+  :root[data-ui="new"]:not([data-ui-color="stations"]) :is(.station, .store, .training, .qc, .roster, .connect, .doctor, .about, .sync, .panel, .welcome) {
+    --color-brand: var(--ui-a);
+    --color-brand-dark: var(--ui-a-dark);
+    --color-brand-light: var(--ui-a-light);
   }
-  :root[data-ui="new"][data-theme="dark"] :is(.station, .store, .training, .qc, .roster, .connect, .doctor, .about, .sync, .panel, .welcome) {
-    --color-brand: #4ade80;
-    --color-brand-dark: #22c55e;
-    --color-brand-light: #12301f;
+  :root[data-ui="new"][data-theme="dark"]:not([data-ui-color="stations"]) :is(.station, .store, .training, .qc, .roster, .connect, .doctor, .about, .sync, .panel, .welcome) {
+    --color-brand: var(--ui-hi);
+    --color-brand-dark: var(--ui-hi-dark);
+    --color-brand-light: var(--ui-hi-light);
   }
-  /* Dark: the green is bright, so text sitting on it goes dark. */
-  :root[data-ui="new"][data-theme="dark"] :is(.station, .store, .training, .qc, .roster, .connect, .doctor, .about, .sync, .panel, .welcome) :is(.bg-brand, .from-brand).text-white {
-    color: #062613;
+  /* Dark: the accent is bright, so text sitting on it goes dark. */
+  :root[data-ui="new"][data-theme="dark"]:not([data-ui-color="stations"]) :is(.station, .store, .training, .qc, .roster, .connect, .doctor, .about, .sync, .panel, .welcome) :is(.bg-brand, .from-brand).text-white {
+    color: var(--ui-on);
   }
 }
 @media screen {
@@ -390,7 +406,7 @@ main > * {
   /* The board's month figures: the first in deep green, the numbers large */
   :root[data-ui="new"] .ui-kpi { border-color: transparent; border-radius: 1.5rem; box-shadow: var(--shadow-card); padding: 1.25rem; }
   :root[data-ui="new"] .ui-kpi > div:nth-child(2) { font-size: 2.25rem; line-height: 2.5rem; font-weight: 800; }
-  :root[data-ui="new"] [data-testid="dash-kpis"] > .ui-kpi:first-child { background: linear-gradient(135deg, #14733f, #0b4527); color: #fff; }
+  :root[data-ui="new"] [data-testid="dash-kpis"] > .ui-kpi:first-child { background: linear-gradient(135deg, var(--ui-a), var(--ui-deep)); color: #fff; }
   :root[data-ui="new"] [data-testid="dash-kpis"] > .ui-kpi:first-child :is(div, span) { color: #fff; }
   :root[data-ui="new"] [data-testid="dash-kpis"] > .ui-kpi:first-child [data-testid="kpi-change"] { background: rgb(255 255 255 / 0.18); }
   /* Welcome page cards */
@@ -400,7 +416,7 @@ main > * {
   :root[data-ui="new"] .ui-chip { background: var(--color-brand-light); color: var(--color-brand-dark); }
   :root[data-ui="new"] .ui-go { border-radius: 9999px; background-color: var(--color-brand); background-image: linear-gradient(to bottom, var(--color-brand), var(--color-brand-dark)); box-shadow: 0 8px 18px -10px var(--color-brand); }
   :root[data-ui="new"] .group:hover .ui-go { filter: brightness(1.08); }
-  :root[data-ui="new"][data-theme="dark"] :is(.ui-tile, .ui-go) { color: #062613; }
+  :root[data-ui="new"][data-theme="dark"] :is(.ui-tile, .ui-go) { color: var(--ui-on); }
   /* The admin panel: floating menu and top bar */
   :root[data-ui="new"] .ui-panel-side a[aria-current="page"] { position: relative; background: transparent; color: var(--color-ink); font-weight: 700; }
   :root[data-ui="new"] .ui-panel-side a[aria-current="page"] > svg { color: var(--color-brand); }
@@ -428,21 +444,21 @@ main > * {
 @media screen and (min-width: 768px) {
   :root[data-ui="new"] .ui-side { top: 1rem; margin: 1rem; height: calc(100vh - 2rem); width: 16rem; border-radius: 28px; box-shadow: var(--shadow-card); }
 }
-/* The purchasing station's amber accents become the green (warning tints stay as they are) */
+/* The purchasing station's amber accents take the chosen accent (warning tints stay as they are) */
 @media screen {
-  :root[data-ui="new"] .store :is(button, a):is(.bg-amber-600, .bg-amber-500) { background-color: var(--color-brand); background-image: linear-gradient(to bottom, var(--color-brand), var(--color-brand-dark)); border-radius: 9999px; box-shadow: 0 8px 18px -10px var(--color-brand); }
-  :root[data-ui="new"] .store :is(.text-amber-700, .text-amber-600):not(:is(.bg-amber-50, .bg-amber-100) *, .bg-amber-50, .bg-amber-100) { color: var(--color-brand-dark); }
-  :root[data-ui="new"] .store :is(.border-amber-600, .border-amber-400) { border-color: var(--color-brand); }
-  :root[data-ui="new"][data-theme="dark"] .store :is(button, a):is(.bg-amber-600, .bg-amber-500) { color: #062613; }
+  :root[data-ui="new"]:not([data-ui-color="stations"]) .store :is(button, a):is(.bg-amber-600, .bg-amber-500) { background-color: var(--color-brand); background-image: linear-gradient(to bottom, var(--color-brand), var(--color-brand-dark)); border-radius: 9999px; box-shadow: 0 8px 18px -10px var(--color-brand); }
+  :root[data-ui="new"]:not([data-ui-color="stations"]) .store :is(.text-amber-700, .text-amber-600):not(:is(.bg-amber-50, .bg-amber-100) *, .bg-amber-50, .bg-amber-100) { color: var(--color-brand-dark); }
+  :root[data-ui="new"]:not([data-ui-color="stations"]) .store :is(.border-amber-600, .border-amber-400) { border-color: var(--color-brand); }
+  :root[data-ui="new"][data-theme="dark"]:not([data-ui-color="stations"]) .store :is(button, a):is(.bg-amber-600, .bg-amber-500) { color: var(--ui-on); }
 }
 /* Toasts: a small dark pill at the bottom, as in the reference («"…" added to projects») */
 @media screen {
-  :root[data-ui="new"] .station-toast { border-color: transparent; border-radius: 9999px; background: #0e2a1b; color: #fff; padding-inline: 1.1rem; box-shadow: 0 14px 30px -12px rgba(6, 38, 19, 0.6); }
-  :root[data-ui="new"] .station-toast > svg { color: #4ade80; }
+  :root[data-ui="new"] .station-toast { border-color: transparent; border-radius: 9999px; background: var(--ui-deep); color: #fff; padding-inline: 1.1rem; box-shadow: 0 14px 30px -12px rgba(6, 38, 19, 0.6); }
+  :root[data-ui="new"] .station-toast > svg { color: var(--ui-hi); }
   :root[data-ui="new"] .station-toast.text-amber-700 > svg { color: #fbbf24; }
   :root[data-ui="new"] [data-sonner-toast][data-type="success"], :root[data-ui="new"] [data-sonner-toast][data-type="info"], :root[data-ui="new"] [data-sonner-toast]:not([data-type]) {
-    --normal-bg: #0e2a1b; --normal-text: #fff; --normal-border: transparent; --success-bg: #0e2a1b; --success-text: #fff; --success-border: transparent;
-    border-radius: 9999px !important; background: #0e2a1b !important; color: #fff !important; border-color: transparent !important;
+    --normal-bg: var(--ui-deep); --normal-text: #fff; --normal-border: transparent; --success-bg: var(--ui-deep); --success-text: #fff; --success-border: transparent;
+    border-radius: 9999px !important; background: var(--ui-deep) !important; color: #fff !important; border-color: transparent !important;
   }
 }
 /* Each look shows only its own markup */

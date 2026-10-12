@@ -75,7 +75,7 @@ export function AppSidebarNew({
 
         <div className="mt-4">
           {/* The dark card at the bottom: the station's note, and back to the stations. */}
-          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0e5530] to-[#06331c] p-3.5 text-white" data-testid="side-card">
+          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[var(--ui-a-dark)] to-[var(--ui-deep)] p-3.5 text-white" data-testid="side-card">
             <svg className="pointer-events-none absolute inset-0 size-full opacity-[0.12]" aria-hidden>
               <defs><pattern id="side-wave" width="26" height="26" patternUnits="userSpaceOnUse"><path d="M0 13 Q6.5 0 13 13 T26 13" fill="none" stroke="#fff" strokeWidth="1" /></pattern></defs>
               <rect width="100%" height="100%" fill="url(#side-wave)" />
@@ -86,7 +86,7 @@ export function AppSidebarNew({
               {footerNote && <div className="text-[11px] leading-5 text-white/75">{footerNote}</div>}
             </div>
             {home && (
-              <Link href="/welcome" className="relative mt-2.5 flex items-center justify-center gap-1.5 rounded-full bg-gradient-to-b from-[#1a8a50] to-[#0e6b3c] px-3 py-2 text-xs font-semibold text-white shadow-inner hover:brightness-110"><Home className="size-4" /> الصفحة الرئيسية</Link>
+              <Link href="/welcome" className="relative mt-2.5 flex items-center justify-center gap-1.5 rounded-full bg-gradient-to-b from-[var(--ui-a)] to-[var(--ui-a-dark)] px-3 py-2 text-xs font-semibold text-white shadow-inner hover:brightness-110"><Home className="size-4" /> الصفحة الرئيسية</Link>
             )}
           </div>
         </div>

@@ -32,7 +32,7 @@ export function WelcomeFooter() {
         <SiteThemeSwitch />
         <div className="mt-5 border-t border-line pt-4">
           <div className="mb-1 flex items-center gap-2 text-sm font-semibold"><Palette className="size-4 text-brand-dark" /> الثيم (شكل التصميم)</div>
-          <p className="mb-3 text-xs text-muted">التصميم القديم هو الافتراضي. اختر الأخضر الجديد، أو ارجع إلى القديم ليظهر المشروع كله كما كان. يُحفظ على هذا الجهاز.</p>
+          <p className="mb-3 text-xs text-muted">التصميم القديم هو الافتراضي. اختر الثيم الجديد ولونه (أخضر، أزرق، بنفسجي… أو ألوان المحطات)، أو ارجع إلى القديم ليظهر المشروع كله كما كان. يُحفظ على هذا الجهاز.</p>
           <UiSwitch />
         </div>
       </div>

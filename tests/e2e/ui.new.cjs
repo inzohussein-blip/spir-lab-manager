@@ -46,11 +46,26 @@ const { B, ok, launch, done, resetLocal, kvPut } = require('./lib.cjs');
   ok((await brand('.store')).toLowerCase() !== '#14733f', 'print: the new look does not apply');
   await p.emulateMedia({ media: 'screen' });
 
+  // ── The accent: another colour, or each station's own ──
+  await p.goto(B + '/welcome'); await p.waitForSelector('[data-testid="ui-colors"]');
+  await p.click('[data-testid="ui-color-blue"]');
+  ok(await p.evaluate(() => document.documentElement.getAttribute('data-ui-color')) === 'blue' && await p.evaluate(() => localStorage.getItem('lab-ui-color')) === 'blue', '«لون الثيم»: blue, kept on this device');
+  await p.goto(B + '/store'); await p.waitForSelector('[data-testid="side-new"]', { timeout: 20000 });
+  ok((await brand('.store')).toLowerCase() === '#1d4ed8', `blue: the stations wear it (${await brand('.store')})`);
+  await p.goto(B + '/welcome'); await p.waitForSelector('[data-testid="ui-colors"]');
+  await p.click('[data-testid="ui-color-stations"]');
+  await p.goto(B + '/store'); await p.waitForSelector('[data-testid="side-new"]', { timeout: 20000 });
+  ok((await brand('.store')).toLowerCase() === '#d97706', `«ألوان المحطات»: the store keeps its own amber in the new shape (${await brand('.store')})`);
+  await p.goto(B + '/welcome'); await p.waitForSelector('[data-testid="ui-colors"]');
+  await p.click('[data-testid="ui-color-green"]');
+  ok(await p.evaluate(() => document.documentElement.getAttribute('data-ui-color')) === null && await p.evaluate(() => localStorage.getItem('lab-ui-color')) === null, 'green again: the default, nothing kept');
+
   // ── Back to the classic look: exactly as before ──
   if (process.env.UI !== 'new') {
     await p.goto(B + '/welcome'); await p.waitForSelector('[data-testid="ui-switch"]');
     await p.click('[data-testid="ui-classic"]');
     ok(await ui() === null && await p.evaluate(() => localStorage.getItem('lab-ui')) === null, 'back to classic: no data-ui, nothing kept');
+    ok(await p.getByTestId('ui-colors').count() === 0, 'classic: no colour choice');
     await p.goto(B + '/store'); await p.waitForSelector('aside nav a', { timeout: 20000 });
     ok(await p.getByTestId('ui-topbar').count() === 0 && await p.getByTestId('side-new').count() === 0, 'classic again: no top bar, the classic menu');
   }

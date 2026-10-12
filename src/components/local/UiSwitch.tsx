@@ -1,7 +1,7 @@
 "use client";
 
 import { Check } from "lucide-react";
-import { setUi, useUi, type UiMode } from "@/lib/local/ui";
+import { setUi, useUi, setUiColor, useUiColor, UI_COLORS, type UiMode } from "@/lib/local/ui";
 
 /** Little pictures of the two looks: the classic one (as the project has always been) and the new green style. */
 function Preview({ mode }: { mode: UiMode }) {
@@ -25,9 +25,10 @@ function Preview({ mode }: { mode: UiMode }) {
 /** The look of the whole site (this device): the classic one — the default — or the new green style. */
 export function UiSwitch() {
   const ui = useUi();
+  const color = useUiColor();
   const opts: { m: UiMode; label: string; hint: string }[] = [
     { m: "classic", label: "التصميم القديم (الافتراضي)", hint: "كما كان المشروع دائماً، بألوان المحطات" },
-    { m: "new", label: "الأخضر الجديد", hint: "قائمة عائمة، شريط بحث ⌘K، بطاقات مستديرة" },
+    { m: "new", label: "الثيم الجديد", hint: "قائمة عائمة، شريط بحث ⌘K، بطاقات مستديرة — بلون تختاره" },
   ];
   return (
     <div role="radiogroup" aria-label="الثيم" data-testid="ui-switch" className="grid gap-3 sm:grid-cols-2">
@@ -42,6 +43,24 @@ export function UiSwitch() {
           </button>
         );
       })}
+      {ui === "new" && (
+        <div className="sm:col-span-2" data-testid="ui-colors">
+          <div className="mb-1.5 text-xs font-semibold">لون الثيم</div>
+          <div role="radiogroup" aria-label="لون الثيم" className="flex flex-wrap gap-1.5">
+            {UI_COLORS.map((o) => {
+              const on = color === o.c;
+              return (
+                <button key={o.c} type="button" role="radio" aria-checked={on} data-testid={`ui-color-${o.c}`} onClick={() => setUiColor(o.c)}
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${on ? "border-brand bg-brand-light font-semibold text-brand-dark" : "border-line hover:bg-canvas"}`}>
+                  <span className="flex -space-x-1 rtl:space-x-reverse">{o.swatch.map((c) => <span key={c} className="size-3.5 rounded-full ring-2 ring-surface" style={{ background: c }} />)}</span>
+                  {o.label}
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-1.5 text-[11px] text-muted">«ألوان المحطات»: لكل محطة لونها كما في التصميم القديم، بشكل الثيم الجديد.</p>
+        </div>
+      )}
     </div>
   );
 }
