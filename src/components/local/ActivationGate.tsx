@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { KeyRound, Lock, WifiOff, Clock, ArrowRight, RefreshCw, X, MessageSquare } from "lucide-react";
+import { KeyRound, Lock, WifiOff, Clock, ArrowRight, RefreshCw, X, MessageSquare, Download } from "lucide-react";
 import {
   evaluate, fetchEnabled, refreshLicense, activateCode, cachedContact, providerMessage, WARN_DAYS, cachedSignup, LICENSE_EVENT, type LicenseState,
 } from "@/lib/license/client";
@@ -148,6 +148,11 @@ export function ActivationGate({ module }: { module?: LicenseModule }) {
         {state.reason !== "clock" && <CodeForm onDone={done} cta="تفعيل رمز جديد" />}
         <button onClick={checkNow} disabled={checking} className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-line px-4 py-2 text-sm hover:bg-canvas disabled:opacity-60">
           <RefreshCw className={`size-4 ${checking ? "animate-spin" : ""}`} /> تحقق الآن (بعد التمديد)
+        </button>
+        {/* The lab's data is its own: it can always take it out, locked or not. */}
+        <button onClick={() => void import("@/lib/local/fullBackup").then((m) => m.downloadFullBackup())} data-testid="locked-backup"
+          className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-line px-4 py-2 text-sm hover:bg-canvas">
+          <Download className="size-4" /> تنزيل نسخة شاملة من بيانات المختبر
         </button>
       </Screen>
     );

@@ -14,7 +14,7 @@ const SLUGS = ['', 'start', 'station', 'report', 'store', 'training', 'qc', 'ros
   await p.waitForSelector('[data-testid="about-page"]', { timeout: 20000 });
   ok(new URL(p.url()).pathname === '/about', 'the welcome page opens «عن التطبيق»');
   const nav = await p.locator('aside nav a').evaluateAll((els) => els.map((e) => e.getAttribute('href')));
-  ok(nav.length === SLUGS.length + 1 && nav[0] === '/about' && nav.includes('/about/qc') && nav[nav.length - 1] === '/about/settings', `a sidebar with every page and the settings (${nav.length})`);
+  ok(nav.length === SLUGS.length + 2 && nav[0] === '/about' && nav.includes('/about/status') && nav.includes('/about/qc') && nav[nav.length - 1] === '/about/settings', `a sidebar with every page, «حالة الخدمة» and the settings (${nav.length})`);
   const home = await p.locator('main').innerText();
   ok(['محطة المختبر', 'المخزن والمشتريات', 'التدريب والمعلومات', 'الجودة والأجهزة', 'الكادر والدوام', 'المزامنة'].every((s) => home.includes(s)), 'the overview lists every station');
   ok(await p.locator('main [data-art="hub"] svg').count() === 1, 'with a picture of the stations');

@@ -24,9 +24,9 @@ const ROUTES = [
   "/roster", "/roster/attendance", "/roster/leaves", "/roster/payroll", "/roster/schedule", "/roster/settings", "/roster/staff",
   "/connect", "/connect/room", "/connect/public", "/connect/labs", "/connect/direct", "/connect/file", "/connect/settings",
   "/doctor", "/doctor/labs", "/doctor/settings",
-  "/sync", "/sync/file", "/sync/auto", "/sync/log", "/sync/doctors", "/sync/settings",
+  "/sync", "/sync/file", "/sync/auto", "/sync/log", "/sync/backup", "/sync/doctors", "/sync/settings",
   "/about", "/about/start", "/about/station", "/about/report", "/about/store", "/about/training", "/about/qc", "/about/roster",
-  "/about/connect", "/about/sync", "/about/admin", "/about/data", "/about/tips", "/about/faq", "/about/support", "/about/settings",
+  "/about/connect", "/about/sync", "/about/admin", "/about/data", "/about/tips", "/about/faq", "/about/support", "/about/status", "/about/settings",
 ];
 // Pages with an id in the URL are client pages: one saved copy serves every id.
 const TEMPLATES = [["/training/test/", "/training/test/_"], ["/station/page/", "/station/page/_"]];

@@ -2,7 +2,7 @@
 
 import {
   Info, Rocket, Beaker, FileText, ShoppingCart, GraduationCap, ShieldCheck, Users, RefreshCw, LayoutDashboard,
-  Database, Lightbulb, CircleHelp, Phone, Settings, MessagesSquare, type LucideIcon,
+  Database, Lightbulb, CircleHelp, Phone, Settings, MessagesSquare, Activity, type LucideIcon,
 } from "lucide-react";
 import { AppSidebar, type SideSection } from "@/components/local/AppSidebar";
 import { aboutHref, aboutPage } from "@/lib/about/content";
@@ -20,7 +20,7 @@ const item = (slug: string) => {
 const SECTIONS: SideSection[] = [
   { title: "التعريف", items: ["", "start"].map(item) },
   { title: "المحطات", items: ["station", "report", "store", "training", "qc", "roster", "connect", "sync", "admin"].map(item) },
-  { title: "المساعدة", items: ["data", "tips", "faq", "support"].map(item) },
+  { title: "المساعدة", items: [...["data", "tips", "faq", "support"].map(item), { href: "/about/status", label: "حالة الخدمة", hint: "ما يعمل الآن وإن توقف الموقع", icon: Activity, exact: true }] },
   { title: "الإدارة", items: [{ href: "/about/settings", label: "الإعدادات", hint: "المظهر وحجم الخط", icon: Settings }] },
 ];
 

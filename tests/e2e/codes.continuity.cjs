@@ -96,6 +96,8 @@ const DAY = 86400000;
   await dev2.ctx.close();
   dev2 = await later(40, 20);
   ok(await dev2.p.locator('div[role=dialog]:has-text("المحطات مقفلة")').count() === 1, 'after the 30 days of continuity: locked');
+  const [bk] = await Promise.all([dev2.p.waitForEvent('download'), dev2.p.click('[data-testid="locked-backup"]')]);
+  ok(JSON.parse(require('fs').readFileSync(await bk.path(), 'utf8')).app === 'spir-lab-full', 'locked, the lab can still take a full backup of its data');
 
   // ── «رمز تجديد بلا إنترنت» on that locked device ──
   c = await card();

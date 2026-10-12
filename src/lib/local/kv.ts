@@ -180,6 +180,20 @@ export function kvApply(k: string, v: string | null): void {
 export function kvSyncedEntries(): [string, string][] {
   return mem ? [...mem].filter(([k]) => isSyncedKey(k)) : [];
 }
+/** Every station's data on this device (IndexedDB, or localStorage when it is unavailable) — for «النسخة الشاملة». */
+export function kvDataEntries(): [string, string][] {
+  if (mem) return [...mem].filter(([k]) => isData(k));
+  const out: [string, string][] = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && isData(k)) out.push([k, localStorage.getItem(k) ?? ""]);
+    }
+  } catch { /* ignore */ }
+  return out;
+}
+/** True for a key of the stations' data (what kvDataEntries lists). */
+export const kvIsDataKey = isData;
 /** Approximate bytes kept under this prefix (UTF-16 ≈ 2 bytes a character). */
 export function kvBytes(prefix: string): number {
   let bytes = 0;

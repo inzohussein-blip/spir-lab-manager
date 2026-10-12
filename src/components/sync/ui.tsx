@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Beaker, ShoppingCart, GraduationCap, ShieldCheck, Users, type LucideIcon } from "lucide-react";
+import { Beaker, ShoppingCart, GraduationCap, ShieldCheck, Users, MessagesSquare, Stethoscope, type LucideIcon } from "lucide-react";
 
 /** The stations the sync carries, with their look (the same colours as on the welcome page). */
 export const STATION_META: Record<string, { label: string; icon: LucideIcon; color: string }> = {
@@ -8,6 +8,13 @@ export const STATION_META: Record<string, { label: string; icon: LucideIcon; col
   training: { label: "التدريب والمعلومات", icon: GraduationCap, color: "#4f46e5" },
   qc: { label: "الجودة والأجهزة", icon: ShieldCheck, color: "#e11d48" },
   roster: { label: "الكادر والدوام", icon: Users, color: "#0284c7" },
+};
+
+/** Stations the sync leaves on the computer (shown in «النسخة الشاملة»). */
+const MORE_META: Record<string, { label: string; icon: LucideIcon; color: string }> = {
+  connect: { label: "محطة التواصل", icon: MessagesSquare, color: "#0891b2" },
+  doctors: { label: "رموز الأطباء", icon: Stethoscope, color: "#7c3aed" },
+  doctor: { label: "نافذة الأطباء", icon: Stethoscope, color: "#7c3aed" },
 };
 
 /** A page title with its icon and a line under it. */
@@ -28,7 +35,7 @@ export function PageHead({ icon, title, sub, children }: { icon: ReactNode; titl
 
 /** One station's number (records, or what a file holds). */
 export function StationTile({ id, n, note }: { id: string; n: number; note?: string }) {
-  const m = STATION_META[id];
+  const m = STATION_META[id] ?? MORE_META[id];
   const Icon = m?.icon ?? Beaker;
   return (
     <li className="flex items-center gap-3 rounded-xl border border-line bg-canvas px-3 py-2.5">
