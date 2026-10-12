@@ -151,6 +151,19 @@ const DAY = 86400000;
   ok(again.at > savedAt && await f.evaluate(() => Date.now() - JSON.parse(localStorage.getItem('local.backup.v1')).last < 60000), 'when due, opening a station saves to the folder by itself');
   ok(await f.locator('[data-testid="backup-reminder"]').count() === 0, 'no reminder while the folder keeps the backups');
 
+  // ── The browser closed while opening the folder: automatic saving stops, with a notice ──
+  const st = () => f.evaluate(() => JSON.parse(localStorage.getItem('local.backup.v1')));
+  await f.evaluate(() => localStorage.setItem('local.backup.opening.v1', String(Date.now() - 5000)));
+  await f.goto(B + '/roster'); await f.waitForSelector('aside nav a', { timeout: 20000 }); await f.waitForTimeout(1500);
+  ok((await st()).every === 1 && !(await st()).crashed, 'a fresh mark is another station saving now: nothing stops');
+  await f.evaluate(() => localStorage.setItem('local.backup.opening.v1', String(Date.now() - 120000)));
+  await f.goto(B + '/roster'); await f.waitForSelector('aside nav a', { timeout: 20000 }); await f.waitForTimeout(1500);
+  ok(!(await st()).every && !!(await st()).crashed && await f.evaluate(() => localStorage.getItem('local.backup.opening.v1')) === null, 'an old mark (the browser closed there): automatic saving stops');
+  await f.goto(B + '/sync/backup'); await f.waitForSelector('[data-testid="auto-save-crashed"]', { timeout: 20000 });
+  ok((await f.locator('[data-testid="auto-save-crashed"]').innerText()).includes('أُوقف'), 'the backup page says why');
+  await f.click('[data-testid="auto-save-folder"]'); await f.waitForTimeout(1500);
+  ok((await st()).every === 1 && !(await st()).crashed && await f.locator('[data-testid="auto-save-crashed"]').count() === 0, 'choosing the folder again switches it back on');
+
   ok(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.slice(0, 3).join(' | ') : ''));
   ending = true; await b.close();
   done();

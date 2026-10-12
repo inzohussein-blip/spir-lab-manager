@@ -70,6 +70,14 @@ export default function FullBackupPage() {
         {s.last ? <>آخر نسخة شاملة: <b>{when(s.last)}</b></> : "لم تُؤخذ نسخة شاملة على هذا الجهاز بعد."}
       </p>
 
+      {s.crashed && !s.every && (
+        <p role="alert" data-testid="auto-save-crashed" className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+          <span>أُوقف «الحفظ التلقائي في مجلد» لأن المتصفح أُغلق وهو يفتح المجلد ({when(s.crashed)}). بعض إصدارات المتصفح لا تتحمّله:
+            نزّل النسخة بنفسك، أو حدّث المتصفح ثم اختر المجلد من جديد.</span>
+        </p>
+      )}
+
       <div className="grid gap-5 lg:grid-cols-2">
         <section className={`${card} flex flex-col`}>
           <div className="mb-1 flex items-center gap-2 font-bold"><Download className="size-4 text-brand" /> تنزيل نسخة الآن</div>

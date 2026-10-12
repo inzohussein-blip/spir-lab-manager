@@ -74,6 +74,8 @@ export interface BackupState {
   folder?: string;
   /** The last automatic save failed (no permission any more, folder gone). */
   failed?: boolean;
+  /** Automatic saving was stopped because the browser closed while it opened the folder. */
+  crashed?: number;
   /** «لاحقاً» on the reminder: not shown again before this time. */
   snooze?: number;
 }
@@ -256,7 +258,7 @@ export async function chooseFolder(every: number): Promise<boolean> {
     const pick = (window as unknown as { showDirectoryPicker(o: { mode: "readwrite"; id?: string }): Promise<DirHandle> }).showDirectoryPicker;
     const h = await pick({ mode: "readwrite", id: "lab-backup" });
     await hput(h);
-    setBackupState({ folder: h.name, every, failed: false });
+    setBackupState({ folder: h.name, every, failed: false, crashed: undefined });
     return await saveToFolder(h);
   } catch { return false; }
 }
@@ -295,11 +297,30 @@ export async function saveNow(fromClick = false): Promise<boolean> {
   return saveToFolder(h);
 }
 
+// Some browser versions close themselves when a page reads a saved folder back (seen with Chromium 153
+// and the browser's private folder). A mark is left while the automatic save opens the folder; found
+// at the next open, it means the browser closed there: automatic saving stops (with a notice) instead
+// of closing the browser again every day.
+const OPENING_KEY = "local.backup.opening.v1";
+const mark = (on: boolean) => { try { if (on) localStorage.setItem(OPENING_KEY, String(Date.now())); else localStorage.removeItem(OPENING_KEY); } catch { /* ignore */ } };
+/** Age of the mark in ms (null: none). A young one is another open station saving right now. */
+const markAge = () => { try { const t = Number(localStorage.getItem(OPENING_KEY)); return t ? Date.now() - t : null; } catch { return null; } };
+const BUSY_MS = 30_000;
+
 /** When a station opens: count from the first data, and save to the folder when one is due. */
 export async function backupTick(): Promise<void> {
   const s = backupState();
   if (!s.last && !s.since && hasData()) setBackupState({ since: Date.now() });
-  if (s.every && s.every > 0 && s.folder && (!s.last || Date.now() - s.last >= s.every * DAY)) await saveNow(false);
+  const age = markAge();
+  if (age != null && age < BUSY_MS) return; // another station of this browser is saving now
+  if (age != null) {
+    mark(false);
+    if (s.every) { setBackupState({ every: 0, failed: false, crashed: Date.now() }); return; }
+  }
+  if (s.every && s.every > 0 && s.folder && (!s.last || Date.now() - s.last >= s.every * DAY)) {
+    mark(true);
+    try { await saveNow(false); } finally { mark(false); }
+  }
 }
 
 /** Days since the last backup (or since the first data, never backed up) when a reminder is due; else null. */
