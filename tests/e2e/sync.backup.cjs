@@ -98,12 +98,24 @@ const DAY = 86400000;
 
   // ── Automatic save to a folder ──
   const { ctx: fx, p: f } = await dev();
-  // The browser's private folder stands in for the folder the lab picks. It is always writable, so
-  // its permission is answered here: a newer headless Chromium closed the page when asked for the
-  // permission of such a folder restored from storage (no permission prompt exists there).
+  // The browser's private folder stands in for the folder the lab picks (no folder picker in a test
+  // browser). The app keeps the picked folder in IndexedDB («lab-backup-folder»); Chromium 153 closes
+  // the whole browser when a private-folder handle is read back from IndexedDB on a new page (a
+  // ten-line script without the app shows it), so here the stored value is a marker and reading it
+  // gives the private folder again — the app's own steps (when due, write, keep the last 10) run as is.
   await fx.addInitScript(() => {
-    window.showDirectoryPicker = async () => (await navigator.storage.getDirectory()).getDirectoryHandle('lab-backups', { create: true });
+    const dir = () => navigator.storage.getDirectory().then((r) => r.getDirectoryHandle('lab-backups', { create: true }));
+    let held = null; dir().then((h) => { held = h; });
+    window.showDirectoryPicker = async () => (held = await dir());
     if (window.FileSystemHandle) { FileSystemHandle.prototype.queryPermission = async () => 'granted'; FileSystemHandle.prototype.requestPermission = async () => 'granted'; }
+    const isFolderStore = (s) => s.name === 'h' && s.transaction?.db?.name === 'lab-backup-folder';
+    const put = IDBObjectStore.prototype.put, get = IDBObjectStore.prototype.get;
+    IDBObjectStore.prototype.put = function (v, k) { return put.call(this, isFolderStore(this) && k === 'dir' ? 'private-folder' : v, k); };
+    IDBObjectStore.prototype.get = function (k) {
+      const r = get.call(this, k);
+      if (isFolderStore(this) && k === 'dir') Object.defineProperty(r, 'result', { get: () => held });
+      return r;
+    };
   });
   f.on('crash', () => console.log('the page crashed: ' + f.url()));
   let ending = false;
