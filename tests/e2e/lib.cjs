@@ -19,7 +19,18 @@ function ok(cond, msg) {
 }
 function launch() {
   const executablePath = process.env.CHROME_PATH || undefined;
-  return chromium.launch(executablePath ? { executablePath } : {});
+  const b = chromium.launch(executablePath ? { executablePath } : {});
+  // UI=new runs a suite in the new green look (the classic look is the default).
+  return process.env.UI !== "new" ? b : b.then((browser) => {
+    const newContext = browser.newContext.bind(browser);
+    browser.newContext = async (o) => {
+      const c = await newContext(o);
+      await c.addInitScript(() => { try { localStorage.setItem("lab-ui", "new"); } catch { /* ignore */ } });
+      return c;
+    };
+    browser.newPage = async (o) => (await browser.newContext(o)).newPage();
+    return browser;
+  });
 }
 const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "lab-e2e-"));
 /** A file path for screenshots / downloads that never lands in the repository. */

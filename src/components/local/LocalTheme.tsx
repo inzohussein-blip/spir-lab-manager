@@ -19,7 +19,7 @@ function getMode(key: string): ThemeMode {
     return "light";
   }
 }
-function setMode(key: string, mode: ThemeMode): void {
+export function setMode(key: string, mode: ThemeMode): void {
   try {
     localStorage.setItem(key, mode);
   } catch { /* ignore */ }

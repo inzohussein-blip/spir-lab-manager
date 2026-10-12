@@ -2,6 +2,7 @@
 
 import { Palette, Building2, ShieldCheck, Scale, ChevronDown } from "lucide-react";
 import { SiteThemeSwitch } from "@/components/local/LocalTheme";
+import { UiSwitch } from "@/components/local/UiSwitch";
 
 const card = "rounded-2xl border border-line bg-surface p-5 text-start shadow-[var(--shadow-card)]";
 
@@ -29,6 +30,11 @@ export function WelcomeFooter() {
         <div className="mb-1 flex items-center gap-2 text-sm font-semibold"><Palette className="size-4 text-brand-dark" /> المظهر</div>
         <p className="mb-3 text-xs text-muted">فاتح (الافتراضي) أو غامق، أو تلقائي حسب إعداد الجهاز. لصفحة الترحيب ومدير الرموز ولوحة الإدارة؛ ولكل محطة مظهرها من إعداداتها (فاتح افتراضياً).</p>
         <SiteThemeSwitch />
+        <div className="mt-5 border-t border-line pt-4">
+          <div className="mb-1 flex items-center gap-2 text-sm font-semibold"><Palette className="size-4 text-brand-dark" /> الثيم (شكل التصميم)</div>
+          <p className="mb-3 text-xs text-muted">التصميم القديم هو الافتراضي. اختر الأخضر الجديد، أو ارجع إلى القديم ليظهر المشروع كله كما كان. يُحفظ على هذا الجهاز.</p>
+          <UiSwitch />
+        </div>
       </div>
 
       <div className={card} data-testid="about-spir">

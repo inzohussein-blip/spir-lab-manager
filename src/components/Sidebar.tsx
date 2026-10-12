@@ -44,7 +44,7 @@ export function Sidebar({ role, lab, badges = {} }: { role: string; lab: { name:
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : href === bestMatch;
   return (
-    <aside className="no-print sticky top-0 hidden h-screen w-60 shrink-0 flex-col overflow-y-auto border-e border-line bg-surface md:flex">
+    <aside className="ui-panel-side no-print sticky top-0 hidden h-screen w-60 shrink-0 flex-col overflow-y-auto border-e border-line bg-surface md:flex">
       <div className="flex items-center gap-2.5 px-5 py-4 text-lg font-bold tracking-tight">
         <LabMark lab={lab} className="size-9 shrink-0 rounded-xl" />
         <div className="min-w-0 leading-tight">

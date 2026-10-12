@@ -1,3 +1,4 @@
+import { UiTopBar } from "@/components/local/UiTopBar";
 import type { ReactNode } from "react";
 import { OfflineReady } from "@/components/local/OfflineReady";
 import { ActivationGate } from "@/components/local/ActivationGate";
@@ -20,7 +21,7 @@ export default function RosterLayout({ children }: { children: ReactNode }) {
       <LocalThemeApplier storageKey={THEME_KEYS.roster} />
       <LocalDataGate>
         <RosterSidebar />
-        <main className="min-w-0 flex-1 p-4 md:p-7 print:p-0">{children}</main>
+        <main className="min-w-0 flex-1 p-4 md:p-7 print:p-0"><UiTopBar themeKey={THEME_KEYS.roster} />{children}</main>
       </LocalDataGate>
       <OfflineReady />
     </div>

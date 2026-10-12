@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, Menu, X, ChevronLeft, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSideCollapsed, SideCollapseButton, SideReopenButton } from "@/components/local/SideCollapse";
+import { setShellNav, useUi } from "@/lib/local/ui";
+import { AppSidebarNew } from "@/components/local/AppSidebarNew";
 
-export interface SideItem { href: string; label: string; hint: string; icon: LucideIcon; exact?: boolean; /** Other pages that show this entry as the open one. */ also?: string[] }
+export interface SideItem { href: string; label: string; hint: string; icon: LucideIcon; exact?: boolean; /** Other pages that show this entry as the open one. */ also?: string[]; /** Only in the new green look (never drawn in the classic one). */ ui?: "new" }
 export interface SideSection { title: string; items: SideItem[] }
 export interface SideBadge { n: number; tone?: "brand" | "warn" | "danger" | "info"; testid?: string; title?: string }
 /** Numbers beside a menu item (one or several), by its href. */
@@ -20,7 +22,7 @@ const BADGE_TONE = { brand: "bg-brand-light text-brand-dark", warn: "bg-amber-50
  * Desktop: sticky column. Phone: top bar + slide-in drawer.
  */
 export function AppSidebar({
-  appName, appTag, icon: AppIcon, sections, getBadges, footerNote, home = true,
+  appName, appTag, icon: AppIcon, sections: allSections, getBadges, footerNote, home = true,
 }: {
   appName: string;
   appTag: string;
@@ -32,6 +34,10 @@ export function AppSidebar({
   home?: boolean;
 }) {
   const pathname = usePathname();
+  const ui = useUi();
+  // Entries of the new look only are left out of the classic look altogether.
+  const sections = useMemo(() => (ui !== "new" && allSections.some((sec) => sec.items.some((it) => it.ui === "new"))
+    ? allSections.map((sec) => ({ ...sec, items: sec.items.filter((it) => it.ui !== "new") })) : allSections), [ui, allSections]);
   const [open, setOpen] = useState(false);
   const [collapsed, setCollapsed] = useSideCollapsed();
   const [badges, setBadges] = useState<SideBadges>({});
@@ -47,6 +53,13 @@ export function AppSidebar({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
+
+  // The new look's top bar searches this menu and lists its numbers as alerts.
+  useEffect(() => {
+    const links = sections.flatMap((sec) => sec.items)
+      .map((it) => ({ href: it.href, label: it.label, hint: it.hint, icon: it.icon, n: ([] as SideBadge[]).concat(badges[it.href] ?? []).reduce((a, b) => a + (b.n > 0 ? b.n : 0), 0) }));
+    setShellNav({ app: appName, links });
+  }, [appName, sections, badges]);
 
   const isActive = (it: SideItem) => (it.exact ? pathname === it.href : pathname === it.href || pathname.startsWith(it.href + "/")) || !!it.also?.includes(pathname);
   const current = sections.flatMap((s) => s.items).find(isActive)?.label ?? appName;
@@ -66,6 +79,10 @@ export function AppSidebar({
 
       <div onClick={() => setOpen(false)} className={cn("no-print fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-[2px] transition-opacity md:hidden", open ? "opacity-100" : "pointer-events-none opacity-0")} />
 
+      {ui === "new" ? (
+        <AppSidebarNew appName={appName} appTag={appTag} icon={AppIcon} sections={sections} footerNote={footerNote} home={home}
+          open={open} setOpen={setOpen} collapsed={collapsed} setCollapsed={setCollapsed} badges={badges} isActive={isActive} />
+      ) : (<>
       {collapsed && <SideReopenButton onClick={() => setCollapsed(false)} />}
       <aside
         className={cn(
@@ -133,6 +150,7 @@ export function AppSidebar({
           {home && <Link href="/welcome" className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-muted hover:bg-canvas hover:text-ink"><Home className="size-4" /> الصفحة الرئيسية</Link>}
         </div>
       </aside>
+      </>)}
     </>
   );
 }

@@ -319,3 +319,132 @@ main > * {
   color: var(--color-low);
   font-weight: 700;
 }
+
+/* ════════ The new green look — only with data-ui="new" (chosen on the welcome page) ════════
+   The classic look is the default: none of the rules below apply to it, so it stays exactly as it
+   was. Unlayered CSS beats Tailwind's utilities layer, which lets the new look reshape the pages
+   (soft cards, pill buttons, rounded fields) without touching their markup. */
+/* Colours on screen only: printed documents keep their own. */
+@media screen {
+  :root[data-ui="new"] {
+    --color-brand: #14733f;
+    --color-brand-dark: #0e5530;
+    --color-brand-light: #e6f4ec;
+    --color-ink: #0f1f17;
+    --color-muted: #75857c;
+    --color-line: #e5ebe7;
+    --color-surface: #ffffff;
+    --color-canvas: #f2f5f3;
+    --shadow-card: 0 1px 2px rgba(15, 40, 28, 0.04), 0 6px 20px -8px rgba(15, 40, 28, 0.10);
+    --shadow-pop: 0 18px 44px -12px rgba(15, 40, 28, 0.28);
+  }
+  :root[data-ui="new"][data-theme="dark"] {
+    --color-brand: #4ade80;
+    --color-brand-dark: #22c55e;
+    --color-brand-light: #12301f;
+    --color-ink: #e6efe9;
+    --color-muted: #8aa095;
+    --color-line: #1d2c24;
+    --color-surface: #101c16;
+    --color-canvas: #0a120e;
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 20px -8px rgba(0, 0, 0, 0.5);
+    --shadow-pop: 0 18px 44px -12px rgba(0, 0, 0, 0.7);
+  }
+  /* Every station wears the same green (the classic look gives each its own accent). */
+  :root[data-ui="new"] :is(.station, .store, .training, .qc, .roster, .connect, .doctor, .about, .sync, .panel, .welcome) {
+    --color-brand: #14733f;
+    --color-brand-dark: #0e5530;
+    --color-brand-light: #e6f4ec;
+  }
+  :root[data-ui="new"][data-theme="dark"] :is(.station, .store, .training, .qc, .roster, .connect, .doctor, .about, .sync, .panel, .welcome) {
+    --color-brand: #4ade80;
+    --color-brand-dark: #22c55e;
+    --color-brand-light: #12301f;
+  }
+  /* Dark: the green is bright, so text sitting on it goes dark. */
+  :root[data-ui="new"][data-theme="dark"] :is(.station, .store, .training, .qc, .roster, .connect, .doctor, .about, .sync, .panel, .welcome) :is(.bg-brand, .from-brand).text-white {
+    color: #062613;
+  }
+}
+@media screen {
+  /* Soft cards with no border, pill buttons, rounded fields */
+  :root[data-ui="new"] :is(.station, .store, .training, .qc, .roster, .connect, .doctor, .about, .sync, .panel, .welcome) :is(.rounded-2xl, .rounded-xl).border.border-line.bg-surface {
+    border-color: transparent;
+    border-radius: 1.5rem;
+    box-shadow: var(--shadow-card);
+  }
+  :root[data-ui="new"] :is(.station, .store, .training, .qc, .roster, .connect, .doctor, .about, .sync, .panel, .welcome) :is(button, a).bg-brand {
+    border-radius: 9999px;
+    background-image: linear-gradient(to bottom, var(--color-brand), var(--color-brand-dark));
+    box-shadow: 0 8px 18px -10px var(--color-brand);
+  }
+  :root[data-ui="new"] :is(.station, .store, .training, .qc, .roster, .connect, .doctor, .about, .sync, .panel, .welcome) button.rounded-lg.border {
+    border-radius: 9999px;
+  }
+  :root[data-ui="new"] :is(.station, .store, .training, .qc, .roster, .connect, .doctor, .about, .sync, .panel, .welcome) :is(input, select, textarea).rounded-lg {
+    border-radius: 0.85rem;
+  }
+  /* Page titles: large and plain; the page icon is hidden (the menu already shows it) */
+  :root[data-ui="new"] :is(.station, .store, .training, .qc, .roster, .connect, .doctor, .about, .sync) main h1 > svg:first-child { display: none; }
+  :root[data-ui="new"] :is(.station, .store, .training, .qc, .roster, .connect, .doctor, .about, .sync, .panel) main h1 { font-size: 1.75rem; line-height: 1.2; letter-spacing: -0.01em; }
+  /* The board's month figures: the first in deep green, the numbers large */
+  :root[data-ui="new"] .ui-kpi { border-color: transparent; border-radius: 1.5rem; box-shadow: var(--shadow-card); padding: 1.25rem; }
+  :root[data-ui="new"] .ui-kpi > div:nth-child(2) { font-size: 2.25rem; line-height: 2.5rem; font-weight: 800; }
+  :root[data-ui="new"] [data-testid="dash-kpis"] > .ui-kpi:first-child { background: linear-gradient(135deg, #14733f, #0b4527); color: #fff; }
+  :root[data-ui="new"] [data-testid="dash-kpis"] > .ui-kpi:first-child :is(div, span) { color: #fff; }
+  :root[data-ui="new"] [data-testid="dash-kpis"] > .ui-kpi:first-child [data-testid="kpi-change"] { background: rgb(255 255 255 / 0.18); }
+  /* Welcome page cards */
+  :root[data-ui="new"] .ui-station-card { border-width: 0; border-radius: 1.75rem; box-shadow: var(--shadow-card); }
+  :root[data-ui="new"] .ui-station-card:hover { box-shadow: var(--shadow-pop); }
+  :root[data-ui="new"] .ui-tile { border-radius: 1rem; background-image: linear-gradient(135deg, var(--color-brand), var(--color-brand-dark)); }
+  :root[data-ui="new"] .ui-chip { background: var(--color-brand-light); color: var(--color-brand-dark); }
+  :root[data-ui="new"] .ui-go { border-radius: 9999px; background-color: var(--color-brand); background-image: linear-gradient(to bottom, var(--color-brand), var(--color-brand-dark)); box-shadow: 0 8px 18px -10px var(--color-brand); }
+  :root[data-ui="new"] .group:hover .ui-go { filter: brightness(1.08); }
+  :root[data-ui="new"][data-theme="dark"] :is(.ui-tile, .ui-go) { color: #062613; }
+  /* The admin panel: floating menu and top bar */
+  :root[data-ui="new"] .ui-panel-side a[aria-current="page"] { position: relative; background: transparent; color: var(--color-ink); font-weight: 700; }
+  :root[data-ui="new"] .ui-panel-side a[aria-current="page"] > svg { color: var(--color-brand); }
+  :root[data-ui="new"] .ui-panel-side a[aria-current="page"]::before { content: ""; position: absolute; inset-block: 0.5rem; inset-inline-start: -0.75rem; width: 4px; border-start-end-radius: 9999px; border-end-end-radius: 9999px; background: var(--color-brand); }
+  :root[data-ui="new"] .ui-panel-side a:not([aria-current="page"]) { color: var(--color-muted); border-radius: 1rem; }
+  :root[data-ui="new"] .ui-panel-side a:not([aria-current="page"]):hover { color: var(--color-ink); }
+}
+@media screen and (min-width: 768px) {
+  :root[data-ui="new"] .ui-panel-side { top: 1rem; margin: 1rem; height: calc(100vh - 2rem); border-width: 0; border-radius: 28px; box-shadow: var(--shadow-card); }
+  :root[data-ui="new"] .ui-panel-top { top: 1rem; margin-top: 1rem; margin-inline-end: 1rem; height: 4rem; border-width: 0; border-radius: 28px; background: var(--color-surface); box-shadow: var(--shadow-card); }
+}
+/* The lab station's own menu, reshaped like the others in the new look */
+@media screen {
+  :root[data-ui="new"] .ui-side { border-width: 0; padding: 0.5rem; }
+  :root[data-ui="new"] .ui-side-title > span { display: none; }
+  :root[data-ui="new"] .ui-side-hint, :root[data-ui="new"] .ui-side-chev { display: none; }
+  :root[data-ui="new"] .ui-side-link { border-radius: 1rem; color: var(--color-muted); padding-block: 0.35rem; }
+  :root[data-ui="new"] .ui-side-link:hover { color: var(--color-ink); }
+  :root[data-ui="new"] .ui-side-link[aria-current="page"] { background: transparent; box-shadow: none; color: var(--color-ink); font-weight: 700; }
+  :root[data-ui="new"] .ui-side-link > span.absolute { inset-inline-start: -1rem; }
+  :root[data-ui="new"] .ui-side-tile { width: 1.5rem; height: 1.5rem; background: transparent; box-shadow: none; color: inherit; --tw-ring-shadow: 0 0 #0000; }
+  :root[data-ui="new"] .ui-side-link[aria-current="page"] .ui-side-tile { color: var(--color-brand); background: transparent; }
+  :root[data-ui="new"] .ui-side-link:hover .ui-side-tile { background: transparent; }
+}
+@media screen and (min-width: 768px) {
+  :root[data-ui="new"] .ui-side { top: 1rem; margin: 1rem; height: calc(100vh - 2rem); width: 16rem; border-radius: 28px; box-shadow: var(--shadow-card); }
+}
+/* The purchasing station's amber accents become the green (warning tints stay as they are) */
+@media screen {
+  :root[data-ui="new"] .store :is(button, a):is(.bg-amber-600, .bg-amber-500) { background-color: var(--color-brand); background-image: linear-gradient(to bottom, var(--color-brand), var(--color-brand-dark)); border-radius: 9999px; box-shadow: 0 8px 18px -10px var(--color-brand); }
+  :root[data-ui="new"] .store :is(.text-amber-700, .text-amber-600):not(:is(.bg-amber-50, .bg-amber-100) *, .bg-amber-50, .bg-amber-100) { color: var(--color-brand-dark); }
+  :root[data-ui="new"] .store :is(.border-amber-600, .border-amber-400) { border-color: var(--color-brand); }
+  :root[data-ui="new"][data-theme="dark"] .store :is(button, a):is(.bg-amber-600, .bg-amber-500) { color: #062613; }
+}
+/* Toasts: a small dark pill at the bottom, as in the reference («"…" added to projects») */
+@media screen {
+  :root[data-ui="new"] .station-toast { border-color: transparent; border-radius: 9999px; background: #0e2a1b; color: #fff; padding-inline: 1.1rem; box-shadow: 0 14px 30px -12px rgba(6, 38, 19, 0.6); }
+  :root[data-ui="new"] .station-toast > svg { color: #4ade80; }
+  :root[data-ui="new"] .station-toast.text-amber-700 > svg { color: #fbbf24; }
+  :root[data-ui="new"] [data-sonner-toast][data-type="success"], :root[data-ui="new"] [data-sonner-toast][data-type="info"], :root[data-ui="new"] [data-sonner-toast]:not([data-type]) {
+    --normal-bg: #0e2a1b; --normal-text: #fff; --normal-border: transparent; --success-bg: #0e2a1b; --success-text: #fff; --success-border: transparent;
+    border-radius: 9999px !important; background: #0e2a1b !important; color: #fff !important; border-color: transparent !important;
+  }
+}
+/* Each look shows only its own markup */
+:root[data-ui="new"] .ui-only-classic { display: none !important; }
+:root:not([data-ui="new"]) .ui-only-new { display: none !important; }

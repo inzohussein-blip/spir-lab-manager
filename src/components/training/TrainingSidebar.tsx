@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { getTests, getTubes, getTools } from "@/lib/training/store";
 import { cn } from "@/lib/utils";
+import { setShellNav } from "@/lib/local/ui";
 import { useEditLock, lockNow } from "@/lib/training/lock";
 import { UnlockForm } from "./LockGate";
 import { useSideCollapsed, SideCollapseButton, SideReopenButton } from "@/components/local/SideCollapse";
@@ -78,6 +79,13 @@ export function TrainingSidebar() {
     it.exact ? pathname === it.href || pathname.startsWith("/training/test") : pathname.startsWith(it.href);
   const current = SECTIONS.flatMap((s) => s.items).find(isActive)?.label ?? "محطة التدريب";
 
+  // The new look's top bar searches this menu (its numbers are counts, not alerts).
+  useEffect(() => {
+    setShellNav({ app: "محطة التدريب", links: SECTIONS.flatMap((sec) => sec.items).filter((it) => canEdit || !EDIT_ONLY.includes(it.href))
+      .map((it) => ({ href: it.href, label: it.label, hint: it.hint, icon: it.icon, n: 0 })) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- EDIT_ONLY is fixed
+  }, [canEdit]);
+
   return (
     <>
       {/* Mobile top bar */}
@@ -102,7 +110,7 @@ export function TrainingSidebar() {
       {collapsed && <SideReopenButton onClick={() => setCollapsed(false)} />}
       <aside
         className={cn(
-          "no-print fixed inset-y-0 start-0 z-50 flex h-screen w-72 shrink-0 flex-col border-e border-line bg-surface shadow-[var(--shadow-pop)] transition-transform duration-200",
+          "ui-side no-print fixed inset-y-0 start-0 z-50 flex h-screen w-72 shrink-0 flex-col border-e border-line bg-surface shadow-[var(--shadow-pop)] transition-transform duration-200",
           "md:sticky md:top-0 md:z-auto md:translate-x-0 md:shadow-none",
           open ? "translate-x-0" : "translate-x-full",
           collapsed && "md:hidden"
@@ -127,7 +135,7 @@ export function TrainingSidebar() {
         <nav className="flex flex-1 flex-col gap-4 overflow-y-auto px-3 pb-3">
           {SECTIONS.map((sec) => (
             <div key={sec.title}>
-              <div className="mb-1.5 flex items-center gap-2 px-2.5 text-[11px] font-semibold text-muted">
+              <div className="ui-side-title mb-1.5 flex items-center gap-2 px-2.5 text-[11px] font-semibold text-muted">
                 {sec.title}
                 <span className="h-px flex-1 bg-line" />
               </div>
@@ -142,25 +150,25 @@ export function TrainingSidebar() {
                       href={it.href}
                       aria-current={active ? "page" : undefined}
                       className={cn(
-                        "group relative flex items-center gap-3 rounded-xl px-2.5 py-2 text-sm",
+                        "ui-side-link group relative flex items-center gap-3 rounded-xl px-2.5 py-2 text-sm",
                         active ? "bg-brand-light text-brand-dark shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--color-brand)_22%,transparent)]" : "text-ink hover:bg-canvas"
                       )}
                     >
                       {active && <span className="absolute inset-y-2 -start-3 w-1 rounded-e-full bg-brand" />}
                       <span className={cn(
-                        "grid size-9 shrink-0 place-items-center rounded-lg transition-colors",
+                        "ui-side-tile grid size-9 shrink-0 place-items-center rounded-lg transition-colors",
                         active ? "bg-gradient-to-br from-brand to-brand-dark text-white" : "bg-canvas text-muted ring-1 ring-line group-hover:bg-brand-light group-hover:text-brand group-hover:ring-transparent"
                       )}>
                         <Icon className="size-[18px]" />
                       </span>
                       <span className="min-w-0 flex-1 leading-tight">
                         <span className={cn("block truncate", active && "font-semibold")}>{it.label}</span>
-                        <span className={cn("block truncate text-[11px]", active ? "text-brand-dark/70" : "text-muted")}>{it.hint}</span>
+                        <span className={cn("ui-side-hint block truncate text-[11px]", active ? "text-brand-dark/70" : "text-muted")}>{it.hint}</span>
                       </span>
                       {badge > 0 ? (
                         <span className="min-w-5 rounded-full bg-brand-light px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-brand-dark tabular-nums">{badge}</span>
                       ) : (
-                        <ChevronLeft className={cn("size-4 shrink-0", active ? "text-brand" : "text-muted opacity-0 group-hover:opacity-60")} />
+                        <ChevronLeft className={cn("ui-side-chev size-4 shrink-0", active ? "text-brand" : "text-muted opacity-0 group-hover:opacity-60")} />
                       )}
                     </Link>
                   );
