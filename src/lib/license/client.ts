@@ -45,6 +45,9 @@ interface Stored {
   version?: string;
   /** The lab's own database, when the code is linked to one (see lib/sync). */
   sync?: DeviceSync | null;
+  /** The site last answered with a key other than this license's (its own key lost or replaced,
+   *  or another site on the address): nothing from it is taken; entering the lab code again does. */
+  otherKeyAt?: number;
 }
 
 export type LicenseState =
@@ -158,7 +161,8 @@ export async function evaluate(module?: LicenseModule): Promise<LicenseState> {
       if (until <= now) {
         // «ضمان الاستمرارية» (the owner's choice, signed in the license): the server could not be reached
         // for a long while before the end — the lab keeps working for the days given, then it locks.
-        const heard = s.checkedAt || 0;
+        // A site answering with another key was reached too: not «out of reach».
+        const heard = Math.max(s.checkedAt || 0, s.otherKeyAt || 0);
         if (cont && cont > 0 && !s.blocked && until - heard >= CONTINUITY_AFTER_DAYS * DAY && now < until + cont * DAY) onCont = true;
         else return { kind: "locked", reason: "expired", lab: p.lab, until };
       }
@@ -241,14 +245,18 @@ export async function refreshLicense(force = false, maxAge = REFRESH_MS): Promis
     if (!d) return;
     // Only an answer signed with this license's own key counts: a new license from the same key, or a
     // refusal it signed (for this code and device, and recent). Anything else changes nothing.
+    const otherKey = () => {
+      write(LIC_KEY, JSON.stringify({ ...s, otherKeyAt: Date.now() } satisfies Stored));
+      try { window.dispatchEvent(new Event(LICENSE_EVENT)); } catch { /* not in a browser */ }
+    };
     if (d.ok === true && typeof d.token === "string" && d.pub) {
-      if (sameKey(d.pub, s.pub)) store(d);
+      if (sameKey(d.pub, s.pub)) store(d); else otherKey();
     } else if ((r.status === 403 || r.status === 404) && REFUSED.has(d.error)) {
       const proof = await verifyWith(s.pub, d.proof);
       const at = Number(proof?.at);
       if (proof && proof.typ === "refusal" && proof.lid === p.lid && proof.dev === deviceId() && proof.err === d.error && Math.abs(Date.now() - at) < REFUSAL_MAX_AGE) {
         write(LIC_KEY, JSON.stringify({ ...s, checkedAt: Date.now(), blocked: { error: d.error, at: Date.now() } } satisfies Stored));
-      }
+      } else if (d.proof) otherKey(); // signed, but not with this license's key
     }
   } catch { /* offline — try again next time */ }
 }
@@ -256,6 +264,12 @@ export async function refreshLicense(force = false, maxAge = REFRESH_MS): Promis
 /** The provider's current note for this lab (empty when none). */
 export function providerMessage(): string {
   return readJson<Stored>(LIC_KEY)?.message?.trim() ?? "";
+}
+
+/** When the site last answered with another signing key than this device's license (null: not lately). */
+export function licenseOtherKeyAt(): number | null {
+  const t = readJson<Stored>(LIC_KEY)?.otherKeyAt;
+  return t && Date.now() - t < 14 * DAY ? t : null;
 }
 
 /** When this device last heard from the server about its code (null: never / no code). */

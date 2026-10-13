@@ -4,7 +4,7 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Printer, Trash2, FileText, Search, Pencil, Download, PackageCheck, Clock, Tag } from "lucide-react";
 import {
-  getVisits, getTests, getSettings, rangeLabel, flagFor, deleteVisits, previousResults, setDelivered, nextAccession, updateVisit, TRASH_DAYS,
+  getVisits, getTests, getSettings, rangeLabel, flagFor, deleteVisits, visitStockTaken, previousResults, setDelivered, nextAccession, updateVisit, TRASH_DAYS,
   type StationVisit, type StationTest, type StationSettings,
 } from "@/lib/station/store";
 import { ReportSheet } from "@/components/station/ReportSheet";
@@ -157,7 +157,11 @@ export default function StationVisitsPage() {
   function remove(ids: string[]) {
     if (ids.length === 0) return;
     if (!window.confirm(`${ids.length === 1 ? "حذف هذه الزيارة؟" : `حذف ${ids.length} زيارة؟`} تُنقل إلى سلة المحذوفات ويمكن استرجاعها خلال ${TRASH_DAYS} يوماً.`)) return;
-    deleteVisits(ids);
+    // Materials these visits took from the stock room: back only if the visits were a mistake (real
+    // visits deleted to free space did use them).
+    const taken = ids.reduce((n, id) => n + visitStockTaken(id), 0);
+    const giveBack = taken > 0 && window.confirm(`هل أُدخلت ${ids.length === 1 ? "هذه الزيارة" : "هذه الزيارات"} خطأً؟\nاضغط «موافق» لإرجاع موادها إلى المخزن (${taken} وحدة)، أو «إلغاء» إن كانت زيارات حقيقية استُعملت موادها.`);
+    deleteVisits(ids, giveBack);
     refresh();
     setChecked((c) => { const n = new Set(c); ids.forEach((id) => n.delete(id)); return n; });
     if (sel && ids.includes(sel.id)) setSel(null);

@@ -8,6 +8,8 @@ import { logAudit } from "@/lib/audit";
 
 /** Record a QC run; status auto-derived from deviation vs tolerance (Westgard-lite). */
 export async function addQcRun(formData: FormData): Promise<void> {
+  // The lab's accounts only, as every other QC action here.
+  if (!(await labUser())) return;
   const controlName = String(formData.get("control_name") || "").trim();
   if (!controlName) return;
   const target = formData.get("target") ? Number(formData.get("target")) : null;

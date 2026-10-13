@@ -19,7 +19,7 @@
  * the password; a restore asks for the password.
  */
 
-import { kvReady, kvDataEntries, kvIsDataKey, kvSet, kvRemove, kvFlush } from "./kv";
+import { kvReady, kvDataEntries, kvIsDataKey, kvIsDeviceOnly, kvSet, kvRemove, kvApply, kvLarge, kvFlush } from "./kv";
 import { exportImages, importImages, type MediaExport } from "@/lib/training/media";
 import { UI_KEY, UI_COLOR_KEY } from "./uiScript";
 import { thisDevice } from "./fileSync";
@@ -53,8 +53,9 @@ export interface SealedBackup {
 const ITER = 210_000;
 const KEY_STORE = "local.backup.key.v1";
 
-/** Station data that stays with this computer (its sync identity and log). */
-const NOT_IN_BACKUP = new Set(["station.syncDevice.v1", "station.syncClock.v1", "station.syncLog.v1"]);
+/** Station data that stays with this computer: its sync identity and log, its sample-number letter
+ *  and counter (two computers with one letter would give the same sample numbers), its last backup. */
+const notInBackup = (k: string) => kvIsDeviceOnly(k);
 /** Device choices kept in localStorage that go with the lab's data. */
 const SETTINGS = (k: string) => k.endsWith(".theme.v1") || k === "lab-theme" || k === UI_KEY || k === UI_COLOR_KEY || k === "local.pin.v1" || k === "lab-sync-exclude";
 
@@ -97,7 +98,7 @@ export const backupFileName = (t = Date.now()) => `spir-lab-backup-${new Date(t)
 export async function makeFullBackup(): Promise<FullBackup> {
   await kvReady();
   const data: Record<string, string> = {};
-  for (const [k, v] of kvDataEntries()) if (!NOT_IN_BACKUP.has(k)) data[k] = v;
+  for (const [k, v] of kvDataEntries()) if (!notInBackup(k)) data[k] = v;
   const settings: Record<string, string> = {};
   try {
     for (let i = 0; i < localStorage.length; i++) {
@@ -130,12 +131,16 @@ export function backupSummary(b: FullBackup): [string, number][] {
   return [...per].filter(([, n]) => n > 0);
 }
 
-/** Replace this device's stations' data with the backup's (what is not in it is removed). */
+/** Replace this device's stations' data with the backup's (what is not in it is removed). The
+ *  restore stays on this device: it is written as data from elsewhere, so neither the sync file nor
+ *  the automatic sync sends it to the lab's other computers as new edits (a week-old backup would
+ *  otherwise delete there everything added since). At the next sync, what is newer there comes back. */
 export async function restoreFullBackup(b: FullBackup): Promise<void> {
   await kvReady();
-  const keep = new Set(Object.keys(b.data).filter((k) => kvIsDataKey(k) && !NOT_IN_BACKUP.has(k)));
-  for (const [k] of kvDataEntries()) if (!keep.has(k) && !NOT_IN_BACKUP.has(k)) kvRemove(k);
-  for (const k of keep) { const v = b.data[k]; if (typeof v === "string") kvSet(k, v); }
+  const put = (k: string, v: string | null) => { if (kvLarge()) kvApply(k, v); else if (v == null) kvRemove(k); else kvSet(k, v); };
+  const keep = new Set(Object.keys(b.data).filter((k) => kvIsDataKey(k) && !notInBackup(k)));
+  for (const [k] of kvDataEntries()) if (!keep.has(k) && !notInBackup(k)) put(k, null);
+  for (const k of keep) { const v = b.data[k]; if (typeof v === "string") put(k, v); }
   for (const [k, v] of Object.entries(b.settings ?? {})) if (SETTINGS(k) && typeof v === "string") { try { localStorage.setItem(k, v); } catch { /* ignore */ } }
   if (Array.isArray(b.images)) { try { await importImages(b.images); } catch { /* no image store */ } }
   await kvFlush();
@@ -144,7 +149,7 @@ export async function restoreFullBackup(b: FullBackup): Promise<void> {
 
 /** True when this device holds any station data worth keeping (not just settings). */
 export function hasData(): boolean {
-  return kvDataEntries().some(([k, v]) => !k.endsWith(".theme.v1") && !NOT_IN_BACKUP.has(k) && v.length > 2 && !/(settings|seeded|catalogVersion|backupAt|deviceTag|unlocked)/i.test(k));
+  return kvDataEntries().some(([k, v]) => !k.endsWith(".theme.v1") && !notInBackup(k) && v.length > 2 && !/(settings|seeded|catalogVersion|backupAt|deviceTag|unlocked)/i.test(k));
 }
 
 // ── «كلمة مرور النسخ» ──

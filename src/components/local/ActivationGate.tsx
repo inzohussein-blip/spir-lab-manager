@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { KeyRound, Lock, WifiOff, Clock, ArrowRight, RefreshCw, X, MessageSquare, Download } from "lucide-react";
 import {
-  evaluate, fetchEnabled, refreshLicense, activateCode, cachedContact, providerMessage, WARN_DAYS, cachedSignup, LICENSE_EVENT, type LicenseState,
+  evaluate, fetchEnabled, refreshLicense, activateCode, cachedContact, providerMessage, WARN_DAYS, cachedSignup, LICENSE_EVENT, type LicenseState, licenseOtherKeyAt,
 } from "@/lib/license/client";
 import { moduleLabel, type LicenseModule } from "@/lib/license/modules";
 
@@ -173,8 +173,11 @@ export function ActivationGate({ module }: { module?: LicenseModule }) {
   // Small notices (the stations stay usable). Whole days left, worked out again with each check.
   // eslint-disable-next-line react-hooks/purity
   const left = state.kind === "grace" || state.kind === "ok" ? Math.ceil((state.until - Date.now()) / DAY) : 0;
+  // The site answers with another signing key than this code's: its extensions are not taken here.
+  const otherKey = state.kind === "ok" && licenseOtherKeyAt() != null;
   const notice =
     state.kind === "grace" ? `هذا الجهاز يعمل بالتفعيل السابق حتى ${fmt(state.until)} (${left} يوم) — أدخل رمز مختبرك قبل ذلك.`
+    : otherKey ? `موقع المزوّد يرد بمفتاح توقيع غير مفتاح رمز «${state.lab}»، فلا يُقبل منه تمديد ولا إيقاف. إن غيّر المزوّد مفتاحه، أدخل رمز المختبر من جديد ليؤكده (الرمز يعمل حتى ${fmt(state.until)}).`
     : state.kind === "ok" && state.cont ? `انتهت مدة رمز «${state.lab}» وموقع المزوّد غير متاح منذ مدة — يعمل الجهاز بـ«ضمان الاستمرارية» حتى ${fmt(state.until)} (${left} يوم). تواصل مع المزوّد لرمز تجديد.`
     : state.kind === "ok" && left <= WARN_DAYS ? `ينتهي رمز «${state.lab}» خلال ${left} يوم (${fmt(state.until)}) — تواصل مع المزوّد للتجديد.`
     : "";
@@ -194,8 +197,8 @@ export function ActivationGate({ module }: { module?: LicenseModule }) {
           <div className="pointer-events-auto flex max-w-2xl flex-wrap items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 shadow-[var(--shadow-pop)]">
             <Clock className="size-4 shrink-0" />
             <span className="flex-1">{notice}</span>
-            {state.kind === "grace" && (
-              <button onClick={() => setOpenForm(true)} className="rounded-md bg-amber-600 px-2 py-1 font-semibold text-white hover:bg-amber-700">إدخال الرمز</button>
+            {(state.kind === "grace" || otherKey) && (
+              <button onClick={() => setOpenForm(true)} data-testid="notice-enter-code" className="rounded-md bg-amber-600 px-2 py-1 font-semibold text-white hover:bg-amber-700">إدخال الرمز</button>
             )}
             <button onClick={hideToday} aria-label="إخفاء اليوم" title="إخفاء اليوم" className="grid size-6 place-items-center rounded-md hover:bg-amber-100"><X className="size-3.5" /></button>
           </div>

@@ -20,9 +20,9 @@ export interface StockRef { id: string; name: string; qty: number; minQty?: numb
 
 // ── Stock movement log ─────────────────────────────────────────────────────────
 /** Why a stock count changed. */
-export type MoveReason = "purchase" | "purchase-del" | "result" | "qc" | "add" | "issue" | "count" | "edit";
+export type MoveReason = "purchase" | "purchase-del" | "result" | "return" | "qc" | "add" | "issue" | "count" | "edit";
 export const MOVE_LABEL: Record<MoveReason, string> = {
-  purchase: "شراء", "purchase-del": "حذف شراء", result: "نتائج محطة المختبر", qc: "سيطرة نوعية",
+  purchase: "شراء", "purchase-del": "حذف شراء", result: "نتائج محطة المختبر", return: "إرجاع (فحص أو زيارة أُدخلت خطأً)", qc: "سيطرة نوعية",
   add: "إضافة يدوية", issue: "صرف يدوي", count: "جرد", edit: "تعديل الصنف",
 };
 /** One change of a stock item's count: every purchase, result, control run, manual add / issue,

@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Search, Printer, MessageCircle, Maximize2, Save, Check, Tag, ClipboardList, Beaker, Layers, Pencil, UserRound, StickyNote, Plus, X, RotateCcw, ListChecks, ChevronDown, AlertTriangle, PackageMinus, type LucideIcon } from "lucide-react";
 import {
   getTests, addVisit, updateVisit, getVisit, getSettings, saveSettings, getPanels, nextAccession, uid, rangeLabel, flagFor,
-  getPatients, getPatient, upsertPatient, addPatientNote, stockForVisit, issueVisitStock, visitStockToIssue, outOfStockByTest, getDoctors, addDoctor,
+  getPatients, getPatient, upsertPatient, addPatientNote, stockForVisit, releaseVisitStock, issueVisitStock, visitStockToIssue, outOfStockByTest, getDoctors, addDoctor,
   previousResults, resultDelta, localYmd, splitAge, joinAge, type AgeUnitPick,
   type StationTest, type Gender, type StationVisit, type StationSettings, type StationPanel, type StationPatient, type NoteEntry, type StationDoctor,
 } from "@/lib/station/store";
@@ -371,6 +371,11 @@ function StationEntryPage() {
     }
     // The visit's materials leave the stock room (never twice for the same test) — now, or later by
     // hand from «المخزن ← نتائج بانتظار الصرف» when the stock room is set to manual.
+    // A test taken off a saved visit was a mistake: what it took goes back to the stock room.
+    if (before) {
+      const removed = Array.from(before).filter((id) => !selected.has(id));
+      if (removed.length) releaseVisitStock(v.id, removed, [v.patient.name, v.accession].filter(Boolean).join(" · "));
+    }
     const short = stockForVisit(v.id, Array.from(selected), before ? Array.from(before) : []);
     // Settings → «المخزن»: say which materials were not in stock (the result is still saved).
     if (short.length && stockOptions().warnOut) {

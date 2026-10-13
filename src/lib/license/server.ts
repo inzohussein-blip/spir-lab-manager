@@ -952,7 +952,7 @@ export async function storageStatus(write = false): Promise<{ source: string; ok
 }
 
 // ── Attempt limits (kept in the database so they hold across server instances) ─────
-type AttemptKind = "activate" | "owner" | "signup" | "doctor";
+type AttemptKind = "activate" | "owner" | "signup" | "doctor" | "login";
 const ATTEMPT_WINDOW = 10 * 60_000;
 const attemptKey = (kind: AttemptKind, ip: string) => `${kind}:${ip}`;
 /** Too many wrong tries from this address in the last 10 minutes? */

@@ -57,6 +57,9 @@ const DAY = 86400000;
   await fake(200, { ok: true, token: shortToken, pub: otherPub, now: Date.now() });
   await forceRefresh(); await openStation();
   ok(payload((await lic()).token).until === p0.until, 'a license signed by another key is not taken (the code keeps its end)');
+  ok(!!(await lic()).otherKeyAt, 'the device notes that the site answered with another key');
+  await d.waitForSelector('[data-testid="notice-enter-code"]', { timeout: 10000 }).catch(() => {});
+  ok((await d.locator('body').innerText()).includes('بمفتاح توقيع غير مفتاح رمز') && await d.locator('[data-testid="notice-enter-code"]').count() === 1, 'the stations say so, with «إدخال الرمز» to confirm a new key');
   await d.unroute('**/api/license/check');
 
   // ── The real owner's stop still locks, and resuming opens again ──
@@ -68,6 +71,7 @@ const DAY = 86400000;
   await c.locator('button[aria-label="إعادة تفعيل"]').click(); await o.waitForTimeout(600);
   await d.click('button:has-text("تحقق الآن")'); await d.waitForTimeout(1800);
   ok(await d.locator('div[role=dialog]').count() === 0, 'resumed: open again');
+  ok(!(await lic()).otherKeyAt, 'an answer with the code\'s own key clears the note');
 
   // ── «ضمان الاستمرارية» ──
   c = await card();

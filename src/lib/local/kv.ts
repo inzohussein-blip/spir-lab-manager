@@ -194,6 +194,9 @@ export function kvDataEntries(): [string, string][] {
 }
 /** True for a key of the stations' data (what kvDataEntries lists). */
 export const kvIsDataKey = isData;
+/** Station data that belongs to this device only (its sample-number letter and counter, its last
+ *  backup, a session unlock, its sync identity) — never synced, never in «النسخة الشاملة». */
+export const kvIsDeviceOnly = (k: string) => DEVICE_ONLY.has(k);
 /** Approximate bytes kept under this prefix (UTF-16 ≈ 2 bytes a character). */
 export function kvBytes(prefix: string): number {
   let bytes = 0;

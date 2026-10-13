@@ -147,7 +147,8 @@ export default function FullBackupPage() {
       <section className={card}>
         <div className="mb-1 flex items-center gap-2 font-bold"><Upload className="size-4 text-brand" /> استعادة نسخة شاملة</div>
         <p className="mb-3 text-xs text-muted">على حاسوب جديد، أو في النسخة المحلية من التطبيق: اختر الملف، راجع ما فيه، ثم استعده. تحلّ بياناته محلّ بيانات المحطات على هذا الجهاز.
-          لجمع بيانات حاسوبين بدل الاستبدال استعمل «المزامنة بملف»: تأخذ الأحدث لكل سجل.</p>
+          لجمع بيانات حاسوبين بدل الاستبدال استعمل «المزامنة بملف»: تأخذ الأحدث لكل سجل.
+          الاستعادة تخص هذا الحاسوب وحده: لا تُرسل إلى حواسيب المختبر الأخرى، وعند المزامنة التالية يصل منها ما هو أحدث.</p>
         <button type="button" disabled={!!busy} onClick={() => file.current?.click()} className={`${btn} border border-line hover:bg-canvas`} data-testid="full-backup-pick">
           <Upload className="size-4" /> اختيار ملف النسخة
         </button>
