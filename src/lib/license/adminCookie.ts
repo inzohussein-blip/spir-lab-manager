@@ -4,10 +4,10 @@ import type { LicenseModule } from "./modules";
 /**
  * Cookie that lets a licensed device open the full admin panel. Issued with the device license
  * (only when the lab code includes "admin"), checked by the middleware. Edge-safe: HS256 with
- * AUTH_SECRET (the same secret as the login session).
+ * AUTH_SECRET (the same secret as the login session). Without it, the owner's LICENSE_ADMIN_PASSWORD
+ * (the cookie is only issued and checked with lab codes on, which need it) — never a key written in the code.
  */
-const DEV_KEY = "dev-insecure-key-change-me-in-production-00000000";
-const secret = () => new TextEncoder().encode("lab-admin-license:" + (process.env.AUTH_SECRET || DEV_KEY));
+const secret = () => new TextEncoder().encode("lab-admin-license:" + (process.env.AUTH_SECRET || `pw:${process.env.LICENSE_ADMIN_PASSWORD ?? ""}`));
 
 /** Cookies last at most a week, so a stopped code or removed panel takes effect soon. */
 export const ADMIN_COOKIE_MAX_MS = 7 * 86_400_000;

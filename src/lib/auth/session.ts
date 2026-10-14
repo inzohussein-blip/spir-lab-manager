@@ -1,7 +1,9 @@
 import "server-only";
 import { cookies } from "next/headers";
 import { SignJWT, jwtVerify } from "jose";
+import { randomBytes } from "node:crypto";
 import { labTarget } from "@/lib/db/lab";
+import { mainQuery } from "@/lib/db";
 import { cookieSecure } from "./cookieSecure";
 
 /**
@@ -10,11 +12,23 @@ import { cookieSecure } from "./cookieSecure";
  */
 
 const COOKIE = "lab_session";
-const DEV_KEY = "dev-insecure-key-change-me-in-production-00000000";
 
-function secret(): Uint8Array {
-  const s = process.env.AUTH_SECRET || DEV_KEY;
-  return new TextEncoder().encode(s);
+/** Without AUTH_SECRET (a lab's local copy, a site set up without it), sessions are signed with a
+ *  random secret made once and kept in the site's database — never with a key anyone could read in
+ *  the code, which would let a made-up cookie open the panel as its manager. */
+let made: Promise<Uint8Array> | null = null;
+async function madeSecret(): Promise<Uint8Array> {
+  await mainQuery(`create table if not exists app_secrets (k text primary key, v text not null)`);
+  await mainQuery(`insert into app_secrets (k, v) values ('session', $1) on conflict (k) do nothing`, [randomBytes(48).toString("base64url")]);
+  const r = await mainQuery<{ v: string }>(`select v from app_secrets where k = 'session'`);
+  if (!r[0]?.v) throw new Error("no session secret");
+  return new TextEncoder().encode(r[0].v);
+}
+async function secret(): Promise<Uint8Array> {
+  const s = process.env.AUTH_SECRET;
+  if (s) return new TextEncoder().encode(s);
+  made ??= madeSecret().catch((e) => { made = null; throw e; });
+  return made;
 }
 
 export interface SessionUser {
@@ -34,7 +48,7 @@ export async function createSession(user: SessionUser): Promise<void> {
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("7d")
-    .sign(secret());
+    .sign(await secret());
   (await cookies()).set(COOKIE, token, {
     httpOnly: true,
     secure: await cookieSecure(),
@@ -49,7 +63,7 @@ export async function getSession(): Promise<SessionUser | null> {
   if (!token) return null;
   let payload;
   try {
-    ({ payload } = await jwtVerify(token, secret()));
+    ({ payload } = await jwtVerify(token, await secret()));
   } catch {
     return null;
   }
