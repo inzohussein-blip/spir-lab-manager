@@ -18,7 +18,7 @@ export default function SuppliersPage() {
 
   useEffect(() => { setRows(getSuppliers()); setPurchases(getPurchases()); setDebts(getSettings().debts === true); }, []);
   // Settings → «ديون الموردين»: each supplier's purchases, what was paid, and what is still owed.
-  const of = (s: Supplier) => purchases.filter((p) => p.supplierId === s.id || (!p.supplierId && p.supplierName?.trim() === s.name.trim()));
+  const of = (s: Supplier) => purchases.filter((p) => !p.ordered && (p.supplierId === s.id || (!p.supplierId && p.supplierName?.trim() === s.name.trim())));
   const sum = (list: Purchase[], f: (p: Purchase) => number) => list.reduce((t, p) => t + f(p), 0);
 
   function persist(next: Supplier[]) { setRows(next); saveSuppliers(next); }

@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Plus, Trash2, Pencil, PackagePlus, Search, Package, X, FlaskConical, Syringe, ShieldCheck } from "lucide-react";
+import { Plus, Trash2, Pencil, PackagePlus, Search, Package, X, FlaskConical, Syringe, ShieldCheck, Microscope } from "lucide-react";
 import { getStock, saveStock, getTests, uid, stockTestIds, isByHand, type StockItem, type StationTest } from "@/lib/station/store";
 import { consumablePresets } from "@/lib/purchasing/presets";
+import { LAB_DEVICES, LAB_MATERIALS, type CatalogMaterial } from "@/lib/purchasing/catalog";
+import { deviceNames } from "@/lib/purchasing/store";
 import { NumberInput } from "@/components/local/NumberInput";
 import { qcLinks } from "@/lib/local/links";
 import { getSettings, getKits, saveKits, type PurchasingSettings, type Kit } from "@/lib/purchasing/store";
@@ -13,7 +15,7 @@ import { TestPicker, inp, Modal, Chips } from "./stockParts";
 type Tab = "items" | "tests";
 /** A reagent is taken with the results (one per test); a supply is issued by the examiner. */
 type Kind = "reagent" | "supply";
-const blank = { name: "", qty: "", minQty: "", expiry: "", testIds: [] as string[], kind: "reagent" as Kind, price: "", barcode: "" };
+const blank = { name: "", device: "", qty: "", minQty: "", expiry: "", testIds: [] as string[], kind: "reagent" as Kind, price: "", barcode: "" };
 /** The name a test's own material gets when made from «الأصناف». */
 const materialName = (t: StationTest) => `كاشف ${t.name_ar}`;
 
@@ -33,6 +35,7 @@ export function ItemsPanel() {
   /** The item being edited, or the kind of a new one. */
   const [editing, setEditing] = useState<StockItem | Kind | null>(null);
   const [kitEditing, setKitEditing] = useState<Kit | "new" | null>(null);
+  const [catalogOpen, setCatalogOpen] = useState(false);
 
   useEffect(() => {
     const list = getStock();
@@ -89,6 +92,24 @@ export function ItemsPanel() {
     const have = new Set(rows.map((s) => s.name.trim()));
     persist([...rows, ...missing.filter((t) => !have.has(materialName(t))).map((t): StockItem => ({ id: uid(), name: materialName(t), qty: 0, testIds: [t.id] }))]);
   }
+  /** «مواد وأجهزة الفحوصات»: the chosen catalog materials into the stock room (0, to be bought), each
+   *  with its device and its tests; one already there takes the device and tests it lacks. */
+  function addCatalog(list: CatalogMaterial[]) {
+    const byCode = new Map(tests.filter((t) => t.code).map((t) => [t.code!.toUpperCase(), t.id]));
+    const key = (x: string) => x.trim().toLowerCase();
+    let next = [...rows];
+    for (const m of list) {
+      const ids = m.codes.map((c) => byCode.get(c)).filter(Boolean) as string[];
+      const at = next.findIndex((s) => key(s.name) === key(m.name));
+      if (at >= 0) {
+        const s = next[at];
+        next[at] = { ...s, device: s.device || m.device, ...(ids.length ? { testIds: Array.from(new Set([...stockTestIds(s), ...ids])), linkedTestId: undefined } : {}) };
+      } else {
+        next = [...next, { id: uid(), name: m.name, qty: 0, device: m.device, ...(ids.length ? { testIds: ids } : {}), ...(m.byHand ? { byHand: true } : {}) }];
+      }
+    }
+    persist(next); setCatalogOpen(false);
+  }
   /** The lab's common supplies (missing ones only), issued by the examiner. */
   function addPresets() {
     const have = new Set(rows.map((r) => r.name.trim()));
@@ -137,6 +158,7 @@ export function ItemsPanel() {
         </label>
         <button onClick={() => setEditing("reagent")} data-testid="item-new" className={`${btn} bg-amber-600 text-white hover:bg-amber-700`}><Plus className="size-4" /> صنف جديد</button>
         <button onClick={() => setKitEditing("new")} data-testid="kit-new" className={`${btn} border border-violet-300 text-violet-700 hover:bg-violet-50`}><Package className="size-4" /> كت جديد</button>
+        <button onClick={() => setCatalogOpen(true)} data-testid="catalog-open" className={`${btn} border border-teal-300 text-teal-800 hover:bg-teal-50`}><Microscope className="size-4" /> مواد وأجهزة الفحوصات</button>
       </div>
       <Chips label="العرض" value={tab} onChange={setTab} options={[["items", "الأصناف والكتات", rows.length + kits.length], ["tests", "التحاليل وموادها", tests.length]]} />
 
@@ -165,6 +187,7 @@ export function ItemsPanel() {
                         <tr key={s.id} data-item={s.name} className="border-b border-line last:border-0 hover:bg-canvas">
                           <td className="px-4 py-2.5">
                             <div className="font-semibold">{s.name}</div>
+                            {s.device && <div className="text-[11px] text-muted" data-testid="item-device">{s.device}</div>}
                             {k && <div className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-violet-700" data-testid="item-kits"><Package className="size-3" /> يأتي في: {k.join("، ")}</div>}
                           </td>
                           <td className="px-4 py-2.5 text-xs text-muted" title={n.join("، ")}>
@@ -278,6 +301,7 @@ export function ItemsPanel() {
         <ItemDialog item={typeof editing === "string" ? null : editing} kind={typeof editing === "string" ? editing : undefined} tests={tests} opts={opts}
           onClose={() => setEditing(null)} onSave={saveItem} onDelete={typeof editing === "string" ? undefined : () => delItem(editing.id)} />
       )}
+      {catalogOpen && <CatalogDialog stock={rows} tests={tests} onClose={() => setCatalogOpen(false)} onAdd={addCatalog} />}
       {kitEditing && (
         <KitDialog kit={kitEditing === "new" ? null : kitEditing} stock={rows} barcode={opts.barcode === true} onClose={() => setKitEditing(null)} onSave={saveKit} />
       )}
@@ -290,7 +314,7 @@ function ItemDialog({ item, kind, tests, opts, onClose, onSave, onDelete }: {
   item: StockItem | null; kind?: Kind; tests: StationTest[]; opts: PurchasingSettings; onClose: () => void; onSave: (s: StockItem) => void; onDelete?: () => void;
 }) {
   const [f, setF] = useState(() => item ? {
-    name: item.name, qty: String(item.qty), minQty: item.minQty != null ? String(item.minQty) : "", expiry: item.expiry ?? "",
+    name: item.name, device: item.device ?? "", qty: String(item.qty), minQty: item.minQty != null ? String(item.minQty) : "", expiry: item.expiry ?? "",
     testIds: stockTestIds(item), kind: (isByHand(item) ? "supply" : "reagent") as Kind, price: item.price != null ? String(item.price) : "", barcode: item.barcode ?? "",
   } : { ...blank, kind: kind ?? "reagent" });
   const [err, setErr] = useState("");
@@ -302,6 +326,8 @@ function ItemDialog({ item, kind, tests, opts, onClose, onSave, onDelete }: {
     onSave({
       ...(price != null ? { price } : {}),
       ...(barcode ? { barcode } : {}),
+      ...(item?.lot ? { lot: item.lot } : {}),
+      ...(f.device.trim() ? { device: f.device.trim().slice(0, 120) } : {}),
       id: item?.id ?? uid(),
       name: f.name.trim(),
       qty: Number(f.qty) || 0,
@@ -321,7 +347,13 @@ function ItemDialog({ item, kind, tests, opts, onClose, onSave, onDelete }: {
   return (
     <Modal title={item ? `تعديل: ${item.name}` : supply ? "مستلزم جديد" : "صنف جديد"} onClose={onClose} testid="item-form" wide>
       <form onSubmit={(e) => { e.preventDefault(); submit(); }} className="flex flex-col gap-4">
-        <label className="text-sm font-medium">اسم الصنف *<input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} autoFocus className={`mt-1 ${inp} text-base`} /></label>
+        <div className="grid gap-3 sm:grid-cols-[2fr_1fr]">
+          <label className="text-sm font-medium">اسم الصنف *<input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} autoFocus className={`mt-1 ${inp} text-base`} /></label>
+          <label className="text-sm font-medium">الجهاز <span className="font-normal text-muted">(اختياري)</span>
+            <input value={f.device} onChange={(e) => setF({ ...f, device: e.target.value })} list="item-devices" aria-label="جهاز الصنف" className={`mt-1 ${inp}`} />
+            <datalist id="item-devices">{deviceNames().map((d) => <option key={d} value={d} />)}</datalist>
+          </label>
+        </div>
         <div className="flex gap-2">
           {kindBtn("reagent", "كاشف / مادة", "يُحسم مع النتائج: وحدة لكل تحليل")}
           {kindBtn("supply", "مستلزم", "أنبوب، سرنجة، قفازات… يصرفه الفاحص بنفسه")}
@@ -411,6 +443,54 @@ function KitDialog({ kit, stock, barcode, onClose, onSave }: {
           <button type="button" onClick={onClose} className="rounded-xl border border-line px-4 py-3 text-sm hover:bg-canvas">إلغاء</button>
         </div>
       </form>
+    </Modal>
+  );
+}
+
+/** «مواد وأجهزة الفحوصات»: what each of the lab's tests needs, by device — the reagents linked to their
+ *  tests, and what the device uses by the day (issued by hand). Those already in the stock room are
+ *  marked; the rest start ticked. Only the materials of tests the lab has are offered. */
+function CatalogDialog({ stock, tests, onClose, onAdd }: { stock: StockItem[]; tests: StationTest[]; onClose: () => void; onAdd: (list: CatalogMaterial[]) => void }) {
+  const codes = new Set(tests.map((t) => (t.code ?? "").toUpperCase()));
+  const testName = new Map(tests.map((t) => [(t.code ?? "").toUpperCase(), t.name_ar]));
+  const have = new Set(stock.map((s) => s.name.trim().toLowerCase()));
+  const offered = LAB_MATERIALS.filter((m) => !m.codes.length || m.codes.some((c) => codes.has(c)));
+  const [on, setOn] = useState<Set<string>>(() => new Set(offered.filter((m) => !have.has(m.name.trim().toLowerCase())).map((m) => m.name)));
+  const flip = (n: string) => setOn((s) => { const x = new Set(s); if (x.has(n)) x.delete(n); else x.add(n); return x; });
+  const chosen = offered.filter((m) => on.has(m.name));
+  return (
+    <Modal title="مواد وأجهزة الفحوصات" onClose={onClose} testid="catalog-form" wide>
+      <p className="mb-3 text-sm text-muted">لكل جهاز في المختبر المواد التي تحتاجها فحوصاته. تُضاف إلى المخزن بكمية 0 (تُكمَّل بالشراء) مع جهازها والتحاليل التي تستعملها، فتظهر اقتراحاتٍ في «إدخال مخزني» ويُحسم منها مع النتائج. الموجود في المخزن يأخذ ما ينقصه من الجهاز والتحاليل.</p>
+      <div className="flex max-h-[60vh] flex-col gap-3 overflow-y-auto">
+        {LAB_DEVICES.map((d) => {
+          const list = offered.filter((m) => m.device === d);
+          if (!list.length) return null;
+          return (
+            <div key={d} className="rounded-xl border border-line" data-catalog-device={d}>
+              <div className="flex items-center gap-2 border-b border-line bg-canvas/60 px-3 py-2 text-sm font-bold">
+                {d} <span className="text-xs font-normal text-muted">({list.length})</span>
+                <button type="button" onClick={() => setOn((s) => new Set([...s, ...list.map((m) => m.name)]))} className="ms-auto text-xs font-normal text-amber-700 hover:underline">الكل</button>
+                <button type="button" onClick={() => setOn((s) => new Set([...s].filter((n) => !list.some((m) => m.name === n))))} className="text-xs font-normal text-muted hover:underline">لا شيء</button>
+              </div>
+              <ul className="divide-y divide-line/60">
+                {list.map((m) => (
+                  <li key={m.name} className="flex items-start gap-2 px-3 py-1.5 text-sm">
+                    <input type="checkbox" checked={on.has(m.name)} onChange={() => flip(m.name)} aria-label={m.name} className="mt-1" />
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium">{m.name}{have.has(m.name.trim().toLowerCase()) && <span className="ms-1.5 rounded-full bg-teal-50 px-1.5 text-[10px] font-semibold text-brand-dark">في المخزن</span>}</div>
+                      <div className="text-[11px] text-muted">{m.byHand ? "يُصرف باليد (يومي)" : m.codes.filter((c) => codes.has(c)).map((c) => testName.get(c)).join("، ")}</div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-4 flex gap-2">
+        <button type="button" onClick={() => onAdd(chosen)} disabled={!chosen.length} data-testid="catalog-add" className="flex-1 rounded-xl bg-amber-600 px-4 py-3 text-base font-semibold text-white hover:bg-amber-700 disabled:opacity-50">إضافة المحدد ({chosen.length})</button>
+        <button type="button" onClick={onClose} className="rounded-xl border border-line px-4 py-3 text-sm hover:bg-canvas">إلغاء</button>
+      </div>
     </Modal>
   );
 }

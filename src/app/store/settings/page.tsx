@@ -9,7 +9,7 @@ import { StockOptionsCard, SettingCard, Toggle } from "@/components/local/Settin
 import { SettingsLayout, notifySaved } from "@/components/SettingsLayout";
 import { THEME_KEYS } from "@/lib/local/theme";
 import { useEffect, useRef, useState } from "react";
-import { Settings, Download, Upload, FileText, HardDrive, ShieldCheck, Boxes, SlidersHorizontal, Wallet, Tag, ScanBarcode } from "lucide-react";
+import { Settings, Download, Upload, FileText, HardDrive, ShieldCheck, Boxes, SlidersHorizontal, Wallet, Tag, ScanBarcode, Truck, CalendarDays } from "lucide-react";
 import { exportBackup, importBackup, getSettings, saveSettings, type PurchasingSettings } from "@/lib/purchasing/store";
 
 export default function StoreSettingsPage() {
@@ -58,7 +58,7 @@ export default function StoreSettingsPage() {
     const next = { ...getSettings(), ...patch };
     saveSettings(next); setS(next); notifySaved();
   }
-  const extrasOn = [s.debts, s.prices, s.barcode].filter(Boolean).length;
+  const extrasOn = [s.debts, s.prices, s.barcode, s.supplierFields, s.showDate].filter(Boolean).length;
 
   return (
     <SettingsLayout
@@ -77,9 +77,21 @@ export default function StoreSettingsPage() {
           content: <StockOptionsCard from="purchasing" />,
         },
         {
-          id: "extras", label: "خيارات إضافية", hint: "ديون الموردين، الأسعار، الباركود", icon: <SlidersHorizontal />, badge: extrasOn ? `${extrasOn} مفعّل` : null,
+          id: "extras", label: "خيارات إضافية", hint: "المورّد والتاريخ، ديون الموردين، الأسعار، الباركود", icon: <SlidersHorizontal />, badge: extrasOn ? `${extrasOn} مفعّل` : null,
           content: (
             <SettingCard title="خيارات إضافية" icon={<SlidersHorizontal />} desc="كلها موقوفة في البداية؛ تظهر في صفحات المحطة حين تشغّلها." testid="store-extras">
+              <Toggle
+                checked={s.supplierFields === true}
+                onChange={(v) => setOption({ supplierFields: v })}
+                label="اسم المورّد ورقم الفاتورة"
+                desc={<><Truck className="me-1 inline size-3.5" />خانتا «اسم المورّد» و«رقم فاتورة المورّد» في «عملية شراء جديدة». تظهران دائماً مع «ديون الموردين».</>}
+              />
+              <Toggle
+                checked={s.showDate === true}
+                onChange={(v) => setOption({ showDate: v })}
+                label="تاريخ الشراء"
+                desc={<><CalendarDays className="me-1 inline size-3.5" />خانة التاريخ في «عملية شراء جديدة» لكتابة تاريخ آخر؛ عند الإيقاف تُسجَّل العملية بتاريخ اليوم تلقائياً.</>}
+              />
               <Toggle
                 checked={s.debts === true}
                 onChange={(v) => setOption({ debts: v })}

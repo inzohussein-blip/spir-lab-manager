@@ -15,6 +15,13 @@ const SEEN_KEY = "local.license.seen.v1";
 const ENABLED_KEY = "local.license.enabled";
 const CONTACT_KEY = "local.license.contact";
 const SIGNUP_KEY = "local.license.signup";
+/** «رمز تجديد بلا إنترنت» entered on this device (a signed new end for its code). */
+const RENEW_KEY = "local.license.renew.v1";
+const RENEW_PREFIX = "SPIR-RENEW.";
+/** «ضمان الاستمرارية» starts only when the server was out of reach this long before the end. */
+export const CONTINUITY_AFTER_DAYS = 14;
+/** A signed refusal older than this is not taken (an old one replayed by another server). */
+const REFUSAL_MAX_AGE = 2 * 86_400_000;
 
 const DAY = 86_400_000;
 /** This app's version (set at build, next.config): sent with every check, shown in /license. */
@@ -38,11 +45,14 @@ interface Stored {
   version?: string;
   /** The lab's own database, when the code is linked to one (see lib/sync). */
   sync?: DeviceSync | null;
+  /** The site last answered with a key other than this license's (its own key lost or replaced,
+   *  or another site on the address): nothing from it is taken; entering the lab code again does. */
+  otherKeyAt?: number;
 }
 
 export type LicenseState =
   | { kind: "off" }
-  | { kind: "ok"; lab: string; until: number; mods: LicenseModule[] }
+  | { kind: "ok"; lab: string; until: number; mods: LicenseModule[]; /** Working on «ضمان الاستمرارية» (the code's end passed with the server out of reach). */ cont?: boolean }
   | { kind: "grace"; until: number }
   | { kind: "need" }
   | { kind: "locked"; reason: "expired" | "stopped" | "grace_over" | "clock" | "gone"; lab?: string; until?: number }
@@ -99,6 +109,27 @@ async function verify(s: Stored): Promise<LicensePayload | null> {
   }
 }
 
+/** A document signed with the license's own key (its public half kept with the license). */
+async function verifyWith(pub: JsonWebKey, token: unknown): Promise<Record<string, unknown> | null> {
+  if (typeof token !== "string" || token.length > 4000) return null;
+  try {
+    const { importJWK, jwtVerify } = await import("jose");
+    const { payload } = await jwtVerify(token, await importJWK(pub as never, "ES256"), { algorithms: ["ES256"] });
+    return payload as Record<string, unknown>;
+  } catch { return null; }
+}
+/** The same signing key (a refresh signed by another key — a new database, another site — is not taken). */
+const sameKey = (a?: JsonWebKey | null, b?: JsonWebKey | null) => !!a && !!b && a.kty === b.kty && a.crv === b.crv && a.x === b.x && a.y === b.y;
+
+interface Renewal { lid: string; lab: string; mods: LicenseModule[]; until: number; cont?: number }
+/** The renewal entered on this device, when it is signed with this license's key and for its code. */
+async function renewalFor(s: Stored, lid: string): Promise<Renewal | null> {
+  const t = readJson<{ token: string }>(RENEW_KEY);
+  if (!t) return null;
+  const r = await verifyWith(s.pub, t.token);
+  return r && r.typ === "renew" && r.lid === lid && typeof r.until === "number" && Array.isArray(r.mods) ? (r as unknown as Renewal) : null;
+}
+
 /** Remember the latest time seen, so turning the clock back cannot extend a period. */
 function clockNow(): { now: number; rolledBack: boolean } {
   const real = Date.now();
@@ -116,14 +147,27 @@ export async function evaluate(module?: LicenseModule): Promise<LicenseState> {
   if (s) {
     const p = await verify(s);
     if (p && p.dev === deviceId()) {
-      if (rolledBack) return { kind: "locked", reason: "clock", lab: p.lab, until: p.until };
-      if (s.blocked) {
+      // A renewal entered without internet moves the end (and the stations) when it is later.
+      const rn = await renewalFor(s, p.lid);
+      const until = rn && rn.until > p.until ? rn.until : p.until;
+      const mods = rn && rn.until > p.until ? rn.mods : p.mods;
+      const cont = rn && rn.until > p.until ? rn.cont ?? p.cont : p.cont;
+      if (rolledBack) return { kind: "locked", reason: "clock", lab: p.lab, until };
+      if (s.blocked && !(s.blocked.error === "expired" && until > now)) {
         const reason = s.blocked.error === "expired" ? "expired" : s.blocked.error === "stopped" ? "stopped" : "gone";
-        return { kind: "locked", reason, lab: p.lab, until: p.until };
+        return { kind: "locked", reason, lab: p.lab, until };
       }
-      if (p.until <= now) return { kind: "locked", reason: "expired", lab: p.lab, until: p.until };
-      if (module && !p.mods.includes(module)) return { kind: "module_off", lab: p.lab, module };
-      return { kind: "ok", lab: p.lab, until: p.until, mods: p.mods };
+      let onCont = false;
+      if (until <= now) {
+        // «ضمان الاستمرارية» (the owner's choice, signed in the license): the server could not be reached
+        // for a long while before the end — the lab keeps working for the days given, then it locks.
+        // A site answering with another key was reached too: not «out of reach».
+        const heard = Math.max(s.checkedAt || 0, s.otherKeyAt || 0);
+        if (cont && cont > 0 && !s.blocked && until - heard >= CONTINUITY_AFTER_DAYS * DAY && now < until + cont * DAY) onCont = true;
+        else return { kind: "locked", reason: "expired", lab: p.lab, until };
+      }
+      if (module && !mods.includes(module)) return { kind: "module_off", lab: p.lab, module };
+      return onCont ? { kind: "ok", lab: p.lab, until: until + (cont ?? 0) * DAY, mods, cont: true } : { kind: "ok", lab: p.lab, until, mods };
     }
   }
   // Activated before lab codes (or by the old shared code): 30 days, counted from the first open after the update.
@@ -155,8 +199,10 @@ function store(d: { token: string; pub: JsonWebKey; now?: number; message?: stri
 
 export type ActivateResult = { ok: true } | { ok: false; error: string; lab?: string };
 
-/** Enter a lab code on this device (also used to renew with a new code). */
+/** Enter a lab code on this device (also used to renew with a new code). A «رمز تجديد بلا إنترنت»
+ *  (SPIR-RENEW.…) is taken here without the server: it must be signed with this license's key. */
 export async function activateCode(code: string): Promise<ActivateResult> {
+  if (code.trim().startsWith(RENEW_PREFIX)) return applyRenewal(code.trim());
   try {
     const r = await fetch("/api/license/activate", {
       method: "POST", headers: { "content-type": "application/json" },
@@ -168,6 +214,19 @@ export async function activateCode(code: string): Promise<ActivateResult> {
   } catch {
     return { ok: false, error: "offline" };
   }
+}
+
+/** «رمز تجديد بلا إنترنت»: kept when it is for this device's code and signed with its key. */
+async function applyRenewal(code: string): Promise<ActivateResult> {
+  const s = readJson<Stored>(LIC_KEY);
+  const p = s ? await verify(s) : null;
+  if (!s || !p || p.dev !== deviceId()) return { ok: false, error: "renew_no_code" };
+  const r = await verifyWith(s.pub, code.slice(RENEW_PREFIX.length));
+  if (!r || r.typ !== "renew") return { ok: false, error: "renew_invalid" };
+  if (r.lid !== p.lid) return { ok: false, error: "renew_other", lab: String(r.lab ?? "") };
+  write(RENEW_KEY, JSON.stringify({ token: code.slice(RENEW_PREFIX.length) }));
+  try { window.dispatchEvent(new Event(LICENSE_EVENT)); } catch { /* not in a browser */ }
+  return { ok: true };
 }
 
 /** Refresh from the server when online (at most every few hours unless forced, or at once after
@@ -184,9 +243,20 @@ export async function refreshLicense(force = false, maxAge = REFRESH_MS): Promis
     });
     const d = await r.json().catch(() => null);
     if (!d) return;
-    if (d.ok === true && typeof d.token === "string" && d.pub) store(d);
-    else if ((r.status === 403 || r.status === 404) && REFUSED.has(d.error)) {
-      write(LIC_KEY, JSON.stringify({ ...s, checkedAt: Date.now(), blocked: { error: d.error, at: Date.now() } } satisfies Stored));
+    // Only an answer signed with this license's own key counts: a new license from the same key, or a
+    // refusal it signed (for this code and device, and recent). Anything else changes nothing.
+    const otherKey = () => {
+      write(LIC_KEY, JSON.stringify({ ...s, otherKeyAt: Date.now() } satisfies Stored));
+      try { window.dispatchEvent(new Event(LICENSE_EVENT)); } catch { /* not in a browser */ }
+    };
+    if (d.ok === true && typeof d.token === "string" && d.pub) {
+      if (sameKey(d.pub, s.pub)) store(d); else otherKey();
+    } else if ((r.status === 403 || r.status === 404) && REFUSED.has(d.error)) {
+      const proof = await verifyWith(s.pub, d.proof);
+      const at = Number(proof?.at);
+      if (proof && proof.typ === "refusal" && proof.lid === p.lid && proof.dev === deviceId() && proof.err === d.error && Math.abs(Date.now() - at) < REFUSAL_MAX_AGE) {
+        write(LIC_KEY, JSON.stringify({ ...s, checkedAt: Date.now(), blocked: { error: d.error, at: Date.now() } } satisfies Stored));
+      } else if (d.proof) otherKey(); // signed, but not with this license's key
     }
   } catch { /* offline — try again next time */ }
 }
@@ -194,6 +264,12 @@ export async function refreshLicense(force = false, maxAge = REFRESH_MS): Promis
 /** The provider's current note for this lab (empty when none). */
 export function providerMessage(): string {
   return readJson<Stored>(LIC_KEY)?.message?.trim() ?? "";
+}
+
+/** When the site last answered with another signing key than this device's license (null: not lately). */
+export function licenseOtherKeyAt(): number | null {
+  const t = readJson<Stored>(LIC_KEY)?.otherKeyAt;
+  return t && Date.now() - t < 14 * DAY ? t : null;
 }
 
 /** When this device last heard from the server about its code (null: never / no code). */

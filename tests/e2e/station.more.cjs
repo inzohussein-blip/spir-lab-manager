@@ -173,7 +173,7 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
 
   // ── «المخزن»: add and issue by hand ──
   const ureaQty = async () => ((await kv(p, 'station.stock.v1')) || []).find((x) => x.name === MAT)?.qty;
-  await p.goto(B + '/store/inventory'); await p.waitForSelector(`li[data-stock="${MAT}"]`, { timeout: 20000 });
+  await p.goto(B + '/store/inventory'); await p.waitForSelector(`tr[data-stock="${MAT}"]`, { timeout: 20000 });
   ok(((await kv(p, 'station.stockOptions.v1'))?.mode ?? 'auto') === 'auto', 'stock room: deduction is automatic by default');
   await p.click(`button[aria-label="إضافة إلى ${MAT}"]`);
   const md = p.locator('[data-testid="move-dialog"]');
@@ -184,7 +184,7 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   await p.click(`button[aria-label="صرف من ${MAT}"]`); await md.locator('input[aria-label="كمية الحركة"]').press('Enter');
   ok(await settled(async () => (await ureaQty()) === 5), 'issued by hand: 1 by default, Enter saves (6 → 5)');
   await p.click('button[role=tab]:has-text("نفد أو ناقص")');
-  ok(await p.locator(`li[data-stock="${MAT}"]`).count() === 0 && await p.locator('li[data-stock]').count() >= 1, 'the «نفد أو ناقص» filter shows only what ran low');
+  ok(await p.locator(`tr[data-stock="${MAT}"]`).count() === 0 && await p.locator('tr[data-stock]').count() >= 1, 'the «نفد أو ناقص» filter shows only what ran low');
 
   // ── Results ↔ stock: automatic ──
   const ureaVisit = async (name) => {

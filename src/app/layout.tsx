@@ -15,6 +15,7 @@ import { getLabIdentity, labName } from "@/lib/lab-identity";
 import { navBadges } from "@/lib/desk/badges";
 import { isBarePath } from "@/lib/barePaths";
 import { LayoutGuard } from "@/components/LayoutGuard";
+import { uiScript } from "@/lib/local/uiScript";
 // Arabic UI font bundled with the app (no Google Fonts request) — works offline.
 import "@fontsource/ibm-plex-sans-arabic/arabic-400.css";
 import "@fontsource/ibm-plex-sans-arabic/arabic-500.css";
@@ -62,6 +63,8 @@ export default async function RootLayout({
         <link rel="apple-touch-icon" href="/icon-192.png" />
         {/* Build id for the stations' offline copy (public/local-sw.js). */}
         <meta name="lab-build" content={process.env.LAB_BUILD} />
+        {/* The look (classic by default, or the new green one chosen on the welcome page), before paint. */}
+        <script dangerouslySetInnerHTML={{ __html: uiScript }} />
         {/* No-flash theme: light unless dark (or «تلقائي» on a dark device) was chosen — before paint. */}
         <script
           dangerouslySetInnerHTML={{
@@ -79,7 +82,7 @@ export default async function RootLayout({
           children
         ) : (
           <OfflineProvider>
-          <div className="flex min-h-screen">
+          <div className="panel flex min-h-screen">
             <Sidebar role={user.role} lab={lab} badges={badges} />
             <div className="flex min-w-0 flex-1 flex-col">
               <Topbar user={user} lab={lab} badges={badges} />

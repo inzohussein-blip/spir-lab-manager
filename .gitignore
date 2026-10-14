@@ -8,3 +8,6 @@ next-env.d.ts
 
 # Test image created by CI / the browser tests (tests/e2e/training.images.cjs)
 public/lab-images/test/
+
+# النسخة المحلية (scripts/local)
+lab-data/

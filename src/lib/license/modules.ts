@@ -24,6 +24,8 @@ export interface LicensePayload {
   dev: string;      // device id it is bound to
   mods: LicenseModule[];
   until: number;    // expiry, ms since epoch
+  /** «ضمان الاستمرارية»: days of work past `until` when the server was out of reach (see lib/license/client). */
+  cont?: number;
   iat?: number;
 }
 

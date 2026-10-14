@@ -122,6 +122,8 @@ export interface StockItem {
   price?: number;
   /** The package's barcode — «… ← الباركود». */
   barcode?: string;
+  /** The device it is used on (written with the purchase that brought it, «المشتريات ← الجهاز»). */
+  device?: string;
 }
 /** A supply the examiner issues by hand (see StockItem.byHand). */
 export const isByHand = (s: StockItem): boolean => s.byHand === true || s.perVisit === true;
@@ -413,9 +415,11 @@ export function setDelivered(ids: string[], delivered: boolean): boolean {
   }));
 }
 /** Delete = move to the recycle bin (restorable for 30 days). */
-export function deleteVisits(ids: string[]): void {
+export function deleteVisits(ids: string[], giveBack = false): void {
   const set = new Set(ids);
   const all = getVisits();
+  // Entered by mistake: their materials go back to the stock room (restoring takes them again).
+  if (giveBack) for (const v of all) if (set.has(v.id)) releaseVisitStock(v.id, undefined, [v.patient.name, v.accession].filter(Boolean).join(" · "));
   toTrash(all.filter((v) => set.has(v.id)).map((item) => ({ kind: "visit" as const, item })));
   write(K_VISITS, all.filter((v) => !set.has(v.id)));
 }
@@ -450,6 +454,9 @@ export function restoreTrash(ids: string[]): number {
   if (visits.length) {
     const have = new Set(getVisits().map((v) => v.id));
     write(K_VISITS, [...getVisits(), ...visits.filter((v) => !have.has(v.id))].sort((a, b) => b.created_at - a.created_at));
+    // A visit whose materials were given back when deleted takes them again (or waits, in manual mode).
+    const used = getUsed();
+    for (const v of visits) if (!have.has(v.id) && !used[v.id] && Date.now() - v.created_at < USED_DAYS * 86400000) stockForVisit(v.id, v.results.map((r) => r.testId));
   }
   if (patients.length) {
     const have = new Set(getPatients().map((p) => p.id));
@@ -671,15 +678,49 @@ export function deductStockForTests(testIds: string[], ref?: string): StockShort
 /** Per visit: the tests whose materials were already taken from stock (or skipped by hand), so a
  *  visit never uses stock twice — whether deducted on save or issued later from the stock room. */
 const K_USED = "station.stockUsed.v1";
-type StockUsed = Record<string, { at: number; ids: string[] }>;
+/** `skip`: the tests marked «تجاهل» (handled, nothing taken) — nothing to give back for them. */
+type StockUsed = Record<string, { at: number; ids: string[]; skip?: string[] }>;
 const USED_DAYS = 60;
 function getUsed(): StockUsed { return read<StockUsed>(K_USED, {}); }
-function markUsed(visitId: string, ids: string[]): void {
+function markUsed(visitId: string, ids: string[], skipped = false): void {
   const used = getUsed();
   const cut = Date.now() - USED_DAYS * 86400000;
   for (const [k, v] of Object.entries(used)) if (!v || v.at < cut) delete used[k];
-  used[visitId] = { at: Date.now(), ids: Array.from(new Set([...(used[visitId]?.ids ?? []), ...ids])) };
+  const cur = used[visitId];
+  const fresh = ids.filter((id) => !cur?.ids.includes(id));
+  const skip = Array.from(new Set([...(cur?.skip ?? []), ...(skipped ? fresh : [])]));
+  used[visitId] = { at: Date.now(), ids: Array.from(new Set([...(cur?.ids ?? []), ...ids])), ...(skip.length ? { skip } : {}) };
   write(K_USED, used);
+}
+
+/** Units a visit (or some of its tests) took from stock that can still be given back: tests issued
+ *  from stock in the last USED_DAYS days, not those skipped by hand. */
+export function visitStockTaken(visitId: string, testIds?: string[]): number {
+  const e = getUsed()[visitId];
+  if (!e) return 0;
+  const back = (testIds ?? e.ids).filter((id) => e.ids.includes(id) && !e.skip?.includes(id));
+  let n = 0;
+  for (const u of stockUse(getStock(), back).values()) n += u;
+  return n;
+}
+/** Give back to the stock room what a visit's tests took (all its tests, or the ones removed from it),
+ *  and forget them, so a visit restored or a test added again takes its materials once more. */
+export function releaseVisitStock(visitId: string, testIds?: string[], ref?: string): void {
+  const used = getUsed();
+  const e = used[visitId];
+  if (!e) return;
+  const back = (testIds ?? e.ids).filter((id) => e.ids.includes(id) && !e.skip?.includes(id));
+  if (testIds) {
+    const drop = new Set(testIds);
+    const skip = (e.skip ?? []).filter((id) => !drop.has(id));
+    used[visitId] = { at: e.at, ids: e.ids.filter((id) => !drop.has(id)), ...(skip.length ? { skip } : {}) };
+  } else delete used[visitId];
+  write(K_USED, used);
+  if (!back.length) return;
+  const list = getStock();
+  const use = stockUse(list, back);
+  if (!use.size) return;
+  saveStock(list.map((st) => (use.has(st.id) ? { ...st, qty: (Number(st.qty) || 0) + use.get(st.id)! } : st)), "return", ref);
 }
 /** The tests of a visit whose stock was already handled (`before`: its tests before this edit, for
  *  visits saved before this record existed). */
@@ -695,7 +736,7 @@ export function issueVisitStock(visitId: string, testIds: string[], before: stri
   return short;
 }
 /** «تجاهل»: mark a visit's tests as handled without taking anything from stock. */
-export function skipVisitStock(visitId: string, testIds: string[]): void { markUsed(visitId, testIds); }
+export function skipVisitStock(visitId: string, testIds: string[]): void { markUsed(visitId, testIds, true); }
 
 /** On saving results in the lab station: deduct now (auto), or leave them waiting in the stock room
  *  (manual — nothing changes until they are issued). */

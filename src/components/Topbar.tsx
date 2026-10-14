@@ -12,7 +12,7 @@ import type { NavBadges } from "@/components/Sidebar";
 
 export function Topbar({ user, lab, badges }: { user: SessionUser; lab: { name: string; logo: string }; badges?: NavBadges }) {
   return (
-    <header className="no-print sticky top-0 z-20 flex h-14 items-center justify-between gap-3 border-b border-line bg-surface/90 px-4 backdrop-blur md:px-7">
+    <header className="ui-panel-top no-print sticky top-0 z-20 flex h-14 items-center justify-between gap-3 border-b border-line bg-surface/90 px-4 backdrop-blur md:px-7">
       <div className="flex flex-1 items-center gap-3">
         <MobileNav role={user.role} lab={lab} badges={badges} />
         {user.role !== "collector" && <NewButton />}

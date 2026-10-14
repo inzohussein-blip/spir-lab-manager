@@ -1,3 +1,4 @@
+import { UiTopBar } from "@/components/local/UiTopBar";
 import type { ReactNode } from "react";
 import { OfflineReady } from "@/components/local/OfflineReady";
 import { ActivationGate } from "@/components/local/ActivationGate";
@@ -21,7 +22,7 @@ export default function ConnectLayout({ children }: { children: ReactNode }) {
       <LocalThemeApplier storageKey={THEME_KEYS.connect} />
       <LocalDataGate>
         <ConnectSidebar />
-        <main className="min-w-0 flex-1 p-4 md:p-7">{children}</main>
+        <main className="min-w-0 flex-1 p-4 md:p-7"><UiTopBar themeKey={THEME_KEYS.connect} />{children}</main>
       </LocalDataGate>
       <OfflineReady />
     </div>

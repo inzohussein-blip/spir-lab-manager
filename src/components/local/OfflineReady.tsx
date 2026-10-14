@@ -49,13 +49,15 @@ function activeWorker(reg?: ServiceWorkerRegistration): Promise<ServiceWorker | 
 
 export function OfflineReady() {
   const [st, setSt] = useState<State>({ kind: "idle" });
+  /** The browser refused to keep this site's data permanently (it may clear it when the disk runs low). */
+  const [notKept, setNotKept] = useState(false);
 
   useEffect(() => {
     // Ask the browser to keep this site's data permanently (station records, training
     // images…), so it is never cleared automatically when the disk runs low.
     (async () => {
       try {
-        if (navigator.storage?.persist && !(await navigator.storage.persisted())) await navigator.storage.persist();
+        if (navigator.storage?.persist && !(await navigator.storage.persisted()) && !(await navigator.storage.persist())) setNotKept(true);
       } catch { /* unsupported — nothing to do */ }
     })();
     if (!("serviceWorker" in navigator)) return;
@@ -145,6 +147,7 @@ export function OfflineReady() {
       <div className={box} role="status">
         <div className="flex items-center gap-2 font-semibold text-green-700"><CheckCircle2 className="size-4" /> جاهز للعمل بدون إنترنت</div>
         <div className="mt-1 text-xs text-muted">حُفظت كل المحطات على هذا الجهاز، وستفتح من الآن بدون إنترنت.</div>
+        {notKept && <div className="mt-1.5 text-xs text-amber-700" data-testid="storage-not-kept">تنبيه: المتصفح لم يسمح بالحفظ الدائم — ثبّت التطبيق (أيقونة التثبيت في شريط العنوان) وخذ نسخة احتياطية بانتظام.</div>}
       </div>
     );
   }
@@ -176,9 +179,11 @@ export function OfflineReady() {
   );
 }
 
-/** One-line status for a settings page: is this computer ready to work offline? */
+/** One-line status for a settings page: is this computer ready to work offline, and does the browser
+ *  keep its data permanently (a button asks again when it does not)? */
 export function OfflineStatusLine() {
   const [at, setAt] = useState<number | null | undefined>(undefined);
+  const [kept, setKept] = useState<boolean | null>(null);
   useEffect(() => {
     (async () => {
       try {
@@ -186,12 +191,22 @@ export function OfflineStatusLine() {
         const m = r ? await r.json() : null;
         setAt(m && (await caches.has(m.cache)) ? m.at : null);
       } catch { setAt(null); }
+      try { setKept(navigator.storage?.persisted ? await navigator.storage.persisted() : null); } catch { setKept(null); }
     })();
   }, []);
+  const askKeep = async () => { try { setKept(await navigator.storage.persist()); } catch { /* unsupported */ } };
   if (at === undefined) return null;
-  return at ? (
+  const keptLine = kept === null ? null : kept ? (
+    <p className="flex items-center gap-1.5 text-xs text-green-700" data-testid="storage-kept"><CheckCircle2 className="size-3.5" /> بيانات هذا الجهاز محفوظة بشكل دائم (لا يمسحها المتصفح تلقائياً)</p>
+  ) : (
+    <p className="text-xs text-amber-700" data-testid="storage-not-kept-line">
+      المتصفح لم يسمح بالحفظ الدائم بعد — قد يمسح البيانات عند امتلاء القرص. ثبّت التطبيق وخذ نسخة احتياطية بانتظام.
+      <button type="button" onClick={askKeep} className="ms-1.5 font-semibold underline">طلب الحفظ الدائم</button>
+    </p>
+  );
+  return <div className="flex flex-col gap-1">{at ? (
     <p className="flex items-center gap-1.5 text-xs text-green-700"><CheckCircle2 className="size-3.5" /> المحطات جاهزة للعمل بدون إنترنت على هذا الجهاز (آخر تحديث: <span dir="ltr">{new Date(at).toLocaleDateString("en-CA")}</span>)</p>
   ) : (
     <p className="text-xs text-amber-700">لم تُجهَّز المحطات للعمل بدون إنترنت بعد — تُجهَّز تلقائياً عند فتحها مع الإنترنت.</p>
-  );
+  )}{keptLine}</div>;
 }

@@ -4,6 +4,7 @@ import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { AlertTriangle, Database, RefreshCw } from "lucide-react";
 import { kvReady, KV_ERROR_EVENT, KV_REMOTE_EVENT } from "@/lib/local/kv";
 import { STATION_SYNC, companySyncOn } from "@/lib/sync/protocol";
+import { BackupReminder } from "./BackupReminder";
 
 /** Shows a station once its data is loaded from the browser's storage (see lib/local/kv), and —
  *  only when station sync is switched on (STATION_SYNC) — starts the sync with the lab's database. */
@@ -59,6 +60,8 @@ export function LocalDataGate({ children }: { children: ReactNode }) {
           <button onClick={() => { setArrived(0); setView((v) => v + 1); }} className="rounded-md bg-brand px-2.5 py-1 text-xs font-semibold text-white hover:bg-brand-dark">عرضها</button>
         </div>
       )}
+      {/* A doctor's own device holds only what labs sent it: no reminder there. */}
+      {!location.pathname.startsWith("/doctor") && <BackupReminder raised={needsJoin && !location.pathname.endsWith("/settings")} />}
       {needsJoin && !location.pathname.endsWith("/settings") && (
         <div role="status" data-testid="sync-needs-join" className="no-print fixed bottom-4 left-4 z-[80] flex max-w-sm items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 shadow-[var(--shadow-pop)]">
           <Database className="size-4 shrink-0" />

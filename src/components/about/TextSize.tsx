@@ -1,5 +1,7 @@
 "use client";
 
+import { UiTopBar } from "@/components/local/UiTopBar";
+import { THEME_KEYS } from "@/lib/local/theme";
 import { useEffect, useState, type ReactNode } from "react";
 
 /** «حجم الخط» of the about station (this device only). */
@@ -34,6 +36,6 @@ export function TextSizeMain({ children }: { children: ReactNode }) {
   }, []);
   const zoom = TEXT_SIZES.find((s) => s.id === size)!.zoom;
   return (
-    <main className="min-w-0 flex-1 p-4 md:p-7" data-text-size={size} style={zoom !== 1 ? { zoom } : undefined}>{children}</main>
+    <main className="min-w-0 flex-1 p-4 md:p-7" data-text-size={size} style={zoom !== 1 ? { zoom } : undefined}><UiTopBar themeKey={THEME_KEYS.about} />{children}</main>
   );
 }

@@ -3,7 +3,8 @@ import {
   licensingEnabled, passwordSet, durableStorage, storageStatus, attemptsBlocked, noteAttempt, clearAttempts,
   logOwnerSignIn, ownerSignIns, signingKeySealed,
   twoFactorStatus, twoFactorRequired, checkOwnerCode, startTwoFactorSetup, confirmTwoFactor, disableTwoFactor, exportCodes, importCodes, listLicenses, listEvents, createLicense, updateLicense, getContact, setContact, type LicenseAction,
-  getSyncConfig, setSyncConfig, cleanSyncConfig, getAdminDb, getPrefs, setPrefs, listErrors, clearErrors,
+  getSyncConfig, setSyncConfig, cleanSyncConfig, getAdminDb, getPrefs, setPrefs, setContinuityAll, listErrors, clearErrors,
+  renewalCode, exportSigningKey, importSigningKey,
 } from "@/lib/license/server";
 import { LabDbError, probe } from "@/lib/sync/pg";
 import { SupaError, supaProbe, supaSignIn } from "@/lib/sync/supabase";
@@ -72,6 +73,27 @@ export async function POST(req: NextRequest) {
     return json({ ok: true, ...r });
   }
   if (b.op === "backup") return json({ ok: true, backup: await exportCodes() });
+  // «رمز تجديد بلا إنترنت»: the code's end moved here, and a signed text for the lab's devices.
+  if (b.op === "renew_offline") {
+    const r = await renewalCode(String(b.id ?? ""), Number(b.days));
+    return r ? json({ ok: true, ...r }) : json({ ok: false, error: "not_found" }, 400);
+  }
+  // The signing key's backup: with the owner's password typed again, sealed with a passphrase.
+  if (b.op === "key_export" || b.op === "key_import") {
+    const ip = ipOf(req.headers);
+    if (await attemptsBlocked("owner", ip, 8)) return json({ ok: false, error: "too_many" }, 429);
+    if (!passwordMatches(String(b.password ?? "")) || ((await twoFactorRequired()) && !(await checkOwnerCode(String(b.code ?? ""))))) {
+      await noteAttempt("owner", ip);
+      return json({ ok: false, error: "wrong" }, 401);
+    }
+    const pass = String(b.passphrase ?? "");
+    if (b.op === "key_export") {
+      const file = await exportSigningKey(pass);
+      return file ? json({ ok: true, file }) : json({ ok: false, error: "short_pass" }, 400);
+    }
+    const r = await importSigningKey(b.file, pass);
+    return r === "ok" ? json({ ok: true }) : json({ ok: false, error: r }, 400);
+  }
   if (b.op === "restore") {
     try { return json({ ok: true, ...(await importCodes(b.backup)) }); }
     catch { return json({ ok: false, error: "invalid" }, 400); }
@@ -86,6 +108,7 @@ export async function POST(req: NextRequest) {
   if (b.op === "totp_enable") return (await confirmTwoFactor(String(b.code ?? ""))) ? json({ ok: true }) : json({ ok: false, error: "wrong_code" }, 400);
   if (b.op === "totp_disable") return (await disableTwoFactor(String(b.code ?? ""))) ? json({ ok: true }) : json({ ok: false, error: "wrong_code" }, 400);
   if (b.op === "contact") { await setContact(String(b.contact ?? "")); return json({ ok: true }); }
+  if (b.op === "continuity_all") return json({ ok: true, changed: await setContinuityAll(Number(b.days)) });
   if (b.op === "prefs") { const prefs = await setPrefs(b.prefs); forgetAdminDb(); forgetConnectInfo(); forgetDoctorsInfo(); return json({ ok: true, prefs }); }
   // «محطة التواصل»: the public chat's messages with the lab behind each name; delete; stop a lab.
   if (b.op === "connect_list") return json({ ok: true, ...(await publicForOwner()) });

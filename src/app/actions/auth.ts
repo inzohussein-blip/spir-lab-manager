@@ -5,6 +5,12 @@ import { createSession, destroySession } from "@/lib/auth/session";
 import { queryOne } from "@/lib/db";
 import { labTarget } from "@/lib/db/lab";
 import { homeFor } from "@/lib/nav";
+import { headers } from "next/headers";
+import { attemptsBlocked, noteAttempt, clearAttempts } from "@/lib/license/server";
+import { ipOf } from "@/lib/license/owner";
+
+/** Wrong passwords allowed from one address in 10 minutes (as the owner's and the codes' sign-ins). */
+const LOGIN_TRIES = 10;
 
 export async function loginAction(
   _prev: { error?: string } | undefined,
@@ -16,10 +22,16 @@ export async function loginAction(
   if (!username || !password) {
     return { error: "يرجى إدخال اسم المستخدم وكلمة المرور", username };
   }
+  const ip = ipOf(await headers());
+  if (await attemptsBlocked("login", ip, LOGIN_TRIES)) {
+    return { error: "محاولات كثيرة خاطئة — انتظر 10 دقائق ثم أعد المحاولة", username };
+  }
   const user = await verifyCredentials(username, password);
   if (!user) {
+    await noteAttempt("login", ip);
     return { error: "بيانات الدخول غير صحيحة", username };
   }
+  await clearAttempts("login", ip);
   await createSession(user);
   // The page opens the panel with a full load (its frame differs from the sign-in page's).
   return { to: homeFor(user.role) };

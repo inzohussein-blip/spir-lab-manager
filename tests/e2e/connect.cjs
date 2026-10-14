@@ -15,6 +15,8 @@ const fs = require('node:fs');
     return p;
   };
   const until = async (fn, ms = 20000) => { const end = Date.now() + ms; while (Date.now() < end) { try { if (await fn()) return true; } catch { /* not yet */ } await new Promise((r) => setTimeout(r, 400)); } return false; };
+  // A room of its own each run: the computers of an earlier run on the same server stay «online» for a while.
+  const ROOM = 'lab-chat-' + Date.now().toString(36);
   const A = await computer();
   const Bp = await computer();
 
@@ -41,12 +43,12 @@ const fs = require('node:fs');
   ok((await A.locator('[data-testid="room-code-error"]').innerText()).includes('8 أحرف'), 'a short chat code is refused');
   await A.fill('input[aria-label="رمز المحادثة"]', 'sync-key-12345'); await A.click('button:has-text("حفظ الرمز")');
   ok((await A.locator('[data-testid="room-code-error"]').innerText()).includes('رمز المزامنة'), 'the sync\'s key cannot be the chat code');
-  await A.fill('input[aria-label="رمز المحادثة"]', 'lab-chat-2026'); await A.click('button:has-text("حفظ الرمز")');
+  await A.fill('input[aria-label="رمز المحادثة"]', ROOM); await A.click('button:has-text("حفظ الرمز")');
   await A.waitForSelector('[data-testid="room-thread"]', { timeout: 20000 });
   const st = await kv(A, 'connect.settings.v1');
-  ok(!!st.room?.tag && !JSON.stringify(st).includes('lab-chat-2026'), 'the code itself is not kept, only what comes from it');
+  ok(!!st.room?.tag && !JSON.stringify(st).includes(ROOM), 'the code itself is not kept, only what comes from it');
   await Bp.goto(B + '/connect/room'); await Bp.waitForSelector('[data-testid="room-code-form"]', { timeout: 20000 });
-  await Bp.fill('input[aria-label="رمز المحادثة"]', 'lab-chat-2026'); await Bp.click('button:has-text("حفظ الرمز")');
+  await Bp.fill('input[aria-label="رمز المحادثة"]', ROOM); await Bp.click('button:has-text("حفظ الرمز")');
   await Bp.waitForSelector('[data-testid="room-thread"]', { timeout: 20000 });
 
   // ── The internal chat ──
@@ -116,7 +118,8 @@ const fs = require('node:fs');
   const open = await until(async () => (await A.locator('[data-peer-state="open"]').count()) === 1 && (await Bp.locator('[data-peer-state="open"]').count()) === 1, 30000);
   ok(open, 'the two computers are connected directly');
   if (open) {
-    ok(await until(async () => (await A.locator('[data-peer-state="open"]').innerText()).includes('مختبر الثاني')), 'each knows the other by its card');
+    const knows = await until(async () => (await A.locator('[data-peer-state="open"]').innerText()).includes('مختبر الثاني'));
+    ok(knows, 'each knows the other by its card' + (knows ? '' : ` — A: ${(await A.locator('[data-testid="peers"]').innerText()).replace(/\s+/g, ' ').slice(0, 200)} | B: ${(await Bp.locator('[data-testid="peers"]').innerText()).replace(/\s+/g, ' ').slice(0, 200)}`));
     await Bp.click('[data-peer-state="open"] a:has-text("المحادثة")');
     await Bp.waitForSelector('[data-testid="lab-route"]', { timeout: 10000 });
     ok((await Bp.locator('[data-testid="lab-route"]').innerText()).includes('متصل مباشرة الآن'), 'the conversation shows the direct connection');

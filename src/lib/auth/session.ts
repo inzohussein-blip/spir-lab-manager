@@ -2,6 +2,7 @@ import "server-only";
 import { cookies } from "next/headers";
 import { SignJWT, jwtVerify } from "jose";
 import { labTarget } from "@/lib/db/lab";
+import { cookieSecure } from "./cookieSecure";
 
 /**
  * Signed session cookie. Uses AUTH_SECRET — set the SAME value here and in
@@ -36,7 +37,7 @@ export async function createSession(user: SessionUser): Promise<void> {
     .sign(secret());
   (await cookies()).set(COOKIE, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: await cookieSecure(),
     sameSite: "lax",
     path: "/",
     maxAge: 60 * 60 * 24 * 7,

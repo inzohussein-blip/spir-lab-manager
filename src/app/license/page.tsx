@@ -5,7 +5,7 @@ import {
   KeyRound, LogOut, Plus, Copy, Check, Ban, Play, MonitorSmartphone, RefreshCw, Trash2, Pencil, ShieldAlert,
   FlaskConical, Download, ChevronDown, MessageSquare, History, Wallet, MessageSquareText, Database, Upload, ShieldCheck, Smartphone, Phone,
   Server, Menu, X, ChevronLeft, HardDrive, Settings, Search, Bug, FileSpreadsheet, Lock, LayoutGrid, Wifi, AlarmClock, CircleDollarSign, MessagesSquare,
-  type LucideIcon,
+  Send, type LucideIcon,
 } from "lucide-react";
 import { StationsOverview, ALWAYS_STATIONS } from "./stations";
 import { PinSection, type PinPolicyView } from "./pins";
@@ -36,6 +36,8 @@ interface Row {
   admin_db_check: { at: number; ok: boolean; error: string } | null;
   /** Devices allowed on the code, and the ones beyond the first (with «حساب واحد بعدة أجهزة»). */
   max_devices: number;
+  /** «ضمان الاستمرارية»: days of work past the end when this server is out of reach (0: off). */
+  continuity_days: number;
   devices: { device_id: string; label: string; activated_at: number; last_seen_at: number | null; app_version: string }[];
   /** "signup": registered by the lab itself. */
   source: string;
@@ -49,12 +51,12 @@ interface Storage { source: "license-db" | "app-db" | "embedded"; ok: boolean; c
 interface SignIn { at: number; ok: boolean; ip: string; agent: string }
 interface TwoFactor { enabled: boolean; broken: boolean; forcedOff: boolean; canSetup: boolean }
 type Prefs = {
-  defaultDays: number; defaultModules: LicenseModule[]; trialDays: number; soonDays: number; adminNeedsOwnDb: boolean;
+  defaultDays: number; defaultModules: LicenseModule[]; trialDays: number; soonDays: number; continuityDays: number; adminNeedsOwnDb: boolean;
   multiDevice: boolean; selfSignup: boolean; errorLog: boolean; dataExport: boolean;
   connectRelay: boolean; connectPublic: boolean; doctorsOn: boolean;
 };
 const DEFAULT_PREFS: Prefs = {
-  defaultDays: 365, defaultModules: [...DEFAULT_MODULES], trialDays: 7, soonDays: 14, adminNeedsOwnDb: NEEDS_DB_GATE,
+  defaultDays: 365, defaultModules: [...DEFAULT_MODULES], trialDays: 7, soonDays: 14, continuityDays: 0, adminNeedsOwnDb: NEEDS_DB_GATE,
   multiDevice: false, selfSignup: false, errorLog: false, dataExport: false, connectRelay: false, connectPublic: true, doctorsOn: true,
 };
 type Data = { enabled: boolean; owner: boolean; needsDb?: boolean; storage?: Storage; licenses?: Row[]; events?: Ev[]; signIns?: SignIn[]; twoFactor?: TwoFactor; contact?: string; prefs?: Prefs; version?: string; now?: number };
@@ -90,7 +92,7 @@ const EVENT_LABEL: Record<string, string> = {
   resumed: "إعادة تفعيل", device_reset: "فك ربط الجهاز", modules: "تغيير المحطات", renamed: "تعديل الاسم",
   paid: "تسجيل الدفع", unpaid: "إلغاء الدفع", message: "رسالة للمختبر", new_code: "رمز جديد", sync: "قاعدة بيانات المختبر",
   admin_db: "قاعدة لوحة الإدارة", device_added: "جهاز إضافي", device_removed: "إزالة جهاز", max_devices: "عدد الأجهزة",
-  data_export: "تصدير البيانات", pin: "رموز الدخول",
+  data_export: "تصدير البيانات", pin: "رموز الدخول", continuity: "ضمان الاستمرارية", renew_offline: "رمز تجديد بلا إنترنت",
 };
 const eventDetail = (e: Ev) => (e.kind === "modules" ? e.detail.split(",").filter(Boolean).map(moduleLabel).join("، ") || "لا شيء" : e.detail);
 
@@ -546,7 +548,7 @@ export default function LicensesPage() {
                 aria-expanded={isOpen} className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-brand-dark hover:underline">
                 <ChevronDown className={`size-3.5 transition-transform ${isOpen ? "rotate-180" : ""}`} /> الدفع والجهاز والرسالة والسجل ({evs.length})
               </button>
-              {isOpen && <Details r={r} evs={evs} multi={prefs.multiDevice} onChange={(c) => change(r, c)} onPins={() => { setPinFocus(r.id); go("pin"); }} />}
+              {isOpen && <Details r={r} evs={evs} multi={prefs.multiDevice} onChange={(c) => change(r, c)} onPins={() => { setPinFocus(r.id); go("pin"); }} onReload={load} />}
             </div>
           );
         })}
@@ -716,6 +718,7 @@ export default function LicensesPage() {
           <SectionTitle icon={<Server className="size-6" />} title="حالة النظام" desc="أين تُحفظ الرموز، ومفتاح التوقيع، وإصدار الموقع." />
           {data.storage && <SystemStatus storage={data.storage} version={data.version} test={test} testing={testing}
             onTest={async () => { setTesting(true); const d = await post({ op: "selftest" }); setTest(d.storage ?? { source: data.storage!.source, ok: false, error: "no reply" }); setTesting(false); }} />}
+          <KeyBackupCard needCode={!!data.twoFactor?.enabled} />
         </>
       )}
     </>
@@ -751,8 +754,58 @@ function PinOwner({ r, onPins }: { r: Row; onPins: () => void }) {
   );
 }
 
+/** «ضمان الاستمرارية» and «رمز تجديد بلا إنترنت»: the lab keeps working when this site cannot be reached. */
+function Continuity({ r, onChange, onReload }: { r: Row; onChange: (c: Record<string, unknown>) => void; onReload: () => void }) {
+  const [days, setDays] = useState(r.continuity_days);
+  const [add, setAdd] = useState(30);
+  const [renew, setRenew] = useState<{ code: string; until: number } | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [err, setErr] = useState("");
+  useEffect(() => setDays(r.continuity_days), [r.continuity_days]);
+  async function makeRenewal() {
+    if (!window.confirm(`تمديد «${r.lab_name}» ${add} يوماً وإصدار رمز تجديد بلا إنترنت؟`)) return;
+    setErr("");
+    const d = await post({ op: "renew_offline", id: r.id, days: add });
+    if (d.ok) { setRenew({ code: d.code, until: d.until }); onReload(); } else setErr("تعذّر إصدار رمز التجديد.");
+  }
+  return (
+    <div className="md:col-span-2" data-testid="continuity">
+      <div className="mb-1 flex items-center gap-1 text-xs font-semibold"><ShieldCheck className="size-3.5" /> استمرارية العمل</div>
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <span>ضمان الاستمرارية:</span>
+        <input type="number" min={0} max={365} value={days} onChange={(e) => setDays(Math.max(0, Math.min(365, Number(e.target.value) || 0)))} aria-label="أيام ضمان الاستمرارية" className={`${inp} w-20`} />
+        <span>يوماً</span>
+        <button onClick={() => onChange({ action: "continuity", days })} disabled={days === r.continuity_days} className="rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-dark disabled:opacity-40">حفظ</button>
+      </div>
+      <p className="mt-1 text-[11px] text-muted">إن تعذّر على أجهزة المختبر الوصول إلى هذا الموقع 14 يوماً متصلة قبل انتهاء الرمز (توقف الاستضافة)، تبقى تعمل هذه الأيام بعد الانتهاء ثم تُقفل. 0 = متوقف. يصل الأجهزة مع اتصالها التالي.</p>
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+        <span>رمز تجديد بلا إنترنت: تمديد</span>
+        <input type="number" min={1} max={3650} value={add} onChange={(e) => setAdd(Math.max(1, Math.min(3650, Number(e.target.value) || 1)))} aria-label="أيام رمز التجديد" className={`${inp} w-20`} />
+        <span>يوماً</span>
+        <button onClick={makeRenewal} disabled={!r.expires_at} data-testid="renew-offline" className="rounded-lg border border-line px-3 py-1.5 font-semibold text-brand-dark hover:bg-surface disabled:opacity-40">إصدار</button>
+      </div>
+      {!r.expires_at && <p className="mt-1 text-[11px] text-muted">يُصدر بعد تفعيل الرمز على جهاز.</p>}
+      {err && <p className="mt-1 text-[11px] text-red-700">{err}</p>}
+      {renew && (
+        <div className="mt-2 rounded-lg border border-emerald-300 bg-emerald-50 p-2 text-[11px] text-emerald-900" data-testid="renew-code-box">
+          <div className="mb-1">مُدِّد الرمز حتى {fmt(renew.until)}. أرسل هذا النص للمختبر ليلصقه في خانة الرمز على أجهزته (يعمل دون الوصول لهذا الموقع):</div>
+          <textarea readOnly value={renew.code} rows={3} dir="ltr" aria-label="رمز التجديد" data-testid="renew-code" className="w-full rounded-md border border-line bg-surface p-1.5 font-mono text-[10px]" />
+          <button onClick={async () => { try { await navigator.clipboard.writeText(renew.code); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* ignore */ } }} className="mt-1 inline-flex items-center gap-1 rounded-md border border-line bg-surface px-2 py-1 font-semibold">
+            {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />} نسخ
+          </button>
+          {/* Opens WhatsApp with the message ready; the owner picks the lab's contact there. */}
+          <a href={`https://wa.me/?text=${encodeURIComponent(`رمز تجديد «${r.lab_name}» حتى ${fmt(renew.until)}.\nالصقه في خانة رمز المختبر على أجهزتكم (في شاشة القفل أو «إدخال الرمز») — يعمل بدون إنترنت:\n\n${renew.code}`)}`}
+            target="_blank" rel="noopener noreferrer" data-testid="renew-whatsapp" className="ms-1 mt-1 inline-flex items-center gap-1 rounded-md border border-emerald-400 bg-surface px-2 py-1 font-semibold text-emerald-800">
+            <Send className="size-3.5" /> إرسال بواتساب
+          </a>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Payment, device name, message to the lab and the code's history. */
-function Details({ r, evs, multi, onChange, onPins }: { r: Row; evs: Ev[]; multi: boolean; onChange: (c: Record<string, unknown>) => void; onPins: () => void }) {
+function Details({ r, evs, multi, onChange, onPins, onReload }: { r: Row; evs: Ev[]; multi: boolean; onChange: (c: Record<string, unknown>) => void; onPins: () => void; onReload: () => void }) {
   const [maxDev, setMaxDev] = useState(r.max_devices);
   const [price, setPrice] = useState(r.price);
   const [paid, setPaid] = useState(r.paid);
@@ -809,6 +862,7 @@ function Details({ r, evs, multi, onChange, onPins }: { r: Row; evs: Ev[]; multi
           {r.message && <button onClick={() => onChange({ action: "message", text: "" })} className="rounded-lg border border-line px-3 py-1.5 text-xs hover:bg-surface">إزالة</button>}
         </div>
       </div>
+      <Continuity r={r} onChange={onChange} onReload={onReload} />
       <PinOwner r={r} onPins={onPins} />
       <div className="md:col-span-2">
         <div className="mb-1 flex items-center gap-1 text-xs font-semibold"><History className="size-3.5" /> السجل</div>
@@ -1364,7 +1418,7 @@ function PrefsCard({ prefs, onSaved }: { prefs: Prefs; onSaved: () => void }) {
     const defaultDays = p.days === -1 ? Number(p.custom) : p.days;
     if (!defaultDays || defaultDays < 1) { setMsg("حدّد المدة."); return; }
     const d = await post({ op: "prefs", prefs: {
-      defaultDays, defaultModules: p.defaultModules, trialDays: p.trialDays, soonDays: p.soonDays, adminNeedsOwnDb: p.adminNeedsOwnDb,
+      defaultDays, defaultModules: p.defaultModules, trialDays: p.trialDays, soonDays: p.soonDays, continuityDays: p.continuityDays, adminNeedsOwnDb: p.adminNeedsOwnDb,
       multiDevice: p.multiDevice, selfSignup: p.selfSignup, errorLog: p.errorLog, dataExport: p.dataExport,
       connectRelay: prefs.connectRelay, connectPublic: prefs.connectPublic, // set in «محطة التواصل»
       doctorsOn: p.doctorsOn,
@@ -1391,6 +1445,18 @@ function PrefsCard({ prefs, onSaved }: { prefs: Prefs; onSaved: () => void }) {
         <label className="text-sm font-medium">تنبيه «قارب على الانتهاء» قبل (أيام)
           <input type="number" min={1} max={90} value={p.soonDays} onChange={(e) => setP({ ...p, soonDays: Number(e.target.value) })} aria-label="أيام التنبيه قبل الانتهاء" className={`mt-1 ${inp}`} />
         </label>
+      </div>
+      <div className="mt-3 flex flex-wrap items-end gap-2" data-testid="continuity-default">
+        <label className="text-sm font-medium">«ضمان الاستمرارية» للرمز الجديد (أيام، 0 = بلا)
+          <input type="number" min={0} max={365} value={p.continuityDays} onChange={(e) => setP({ ...p, continuityDays: Number(e.target.value) })} aria-label="ضمان الاستمرارية الافتراضي" className={`mt-1 ${inp} w-40`} />
+        </label>
+        <button type="button" onClick={async () => {
+          const n = Math.max(0, Math.min(365, Math.round(p.continuityDays || 0)));
+          if (!window.confirm(`تطبيق «ضمان الاستمرارية» ${n ? `${n} يوماً` : "بلا أيام (إيقافه)"} على كل الرموز المدفوعة الحالية؟`)) return;
+          const d = await post({ op: "continuity_all", days: n });
+          setMsg(d.ok ? `✓ طُبّق على ${(d as { changed?: number }).changed ?? 0} رمزاً` : "تعذّر التطبيق."); if (d.ok) onSaved();
+        }} className="rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas" data-testid="continuity-all">تطبيقه على كل الرموز الحالية</button>
+        <span className="basis-full text-xs text-muted">إن تعذّر على جهاز الوصول إلى الموقع 14 يوماً قبل نهاية رمزه، يبقى يعمل هذه الأيام بعدها. الرموز التجريبية بلا ضمان.</span>
       </div>
       <div className="mt-3 text-sm font-medium">المحطات المفعّلة في الرمز الجديد</div>
       <ModuleChips value={p.defaultModules} onChange={(m) => setP({ ...p, defaultModules: m })} />
@@ -1717,6 +1783,56 @@ function SectionTitle({ icon, title, desc }: { icon: React.ReactNode; title: str
         <h1 className="text-2xl font-bold">{title}</h1>
         <p className="mt-0.5 text-sm text-muted">{desc}</p>
       </div>
+    </div>
+  );
+}
+
+/** «نسخة احتياطية من مفتاح التوقيع»: the key that signs every lab's code, sealed with a passphrase.
+ *  Restored on a new site (after the hosting stopped), the labs' devices keep working and renew there. */
+function KeyBackupCard({ needCode }: { needCode: boolean }) {
+  const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
+  const [pass, setPass] = useState("");
+  const [file, setFile] = useState<unknown>(null);
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  const ERR: Record<string, string> = { wrong: "كلمة مرور المالك (أو رمز الهاتف) غير صحيحة.", short_pass: "عبارة الحماية 8 أحرف على الأقل.", wrong_pass: "عبارة الحماية لا تفتح هذا الملف.", invalid: "الملف ليس نسخة مفتاح توقيع صالحة.", too_many: "محاولات كثيرة — حاول بعد قليل." };
+  async function exportKey() {
+    setBusy(true); setMsg("");
+    const d = await post({ op: "key_export", password, code, passphrase: pass });
+    setBusy(false);
+    if (!d.ok) { setMsg(ERR[d.error] ?? "تعذّر التصدير."); return; }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(d.file, null, 1)], { type: "application/json" }));
+    a.download = `lab-signing-key-${new Date().toLocaleDateString("en-CA")}.json`; a.click();
+    setMsg("نُزّلت النسخة. احفظها مع عبارة الحماية في مكان آمن خارج الموقع.");
+  }
+  async function importKey() {
+    if (!file || !window.confirm("استعادة مفتاح التوقيع من هذا الملف؟ الرموز التي وقّعها مفتاح آخر على هذا الموقع لن تعود تُجدَّد من هنا.")) return;
+    setBusy(true); setMsg("");
+    const d = await post({ op: "key_import", password, code, passphrase: pass, file });
+    setBusy(false);
+    setMsg(d.ok ? "استُعيد مفتاح التوقيع — أعد نشر الموقع ليأخذه كل خادم." : ERR[d.error] ?? "تعذّرت الاستعادة.");
+  }
+  const inpCls = "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
+  return (
+    <div className="mt-4 rounded-2xl border border-line bg-surface p-4 shadow-[var(--shadow-card)]" data-testid="key-backup">
+      <div className="mb-1 flex items-center gap-2 text-sm font-semibold"><KeyRound className="size-4" /> نسخة احتياطية من مفتاح التوقيع</div>
+      <p className="mb-3 text-xs text-muted">المفتاح الذي يوقّع رموز كل المختبرات. احفظ نسخة منه (محمية بعبارة تختارها) خارج الموقع: إن توقفت الاستضافة أو ضاعت قاعدة البيانات، تستعيده على موقع جديد فتبقى أجهزة المختبرات تعمل وتُجدَّد منه. أجهزة المختبرات لا تقبل تحديثاً أو إيقافاً إلا موقّعاً بهذا المفتاح.</p>
+      <div className="grid gap-2 sm:grid-cols-3">
+        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="كلمة مرور المالك" aria-label="كلمة مرور المالك للمفتاح" className={inpCls} />
+        {needCode && <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="رمز الهاتف" aria-label="رمز الهاتف للمفتاح" className={inpCls} dir="ltr" />}
+        <input type="password" value={pass} onChange={(e) => setPass(e.target.value)} placeholder="عبارة حماية الملف (8 أحرف أو أكثر)" aria-label="عبارة حماية المفتاح" className={inpCls} />
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <button onClick={exportKey} disabled={busy || !password || pass.length < 8} data-testid="key-export" className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-50"><Download className="size-4" /> تنزيل نسخة المفتاح</button>
+        <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-sm hover:bg-canvas">
+          <Upload className="size-4" /> اختيار ملف للاستعادة
+          <input type="file" accept="application/json,.json" className="hidden" aria-label="ملف مفتاح التوقيع" onChange={async (e) => { const f = e.target.files?.[0]; if (!f) return; try { setFile(JSON.parse(await f.text())); setMsg(`اختير: ${f.name}`); } catch { setFile(null); setMsg("الملف غير صالح."); } }} />
+        </label>
+        <button onClick={importKey} disabled={busy || !file || !password || !pass} data-testid="key-import" className="rounded-lg border border-amber-400 px-3 py-1.5 text-sm font-semibold text-amber-800 hover:bg-amber-50 disabled:opacity-50">استعادة المفتاح</button>
+      </div>
+      {msg && <p className="mt-2 text-xs text-brand-dark" role="status">{msg}</p>}
     </div>
   );
 }

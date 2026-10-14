@@ -30,6 +30,7 @@ export default function PurchasingReportPage() {
     return purchases
       .filter((p) => {
         const [y, mo] = (p.date || "").split("-");
+        if (p.ordered) return false; // not received yet: not spending
         if (y !== year) return false;
         if (m > 0 && Number(mo) !== m) return false;
         return true;

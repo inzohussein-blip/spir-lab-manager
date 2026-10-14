@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { getPages, savePages, getVisits, requestPersistentStorage, uid, TRASH_DAYS, type StationPage } from "@/lib/station/store";
 import { cn, fmtDate } from "@/lib/utils";
+import { setShellNav } from "@/lib/local/ui";
 import { useSideCollapsed, SideCollapseButton, SideReopenButton } from "@/components/local/SideCollapse";
 
 interface NavItem { href: string; label: string; hint: string; icon: LucideIcon }
@@ -40,7 +41,7 @@ function NavLink({
       href={href}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "group relative flex items-center gap-3 rounded-xl px-2.5 py-2 text-sm",
+        "ui-side-link group relative flex items-center gap-3 rounded-xl px-2.5 py-2 text-sm",
         active
           ? "bg-brand-light text-brand-dark shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--color-brand)_22%,transparent)]"
           : "text-ink hover:bg-canvas"
@@ -49,7 +50,7 @@ function NavLink({
       {active && <span className="absolute inset-y-2 -start-3 w-1 rounded-e-full bg-brand" />}
       <span
         className={cn(
-          "grid size-9 shrink-0 place-items-center rounded-lg transition-colors",
+          "ui-side-tile grid size-9 shrink-0 place-items-center rounded-lg transition-colors",
           active
             ? "bg-gradient-to-br from-brand to-brand-dark text-white shadow-[0_4px_10px_-2px_color-mix(in_oklab,var(--color-brand)_55%,transparent)]"
             : "bg-canvas text-muted ring-1 ring-line group-hover:bg-brand-light group-hover:text-brand group-hover:ring-transparent"
@@ -59,7 +60,7 @@ function NavLink({
       </span>
       <span className="min-w-0 flex-1 leading-tight">
         <span className={cn("block truncate", active && "font-semibold")}>{label}</span>
-        <span className={cn("block truncate text-[11px]", active ? "text-brand-dark/70" : "text-muted")}>{hint}</span>
+        <span className={cn("ui-side-hint block truncate text-[11px]", active ? "text-brand-dark/70" : "text-muted")}>{hint}</span>
       </span>
       {badge ? (
         <span
@@ -71,7 +72,7 @@ function NavLink({
           {badge}
         </span>
       ) : (
-        <ChevronLeft className={cn("size-4 shrink-0 transition-all", active ? "text-brand opacity-100" : "text-muted opacity-0 group-hover:-translate-x-0.5 group-hover:opacity-60")} />
+        <ChevronLeft className={cn("ui-side-chev size-4 shrink-0 transition-all", active ? "text-brand opacity-100" : "text-muted opacity-0 group-hover:-translate-x-0.5 group-hover:opacity-60")} />
       )}
     </Link>
   );
@@ -131,6 +132,16 @@ export function StationSidebar() {
     setToday(`${d.toLocaleDateString("ar-IQ", { weekday: "long" })} ${fmtDate(d)}`);
   }, [pathname]);
 
+  // The new look's top bar searches this menu and lists its numbers as alerts.
+  const shellKey = `${todayCount}|${pages.map((p) => `${p.id}:${p.title}`).join()}`;
+  useEffect(() => {
+    setShellNav({ app: "محطة المختبر", links: [
+      ...SECTIONS.flatMap((sec) => sec.items).map((it) => ({ href: it.href, label: it.label, hint: it.hint, icon: it.icon, n: it.href === "/station/visits" ? todayCount : 0 })),
+      ...pages.map((p) => ({ href: `/station/page/${p.id}`, label: p.title, hint: "واجهة مخصّصة", icon: FileText })),
+    ] });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- shellKey sums up what is shown
+  }, [shellKey]);
+
   return (
     <>
       {/* Mobile top bar */}
@@ -163,7 +174,7 @@ export function StationSidebar() {
       {collapsed && <SideReopenButton onClick={() => setCollapsed(false)} />}
       <aside
         className={cn(
-          "no-print fixed inset-y-0 start-0 z-50 flex h-screen w-72 shrink-0 flex-col border-e border-line bg-surface shadow-[var(--shadow-pop)] transition-transform duration-200",
+          "ui-side no-print fixed inset-y-0 start-0 z-50 flex h-screen w-72 shrink-0 flex-col border-e border-line bg-surface shadow-[var(--shadow-pop)] transition-transform duration-200",
           "md:sticky md:top-0 md:z-auto md:translate-x-0 md:shadow-none",
           open ? "translate-x-0" : "translate-x-full",
           collapsed && "md:hidden"
@@ -199,7 +210,7 @@ export function StationSidebar() {
         <nav className="flex flex-1 flex-col gap-4 overflow-y-auto px-3 pb-3">
           {SECTIONS.map((sec) => (
             <div key={sec.title}>
-              <div className="mb-1.5 flex items-center gap-2 px-2.5 text-[11px] font-semibold text-muted">
+              <div className="ui-side-title mb-1.5 flex items-center gap-2 px-2.5 text-[11px] font-semibold text-muted">
                 {sec.title}
                 <span className="h-px flex-1 bg-line" />
               </div>
@@ -217,7 +228,7 @@ export function StationSidebar() {
           ))}
 
           <div>
-            <div className="mb-1.5 flex items-center gap-2 px-2.5 text-[11px] font-semibold text-muted">
+            <div className="ui-side-title mb-1.5 flex items-center gap-2 px-2.5 text-[11px] font-semibold text-muted">
               واجهات مخصّصة
               <span className="h-px flex-1 bg-line" />
             </div>
