@@ -55,10 +55,23 @@ export function ReorderPanel() {
   const rows = useMemo<Row[]>(() => {
     const since = now - DAYS * 86_400_000;
     const used = new Map<string, number>();
-    for (const m of moves) if (m.at >= since && USED.has(m.reason) && m.delta < 0) used.set(m.stockId, (used.get(m.stockId) ?? 0) - m.delta);
+    // Each material's first recorded change: one first stocked last week is measured over its week,
+    // not over 90 days (and the log keeps the newest moves only, so never before its oldest one).
+    const first = new Map<string, number>();
+    const logStart = moves.reduce((t, m) => Math.min(t, m.at), now);
+    for (const m of moves) {
+      first.set(m.stockId, Math.min(first.get(m.stockId) ?? m.at, m.at));
+      if (m.at < since) continue;
+      if (USED.has(m.reason) && m.delta < 0) used.set(m.stockId, (used.get(m.stockId) ?? 0) - m.delta);
+      // Given back (a test or visit entered by mistake): not used after all.
+      else if (m.reason === "return" && m.delta > 0) used.set(m.stockId, (used.get(m.stockId) ?? 0) - m.delta);
+    }
     return stock.flatMap((item) => {
       const have = Number(item.qty) || 0, min = Number(item.minQty) || 0;
-      const perDay = (used.get(item.id) ?? 0) / DAYS;
+      // At least a week, so a busy first day does not make a huge order.
+      const from = Math.max(since, logStart, Math.min(first.get(item.id) ?? since, now));
+      const days = Math.min(DAYS, Math.max(7, (now - from) / 86_400_000));
+      const perDay = Math.max(0, used.get(item.id) ?? 0) / days;
       const need = Math.ceil(perDay * cover);
       if (!(have <= min && item.minQty != null) && !(perDay > 0 && have < need)) return [];
       const suggested = Math.max(1, Math.max(need, min * 2) - Math.max(0, have));
@@ -90,7 +103,7 @@ export function ReorderPanel() {
       <div className="no-print mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold"><ShoppingBasket className="size-6" /> اقتراح الشراء</h1>
-          <p className="mt-1 text-sm text-muted">المواد التي وصلت حدّها الأدنى أو لا تكفي صرف {cover} يوماً (حسب معدّل آخر {DAYS} يوماً). عدّل الكمية والمورّد، ثم اطبع طلب الشراء أو أرسله إلى «المشتريات».</p>
+          <p className="mt-1 text-sm text-muted">المواد التي وصلت حدّها الأدنى أو لا تكفي صرف {cover} يوماً (حسب معدّل آخر {DAYS} يوماً، أو منذ أول حركة للمادة إن كانت أحدث). عدّل الكمية والمورّد، ثم اطبع طلب الشراء أو أرسله إلى «المشتريات».</p>
         </div>
         <label className="flex items-center gap-2 text-sm">يكفي لـ
           <NumberInput value={cover} onValue={(v) => setCover(Number(v))} aria-label="أيام التغطية" className="w-20 rounded-lg border border-line bg-surface px-2 py-1.5 text-center text-sm tabular-nums" />

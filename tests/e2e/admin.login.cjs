@@ -1,6 +1,6 @@
-// The admin panel's sign-in: after 10 wrong passwords from one address in 10 minutes it waits (even
-// the right password), as the owner's and the lab codes' sign-ins do; another address is not affected,
-// and a right password clears the count.
+// The admin panel's sign-in: after 10 wrong passwords for one account from one address in 10 minutes it
+// waits (even the right password); another address is not affected, nor another account from the same
+// address (a lab's computers share one), and a right password clears the count.
 const { B, ok, launch, done } = require('./lib.cjs');
 (async () => {
   const b = await launch();
@@ -11,8 +11,8 @@ const { B, ok, launch, done } = require('./lib.cjs');
     await p.goto(B + '/login'); await p.waitForSelector('input[name="username"]', { timeout: 20000 });
     return p;
   };
-  const tryLogin = async (p, password) => {
-    await p.fill('input[name="username"]', 'admin'); await p.fill('input[name="password"]', password);
+  const tryLogin = async (p, password, user = 'admin') => {
+    await p.fill('input[name="username"]', user); await p.fill('input[name="password"]', password);
     await p.click('button[type="submit"]');
     await p.waitForFunction(() => !location.pathname.startsWith('/login') || /غير صحيحة|محاولات كثيرة/.test(document.body.innerText), null, { timeout: 15000 }).catch(() => {});
     await p.waitForTimeout(300);
@@ -30,6 +30,9 @@ const { B, ok, launch, done } = require('./lib.cjs');
   const r = await at(`10.78.${Date.now() % 200}.9`);
   for (let i = 0; i < 3; i++) await tryLogin(r, 'wrong-' + i);
   ok((await tryLogin(r, 'admin123')) === 'in', 'a few wrong tries, then the right password: in');
+  const s = await at(`10.79.${Date.now() % 200}.11`);
+  for (let i = 0; i < 11; i++) await tryLogin(s, 'wrong-' + i, 'someone-else');
+  ok((await tryLogin(s, 'admin123')) === 'in', "another account's wrong tries from the same address do not stop this one");
   // A made-up session cookie (signed with the old key that was written in the code, or with an id that
   // is no account's) never opens the panel.
   const { SignJWT } = require('jose');

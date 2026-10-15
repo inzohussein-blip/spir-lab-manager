@@ -21,6 +21,10 @@ function ymd(s: string): string | undefined {
 export function parseGs1(raw: string): Gs1 | null {
   let s = String(raw ?? "").trim().replace(/^\][A-Za-z]\d/, ""); // a symbology prefix (]d2, ]C1)
   if (!s) return null;
+  // A plain product barcode (EAN-8/13, UPC, GTIN-14): only digits, 14 at most. Never read as GS1
+  // fields — a code starting 10… or 01… would otherwise give a made-up lot or a cut product code
+  // (a GS1 code with its product code alone is already 16 digits: «01» + 14).
+  if (/^\d{8,14}$/.test(s)) return { gtin: s };
   const out: Gs1 = {};
   const set = (ai: string, v: string) => {
     if (ai === "01" || ai === "02") out.gtin = v;

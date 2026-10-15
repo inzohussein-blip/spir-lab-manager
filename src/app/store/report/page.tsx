@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { FileBarChart, Printer } from "lucide-react";
-import { getPurchases, getSettings, type Purchase, type PurchasingSettings } from "@/lib/purchasing/store";
+import { dueOf, getPurchases, getSettings, paidOf, type Purchase, type PurchasingSettings } from "@/lib/purchasing/store";
 import { money } from "@/lib/utils";
 
 /** Months as numbers only (0 = the whole year). */
@@ -39,7 +39,9 @@ export default function PurchasingReportPage() {
   }, [purchases, year, month]);
 
   const total = rows.reduce((s, p) => s + Number(p.total || 0), 0);
-  const unpaid = rows.filter((p) => !p.paid).reduce((s, p) => s + Number(p.total || 0), 0);
+  // With supplier debts on, what is still owed (after part payments), as on «المشتريات».
+  const owed = (p: Purchase) => (settings.debts ? dueOf(p) : p.paid ? 0 : Number(p.total) || 0);
+  const unpaid = rows.reduce((s, p) => s + owed(p), 0);
 
   const bySupplier = useMemo(() => {
     const map = new Map<string, number>();
@@ -117,7 +119,7 @@ export default function PurchasingReportPage() {
                 <td className="py-1.5 whitespace-nowrap">{p.date}</td>
                 <td className="py-1.5">{p.supplierName ?? "—"}</td>
                 <td className="py-1.5 text-gray-600">{p.items.map((it) => it.name).join("، ")}</td>
-                <td className="py-1.5">{p.paid ? "مدفوعة" : "غير مدفوعة"}</td>
+                <td className="py-1.5" data-testid="report-status">{owed(p) <= 0 ? "مدفوعة" : settings.debts && paidOf(p) > 0 ? `متبقٍ ${money(owed(p))}` : "غير مدفوعة"}</td>
                 <td className="py-1.5 text-left tabular-nums">{money(p.total)} د.ع</td>
               </tr>
             ))}
