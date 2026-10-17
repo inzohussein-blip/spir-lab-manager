@@ -4,6 +4,7 @@ import { hasRole } from "@/lib/auth/guard";
 import { revalidatePath } from "next/cache";
 import { query, queryOne } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
+import { ensureDesk } from "@/lib/desk/schema";
 
 function accessionNo(): string {
   const d = new Date();
@@ -154,11 +155,15 @@ export async function setOrderStatus(formData: FormData): Promise<void> {
   if (!(await hasRole("technician", "reception"))) return; // the role's pages only (see lib/nav.ts)
   const orderId = String(formData.get("order_id") || "");
   const status = String(formData.get("status") || "");
-  if (!orderId || !status) return;
-  await query(`update test_orders set status = $1 where id = $2`, [
-    status,
-    orderId,
-  ]);
+  if (!orderId || !["pending", "in_progress", "completed", "delivered"].includes(status)) return;
+  // «تسليم النتائج»: the time it was handed over (the turnaround report and the doctors' window read it).
+  await ensureDesk();
+  await query(
+    `update test_orders set status = $1,
+       delivered_at = case when $1 = 'delivered' then coalesce(delivered_at, now()) else null end
+     where id = $2`,
+    [status, orderId]
+  );
   await logAudit("order.status", "order", orderId, { status });
   revalidatePath(`/orders/${orderId}`);
 }

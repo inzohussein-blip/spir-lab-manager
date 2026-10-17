@@ -9,8 +9,11 @@ import { headers } from "next/headers";
 import { attemptsBlocked, noteAttempt, clearAttempts } from "@/lib/license/server";
 import { ipOf } from "@/lib/license/owner";
 
-/** Wrong passwords allowed from one address in 10 minutes (as the owner's and the codes' sign-ins). */
+/** Wrong passwords allowed in 10 minutes for one account from one address — a lab's computers often
+ *  share one address, so one person's mistakes never stop the others signing in — and for one account
+ *  from any address (so changing the address it claims does not get round the count). */
 const LOGIN_TRIES = 10;
+const LOGIN_TRIES_ACCOUNT = 30;
 
 export async function loginAction(
   _prev: { error?: string } | undefined,
@@ -22,16 +25,19 @@ export async function loginAction(
   if (!username || !password) {
     return { error: "يرجى إدخال اسم المستخدم وكلمة المرور", username };
   }
-  const ip = ipOf(await headers());
-  if (await attemptsBlocked("login", ip, LOGIN_TRIES)) {
+  const name = username.toLowerCase().slice(0, 80);
+  const here = `${ipOf(await headers())}|${name}`, anywhere = `*|${name}`;
+  if (await attemptsBlocked("login", here, LOGIN_TRIES) || await attemptsBlocked("login", anywhere, LOGIN_TRIES_ACCOUNT)) {
     return { error: "محاولات كثيرة خاطئة — انتظر 10 دقائق ثم أعد المحاولة", username };
   }
   const user = await verifyCredentials(username, password);
   if (!user) {
-    await noteAttempt("login", ip);
+    await noteAttempt("login", here);
+    await noteAttempt("login", anywhere);
     return { error: "بيانات الدخول غير صحيحة", username };
   }
-  await clearAttempts("login", ip);
+  await clearAttempts("login", here);
+  await clearAttempts("login", anywhere);
   await createSession(user);
   // The page opens the panel with a full load (its frame differs from the sign-in page's).
   return { to: homeFor(user.role) };

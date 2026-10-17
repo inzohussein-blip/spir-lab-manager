@@ -150,6 +150,8 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   ok((await p.locator('tr[data-supplier="مورّد الكواشف"] [data-testid="supplier-due"]').innerText()).includes('4,000'), 'the supplier\'s balance: 4,000');
   await p.click('button[aria-label="كشف حساب مورّد الكواشف"]');
   ok((await p.locator('[data-testid="statement"] tbody tr').count()) === 3 && (await p.locator('[data-testid="statement-due"]').innerText()).includes('4,000'), 'account statement: the purchase, two payments, 4,000 owed');
+  await p.goto(B + '/store/report'); await p.waitForSelector('[data-testid="report-status"]', { timeout: 20000 });
+  ok(await settled(async () => (await p.locator('[data-testid="report-status"]').allInnerTexts()).some((t) => t.includes('4,000'))), 'the report counts what is still owed after the part payments (4,000), as the purchases page');
   await p.goto(B + '/store'); await p.waitForSelector('tr[data-purchase]', { timeout: 20000 });
   await p.locator('tr[data-purchase]').first().locator('button:has-text("تم الدفع")').click();
   ok(await settled(async () => { const x = (await firstPur()); return x.paid === true && x.payments.reduce((t, y) => t + y.amount, 0) === 10000; }), '«تم الدفع» with debts on: the remaining 4,000 recorded as a payment');
@@ -183,6 +185,10 @@ const { B, ok, launch, done, kv, kvPut, resetLocal } = require('./lib.cjs');
   ok(await p.locator('input[placeholder="الصنف"]').first().inputValue() === 'كاشف السكر' && await p.locator('input[aria-label="العدد"]').first().inputValue() === '2', 'purchases: scanning twice adds the item with 2');
   await scan('000');
   ok((await p.locator('[data-testid="scan-box"]').innerText()).includes('غير معروف'), 'an unknown code is said so');
+  // A plain product barcode that starts like a GS1 field (10… = lot) is still a product code.
+  await scan('1012345678905');
+  ok((await p.locator('[data-testid="scan-box"]').innerText()).includes('غير معروف')
+    && !(await p.locator('input[aria-label="اللوت"]').evaluateAll((els) => els.some((e) => e.value === '12345678905'))), 'a plain barcode starting 10… is not read as a lot number');
   await p.goto(B + '/store/count'); await p.waitForSelector('[data-testid="scan-box"]', { timeout: 20000 });
   await scan('6291041500213'); await scan('6291041500213'); await scan('6291041500213');
   ok(await p.locator('input[aria-label="المعدود كاشف السكر"]').inputValue() === '3', 'stocktake: each scan counts one');
