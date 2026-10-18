@@ -95,6 +95,8 @@ export function LabSettingsDialog({ print, rules, onClose }: { print: LabPrint; 
                 <option value="A4">A4</option><option value="A5">A5</option>
               </select>
             </label>
+            <Check label="تقرير «سجل العيّنات» بهذه الخيارات أيضاً" hint="صفحة «التقرير» في سجل العيّنات تفتح بشكل نافذة المختبر هذا بدل شكل لوحة الإدارة (ويمكن التبديل بينهما في كل طباعة)."
+              checked={p.orderReport === "lab"} onChange={(v) => set("orderReport", v ? "lab" : "panel")} />
             <Check label="الباركود بجانب بيانات المريض" checked={p.reportBarcode !== false} onChange={(v) => set("reportBarcode", v)} />
             <Check label="رمز QR ببيانات المختبر أسفل التقرير" checked={p.labQr !== false} onChange={(v) => set("labQr", v)} />
             <Check label="طباعة النتيجة السابقة بجانب الجديدة" checked={!!p.printPrevious} onChange={(v) => set("printPrevious", v)} />

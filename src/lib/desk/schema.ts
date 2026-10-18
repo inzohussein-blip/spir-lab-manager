@@ -43,3 +43,9 @@ export async function ensureOps(): Promise<void> {
   await ensureDesk();
   return ensureMigration("0031_quality_staff_stock.sql", "test_orders", "station_ref");
 }
+
+/** «جدول المناوبات الأسبوعي»: shift types and each person's weekly shifts (0032). */
+export async function ensureSchedule(): Promise<void> {
+  await ensureOps();
+  return ensureMigration("0032_staff_schedule.sql", "staff_schedule", "weekday");
+}

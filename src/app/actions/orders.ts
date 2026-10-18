@@ -102,12 +102,15 @@ export async function saveResult(formData: FormData): Promise<void> {
   const hasPhysical = Object.values(physical).some(Boolean);
   const hasMicro = Object.values(micro).some(Boolean);
 
+  // The highlight mark («تمييز», set in «نافذة المختبر») stays with the result when it is saved again here.
+  await ensureDesk();
+  const before = await queryOne<{ hl: boolean | null }>(`select hl from test_results where order_item_id = $1`, [orderItemId]);
   await query(`delete from test_results where order_item_id = $1`, [orderItemId]);
   await query(
     `insert into test_results
        (order_item_id, order_id, patient_id, test_id, value_numeric, value_text,
-        physical_inspection, microscopic)
-     values ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        physical_inspection, microscopic, hl)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
     [
       orderItemId,
       orderId,
@@ -117,6 +120,7 @@ export async function saveResult(formData: FormData): Promise<void> {
       valueText,
       hasPhysical ? JSON.stringify(physical) : null,
       hasMicro ? JSON.stringify(micro) : null,
+      before?.hl === true,
     ]
   );
 

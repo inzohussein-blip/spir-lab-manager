@@ -2,8 +2,14 @@
  * What «نافذة ساحب الدم» and «نافذة المختبر» pass between the server and the page. No browser or
  * server APIs here (both sides import it).
  */
-import type { Gender, NormalRange, StationSettings } from "@/lib/station/store";
+import type { Gender, NormalRange, StationSettings, StationTest } from "@/lib/station/store";
 import { DEFAULT_TESTS } from "@/lib/station/defaultTests";
+
+/** A catalog test as the lab station's report and forms read it. */
+export const toStation = (t: DeskTest): StationTest => ({
+  id: t.id, code: t.code || undefined, name_ar: t.name_ar, name_en: t.name_en ?? undefined, category: t.category ?? undefined,
+  sample_type: t.sample_type ?? undefined, unit: t.unit ?? undefined, normal: t.normal,
+});
 
 export interface DeskTest {
   id: string;
@@ -83,7 +89,11 @@ export type LabPrint = Partial<Pick<StationSettings,
   "reportFontOn" | "reportFont" | "tubeLabel" | "labelSize" | "labelCopies" | "entryWhatsApp" | "entryHighlight" |
   "autoDerived" | "derivedEgfr" | "derivedSampson" | "sfaDiagnosis" | "sfaAutoCalc" | "formHideEmpty" | "csTestedOnly" |
   "formBoldAbnormal" | "signatureOn" | "signatureImage" | "stampImage" | "signatureName" | "signatureTitle" | "reportTable"
->> & { paper?: "A4" | "A5" };
+>> & {
+  paper?: "A4" | "A5";
+  /** «سجل العيّنات ← التقرير» opens with these print options ("lab") or the panel's own report look (default). */
+  orderReport?: "lab" | "panel";
+};
 
 export interface LabRules {
   /** A second person must verify the results before they are final. */

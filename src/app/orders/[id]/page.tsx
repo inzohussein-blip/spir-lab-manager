@@ -7,6 +7,8 @@ import { createInvoiceFromOrder } from "@/app/actions/invoices";
 import { PageHeader, Button } from "@/components/ui/primitives";
 import { AiAssistant } from "@/components/AiAssistant";
 import { ResultEntry } from "@/components/ResultEntry";
+import { labPrint } from "@/lib/desk/data";
+import { formOptionsOf } from "@/lib/station/templates";
 import { PaymentBadge } from "@/components/PaymentBadge";
 import { QuickPay } from "@/components/QuickPay";
 import { money } from "@/lib/utils";
@@ -27,7 +29,7 @@ export default async function OrderDetailPage(
   if (!order) notFound();
 
   const items = await query<any>(
-    `select i.id as item_id, i.test_id, t.name_ar, t.unit, t.is_special,
+    `select i.id as item_id, i.test_id, t.code, t.name_ar, t.unit, t.is_special,
             t.normal_low, t.normal_high,
             r.value_numeric, r.value_text, r.flag,
             r.physical_inspection, r.microscopic
@@ -38,6 +40,9 @@ export default async function OrderDetailPage(
       order by t.name_ar`,
     [params.id]
   );
+
+  // The report forms (GUE, GSE, semen, C&S…) open with «نافذة المختبر»'s form options.
+  const formOpts = formOptionsOf(await labPrint());
 
   const invoice = await queryOne<{ id: string }>(
     `select id from invoices where order_id = $1 and status <> 'void' limit 1`,
@@ -128,7 +133,7 @@ export default async function OrderDetailPage(
 
       <div className="flex flex-col gap-4">
         {items.map((it: any) => (
-          <ResultEntry key={it.item_id} item={it} orderId={order.id} patientId={order.patient_id} />
+          <ResultEntry key={it.item_id} item={it} orderId={order.id} patientId={order.patient_id} formOpts={formOpts} />
         ))}
 
         <AiAssistant orderId={order.id} />
