@@ -8,7 +8,8 @@ import { QrCode } from "@/components/station/QrCode";
 import { labQrCode, type LabQrCode } from "@/lib/station/labQr";
 import { FormReport } from "@/components/station/FormReport";
 import { isFormCode, decodeForm, formOptionsOf, type FormCode } from "@/lib/station/templates";
-import { reportExtrasOf, LOGO_PX, WM_SIZE } from "@/lib/station/reportExtras";
+import { reportExtrasOf, LOGO_PX, WM_SIZE, WAVE_MARGINS } from "@/lib/station/reportExtras";
+import { WaveTop, WaveBottom } from "@/components/station/ReportWaves";
 import { reportDateOf, reportDateText, reportDateLabel } from "@/lib/station/reportDate";
 import { CATEGORY_EN } from "@/lib/categoryEn";
 import { NO_FILL, fillSteps, smartFill, headZoom, tableHeight, type Fill } from "@/lib/station/fillPage";
@@ -37,9 +38,10 @@ const exact = { WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as 
  *  own date / title / link / page-number lines — and these are made inside the sheet instead: the
  *  top in the header repeated on each page, the bottom under the signature group fixed at each
  *  page's bottom, the sides as padding. Pre-printed paper keeps its letterhead and footer space. */
-function sheetMargins(paper: "A4" | "A5", pre?: { top: number; bottom: number } | null): { top: number; side: number; bottom: number } {
+function sheetMargins(paper: "A4" | "A5", pre?: { top: number; bottom: number } | null, wave = false): { top: number; side: number; bottom: number } {
   const side = paper === "A5" ? 8 : 12;
   if (pre) return { top: pre.top, side, bottom: pre.bottom };
+  if (wave) return { ...WAVE_MARGINS[paper], side };
   return paper === "A5" ? { top: 7, side, bottom: 9 } : { top: 10, side, bottom: 12 };
 }
 
@@ -147,7 +149,10 @@ export function ReportSheet({
 
   // Extra options (pre-printed paper, logo placement and watermark, font) — see lib/station/reportExtras.
   const x = reportExtrasOf(settings);
-  const m = sheetMargins(paper, x.pre);
+  const wave = x.design === "wave";
+  const m = sheetMargins(paper, x.pre, wave);
+  // The page height the results may use: pre-printed paper's or the wave design's margins.
+  const reserved = x.pre ?? (wave ? WAVE_MARGINS[paper] : undefined);
 
   // Few tests (Settings → «ملء الصفحة»): larger text and taller rows, so the results table reaches
   // further down the page. The section's other ways are all off unless chosen (lib/station/fillPage).
@@ -161,7 +166,7 @@ export function ReportSheet({
   const sheetRef = useRef<HTMLDivElement>(null);
   const [measured, setMeasured] = useState({ other: 0, wrap: 1 });
   const fill: Fill = !fillOn || cardMode ? NO_FILL
-    : smart && measured.other > 0 ? smartFill(baseTs, paper, regular.length, groups.length, measured.other, measured.wrap, x.pre ?? undefined, level)
+    : smart && measured.other > 0 ? smartFill(baseTs, paper, regular.length, groups.length, measured.other, measured.wrap, reserved, level)
     : fillSteps(regular.length, paper, opt(settings.fillPaper), level);
   const ts = fill.font === 1 ? baseTs : { ...baseTs, fontSize: Math.round(baseTs.fontSize * fill.font * 10) / 10 };
   const pad = { a4: Math.round(DENSITY_PAD[ts.density].a4 * fill.pad), a5: Math.round(DENSITY_PAD[ts.density].a5 * fill.pad) };
@@ -227,6 +232,13 @@ export function ReportSheet({
     // eslint-disable-next-line @next/next/no-img-element
     <img src={settings.logo} alt="" className="shrink-0 object-contain" style={{ width: logoPx, height: logoPx }} data-testid="report-logo" />
   );
+  // «الموجة»: the name centred, larger, with its sub-title under it.
+  const waveName = (
+    <div className="text-center" style={hz !== 1 ? { zoom: hz } : undefined}>
+      <h2 className="text-[1.75rem] font-extrabold leading-tight" style={{ color: c.title }}>{settings.labName}</h2>
+      {settings.labSubtitle && <p className="mt-0.5 text-base font-medium" style={{ color: c.subtitle }}>{settings.labSubtitle}</p>}
+    </div>
+  );
   const nameBlock = (
     <div className={x.head.logo === "center" ? "text-center" : ""} style={hz !== 1 ? { zoom: hz } : undefined}>
       <h2 className="text-2xl font-extrabold leading-tight" style={{ color: c.title }}>{settings.labName}</h2>
@@ -251,6 +263,12 @@ export function ReportSheet({
         {/* Letterhead in the lab's colours — none on pre-printed paper (it has its own) */}
         {x.pre ? (
           <div className="flex justify-end pb-3" data-testid="report-head-pre">{dateBlock}</div>
+        ) : wave ? (
+          <div data-testid="report-head" data-logo={x.head.logo} data-design="wave">
+            <div className={`flex items-center justify-center gap-3 pb-3 ${x.head.logo === "center" ? "flex-col gap-1" : x.head.logo === "end" ? "flex-row-reverse" : ""}`}>{logoImg}{waveName}</div>
+            <div className="h-px w-full" style={{ background: c.border, ...exact }} />
+            <div className="mt-2 flex justify-end">{dateBlock}</div>
+          </div>
         ) : x.head.logo === "center" ? (
           <div className="pb-3" data-testid="report-head" data-logo="center">
             <div className="flex flex-col items-center gap-1">{logoImg}{nameBlock}</div>
@@ -267,7 +285,7 @@ export function ReportSheet({
           </div>
         )}
         {/* Accent rule with a main-colour center */}
-        {!x.pre && <div className="h-1 w-full rounded" style={{ background: `linear-gradient(90deg, ${c.border} 0%, ${c.title} 50%, ${c.border} 100%)`, ...exact }} />}
+        {!x.pre && !wave && <div className="h-1 w-full rounded" style={{ background: `linear-gradient(90deg, ${c.border} 0%, ${c.title} 50%, ${c.border} 100%)`, ...exact }} />}
 
         <div className="report-keep mt-4 grid grid-cols-2 gap-x-6 gap-y-1.5 rounded-lg border-2 p-3 text-sm sm:grid-cols-3" style={{ borderColor: c.border, ...(hz !== 1 ? { zoom: hz } : {}) }} data-testid="report-patient">
           <div><span style={{ color: c.title }} className="font-semibold">المريض:</span> <b>{patient.name || "—"}</b></div>
@@ -302,6 +320,9 @@ export function ReportSheet({
         #report-sheet .report-page { break-before: page; }
         #report-sheet .form-table td, #report-sheet .form-table th { padding-top: 2px !important; padding-bottom: 2px !important; }
         #report-sheet .report-watermark { position: fixed; }
+        #report-sheet .report-wave-top { position: fixed; top: 0; left: 0; right: 0; }
+        #report-sheet .report-wave-bottom { position: fixed; bottom: 0; left: 0; right: 0; }
+        ${wave ? "#report-sheet .report-bottom { background: transparent; }" : ""}
         #report-sheet .report-sign { margin-top: 0; }
         #report-sheet .report-qr { padding: 2px 5px !important; }
         #report-sheet .report-qr img { width: 19mm !important; height: 19mm !important; }
@@ -332,9 +353,16 @@ export function ReportSheet({
         ` : ""}
       }`}</style>}
 
-      <div id="report-sheet" ref={sheetRef} data-pre={x.pre ? "1" : undefined} data-fill={fillOn ? `${fill.font}` : undefined}
+      <div id="report-sheet" ref={sheetRef} data-pre={x.pre ? "1" : undefined} data-design={x.design} data-fill={fillOn ? `${fill.font}` : undefined}
         className={`relative isolate mx-auto flex max-w-[210mm] flex-col bg-white p-8 text-black shadow-sm print:mt-0 print:shadow-none ${printable ? "" : "print:hidden"} ${className}`}
-        style={{ ...(x.font ? { fontFamily: x.font } : {}), ...(x.pre ? { paddingTop: `${x.pre.top}mm`, paddingBottom: `${x.pre.bottom}mm` } : {}) }}>
+        style={{ ...(x.font ? { fontFamily: x.font } : {}), ...(x.pre ? { paddingTop: `${x.pre.top}mm`, paddingBottom: `${x.pre.bottom}mm` } : wave ? { paddingTop: `${m.top}mm`, paddingBottom: `${m.bottom}mm` } : {}) }}>
+        {/* «الموجة»: its waves at the top and bottom (fixed in print → on every page) */}
+        {wave && (
+          <>
+            <div aria-hidden className="report-wave-top pointer-events-none absolute inset-x-0 top-0 -z-10" data-testid="report-wave-top"><WaveTop primary={baseTs.primary} accent={baseTs.accent} /></div>
+            <div aria-hidden className="report-wave-bottom pointer-events-none absolute inset-x-0 bottom-0 -z-10" data-testid="report-wave-bottom"><WaveBottom primary={baseTs.primary} accent={baseTs.accent} /></div>
+          </>
+        )}
         {/* Pre-printed paper: where its own letterhead and footer are (on screen only) */}
         {x.pre && (
           <>
@@ -410,11 +438,17 @@ export function ReportSheet({
             {qrCode && <LabQrCard q={qrCode} logo={qrLogo} colors={c} />}
           </div>
 
-          {settings.footer && !x.pre && (
+          {settings.footer && !x.pre && (wave ? (
+            // «الموجة»: the footer as text over a thin line (no coloured bar).
+            <div className="report-footer mt-3 text-center text-xs font-medium text-gray-700" data-design="wave">
+              <div className="mx-auto mb-1.5 h-px w-3/5" style={{ background: c.border, ...exact }} />
+              {settings.footer}
+            </div>
+          ) : (
             <div className="report-footer mt-4 rounded-md px-4 py-2 text-center text-xs font-medium text-white" style={{ background: c.bar, ...exact }}>
               {settings.footer}
             </div>
-          )}
+          ))}
         </div>
       </div>
     </>

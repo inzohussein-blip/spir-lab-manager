@@ -54,8 +54,11 @@ export const REPORT_PALETTES: { name: string; primary: string; accent: string }[
   { name: "عنابي", primary: "#7a1f35", accent: "#d08a5a" },
   { name: "أحمر", primary: "#a32020", accent: "#e0a030" },
   { name: "رمادي داكن", primary: "#374151", accent: "#9ca3af" },
+  { name: "تيل وأزرق (يناسب «الموجة»)", primary: "#1f9a7a", accent: "#3a8fcf" },
 ];
 
+/** A colour lightened towards white (t = 0 → itself, 1 → white) — for the report's decorations. */
+export const tint = (hex: string, t: number) => mix(hex, "#ffffff", t);
 /** Mix two hex colours: t = 0 → a, t = 1 → b. */
 function mix(a: string, b: string, t: number): string {
   const p = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));

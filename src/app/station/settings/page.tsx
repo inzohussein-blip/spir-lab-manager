@@ -15,6 +15,7 @@ import {
 } from "@/lib/station/store";
 import { InstallButton } from "@/components/station/InstallButton";
 import { TableStyleCard } from "@/components/station/TableStyleCard";
+import { ReportDesignCard } from "@/components/station/ReportDesignCard";
 import { ORIGINAL_HEAD, PRE_BOTTOM_DEFAULT, PRE_TOP_DEFAULT, REPORT_FONTS, type ReportHead } from "@/lib/station/reportExtras";
 import { reportDateOf, reportDateText, reportDateLabel, type ReportDate } from "@/lib/station/reportDate";
 import { ThemeCard } from "@/components/local/LocalTheme";
@@ -118,7 +119,7 @@ export default function StationSettingsPage() {
 
   // What is switched on in each section (shown beside its name).
   const onCount = (xs: boolean[]) => { const n = xs.filter(Boolean).length; return n ? `${n} مفعّل` : null; };
-  const reportOn = onCount([s.reportBarcode !== false, s.labQr !== false, s.printPrevious === true, s.signatureOn === true, s.prePrinted === true, s.reportHeadOn === true, s.reportFontOn === true]);
+  const reportOn = onCount([s.reportBarcode !== false, s.labQr !== false, s.printPrevious === true, s.signatureOn === true, s.prePrinted === true, s.reportHeadOn === true, s.reportFontOn === true, s.reportDesign === "wave"]);
   const fillOn = onCount([s.reportFill === true, s.fillSmart === true, s.fillPaper === true, s.fillNotes === true, s.fillHead === true, s.fillCard === true, s.fillPrev === true, !!s.fillLevel]);
   const formsOn = onCount([s.formBoldAbnormal !== false, s.formHideEmpty === true, s.csTestedOnly === true, s.sfaDiagnosis !== false, s.sfaAutoCalc !== false, s.formExtraNormals === true]);
   const entryOn = onCount([s.entryPrintButton !== false, s.entryWhatsApp !== false, s.entryHighlight !== false, s.showPrevious !== false, s.autoDerived === true, s.tubeLabel === true, s.collapseGroups === true, s.ageUnit === true, s.deliveryStatus === true]);
@@ -209,6 +210,8 @@ export default function StationSettingsPage() {
           aside: preview,
           content: (
             <>
+              <ReportDesignCard settings={s} onDesign={(d) => setOption({ reportDesign: d === "wave" ? "wave" : undefined })}
+                onColors={(c) => setOption({ reportTable: { ...(s.reportTable ?? {}), ...c } })} />
               <TableStyleCard settings={s} onChange={(t) => setOption({ reportTable: t })} />
 
               <SettingCard title="ما يظهر على الورقة" icon={<Eye />} desc="تظهر النتيجة في المعاينة بجانب الإعدادات." testid="report-content">

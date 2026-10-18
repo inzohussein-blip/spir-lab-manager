@@ -41,9 +41,20 @@ const mm = (v: unknown, d: number) => {
   return Number.isFinite(n) && n >= 0 ? Math.min(120, Math.round(n)) : d;
 };
 
+/** The report's designs (Settings → «التقرير المطبوع ← تصميم التقرير»). */
+export type ReportDesign = "classic" | "wave";
+export const REPORT_DESIGNS: { id: ReportDesign; name: string; hint: string }[] = [
+  { id: "classic", name: "الكلاسيكي (الأصلي)", hint: "الاسم والشعار في الأعلى، خط ملوّن، وشريط التذييل الملوّن." },
+  { id: "wave", name: "الموجة", hint: "موجات هادئة أعلى كل صفحة وأسفلها، صليب طبي وخط نبض، الاسم في الوسط، والتذييل نصاً فوق خط رفيع." },
+];
+/** «الموجة»: the page's margins (mm) leave room for its waves at the top and bottom of every page. */
+export const WAVE_MARGINS: Record<"A4" | "A5", { top: number; bottom: number }> = { A4: { top: 24, bottom: 24 }, A5: { top: 17, bottom: 17 } };
+
 export interface ReportExtras {
   /** Blank space (mm) for the pre-printed paper, or null. */
   pre: { top: number; bottom: number } | null;
+  /** The design; pre-printed paper keeps its own letterhead, so it is always the classic one there. */
+  design: ReportDesign;
   head: ReportHead;
   /** CSS font-family for the sheet, or null for the app's font. */
   font: string | null;
@@ -56,6 +67,7 @@ export function reportExtrasOf(s: StationSettings): ReportExtras {
   const f = s.reportFontOn ? REPORT_FONTS.find((x) => x.id === s.reportFont) : undefined;
   return {
     pre: s.prePrinted ? { top: mm(s.prePrintedTop, PRE_TOP_DEFAULT), bottom: mm(s.prePrintedBottom, PRE_BOTTOM_DEFAULT) } : null,
+    design: !s.prePrinted && s.reportDesign === "wave" ? "wave" : "classic",
     head: h,
     font: f && f.id !== "plex" ? `${f.family}, var(--font-sans)` : null,
   };

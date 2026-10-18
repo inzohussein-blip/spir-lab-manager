@@ -262,6 +262,9 @@ export interface StationSettings {
   /** The report's font — off by default (the app's font). */
   reportFontOn?: boolean;
   reportFont?: string;
+  /** The report's design (see ./reportExtras REPORT_DESIGNS): the classic letterhead (unset), or
+   *  «الموجة» — soft waves at the top and bottom of every page, the name centred. */
+  reportDesign?: "classic" | "wave";
 }
 
 function read<T>(key: string, fallback: T): T {
