@@ -12,7 +12,7 @@ export const STATION_META: Record<string, { label: string; icon: LucideIcon; col
 
 /** Stations the sync leaves on the computer (shown in «النسخة الشاملة»). */
 const MORE_META: Record<string, { label: string; icon: LucideIcon; color: string }> = {
-  connect: { label: "محطة التواصل", icon: MessagesSquare, color: "#0891b2" },
+  connect: { label: "محطة التواصل", icon: MessagesSquare, color: "#059669" },
   doctors: { label: "رموز الأطباء", icon: Stethoscope, color: "#7c3aed" },
   doctor: { label: "نافذة الأطباء", icon: Stethoscope, color: "#7c3aed" },
 };

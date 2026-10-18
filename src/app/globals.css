@@ -335,6 +335,7 @@ main > * {
   :root[data-ui="new"][data-ui-color="teal"] { --ui-a: #0f766e; --ui-a-dark: #115e59; --ui-a-light: #e3f4f2; --ui-hi: #2dd4bf; --ui-hi-dark: #14b8a6; --ui-hi-light: #0f2e2b; --ui-deep: #063a36; --ui-on: #032622; }
   :root[data-ui="new"][data-ui-color="rose"] { --ui-a: #be123c; --ui-a-dark: #9f1239; --ui-a-light: #fde8ee; --ui-hi: #fb7185; --ui-hi-dark: #f43f5e; --ui-hi-light: #3a1420; --ui-deep: #5a0a22; --ui-on: #3a0612; }
   :root[data-ui="new"][data-ui-color="orange"] { --ui-a: #c2410c; --ui-a-dark: #9a3412; --ui-a-light: #fdeee6; --ui-hi: #fb923c; --ui-hi-dark: #f97316; --ui-hi-light: #3a1d0f; --ui-deep: #5a1d08; --ui-on: #3a1404; }
+  :root[data-ui="new"][data-ui-color="slate"] { --ui-a: #334155; --ui-a-dark: #1e293b; --ui-a-light: #eceff3; --ui-hi: #94a3b8; --ui-hi-dark: #64748b; --ui-hi-light: #1e2633; --ui-deep: #172030; --ui-on: #0b1220; }
   :root[data-ui="new"][data-ui-color="stations"] { --ui-a: #0d9488; --ui-a-dark: #0f766e; --ui-a-light: #f0fdfa; --ui-hi: #2dd4bf; --ui-hi-dark: #14b8a6; --ui-hi-light: #0b3b36; --ui-deep: #134e4a; --ui-on: #042f2e; }
   /* «ألوان المحطات»: the menu's dark card and the toasts follow each station's own accent. */
   :root[data-ui="new"][data-ui-color="stations"] :is(.station, .store, .training, .qc, .roster, .connect, .doctor, .about, .sync, .panel, .welcome) {

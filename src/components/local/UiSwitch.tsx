@@ -1,16 +1,24 @@
 "use client";
 
 import { Check } from "lucide-react";
-import { setUi, useUi, setUiColor, useUiColor, UI_COLORS, type UiMode } from "@/lib/local/ui";
+import { setUi, useUi, setUiColor, useUiColor, UI_COLORS, type UiMode, type UiColor } from "@/lib/local/ui";
 
-/** Little pictures of the two looks: the classic one (as the project has always been) and the new green style. */
-function Preview({ mode }: { mode: UiMode }) {
+/** Each colour's main and dark shade (as in globals.css), for the new look's little picture. */
+const SHADES: Record<UiColor, [string, string]> = {
+  green: ["#14733f", "#0e5530"], blue: ["#1d4ed8", "#1e3a8a"], violet: ["#6d28d9", "#4c1d95"], teal: ["#0f766e", "#115e59"],
+  rose: ["#be123c", "#9f1239"], orange: ["#c2410c", "#9a3412"], slate: ["#334155", "#1e293b"], stations: ["#0d9488", "#0f766e"],
+};
+
+/** Little pictures of the two looks: the classic one (as the project has always been) and the new
+ *  style, in the colour chosen for it. */
+function Preview({ mode, color = "green" }: { mode: UiMode; color?: UiColor }) {
+  const [c, d] = SHADES[color];
   return mode === "new" ? (
     <svg viewBox="0 0 120 70" className="w-full rounded-xl" aria-hidden>
-      <rect width="120" height="70" fill="#f2f5f3" /><rect x="86" y="6" width="28" height="58" rx="7" fill="#fff" /><rect x="90" y="12" width="20" height="3" rx="1.5" fill="#14733f" /><rect x="90" y="20" width="20" height="3" rx="1.5" fill="#cfd8d3" /><rect x="90" y="27" width="20" height="3" rx="1.5" fill="#cfd8d3" />
-      <rect x="90" y="50" width="20" height="10" rx="4" fill="#0e5530" />
-      <rect x="6" y="6" width="74" height="8" rx="4" fill="#fff" /><rect x="6" y="20" width="22" height="20" rx="6" fill="#14733f" /><rect x="31" y="20" width="22" height="20" rx="6" fill="#fff" /><rect x="56" y="20" width="24" height="20" rx="6" fill="#fff" />
-      <rect x="6" y="44" width="46" height="20" rx="6" fill="#fff" /><rect x="56" y="44" width="24" height="20" rx="6" fill="#0e5530" />
+      <rect width="120" height="70" fill="#f2f5f3" /><rect x="86" y="6" width="28" height="58" rx="7" fill="#fff" /><rect x="90" y="12" width="20" height="3" rx="1.5" fill={c} /><rect x="90" y="20" width="20" height="3" rx="1.5" fill="#cfd8d3" /><rect x="90" y="27" width="20" height="3" rx="1.5" fill="#cfd8d3" />
+      <rect x="90" y="50" width="20" height="10" rx="4" fill={d} />
+      <rect x="6" y="6" width="74" height="8" rx="4" fill="#fff" /><rect x="6" y="20" width="22" height="20" rx="6" fill={c} /><rect x="31" y="20" width="22" height="20" rx="6" fill="#fff" /><rect x="56" y="20" width="24" height="20" rx="6" fill="#fff" />
+      <rect x="6" y="44" width="46" height="20" rx="6" fill="#fff" /><rect x="56" y="44" width="24" height="20" rx="6" fill={d} />
     </svg>
   ) : (
     <svg viewBox="0 0 120 70" className="w-full rounded-xl" aria-hidden>
@@ -37,7 +45,7 @@ export function UiSwitch() {
         return (
           <button key={o.m} type="button" role="radio" aria-checked={on} data-testid={`ui-${o.m}`} onClick={() => setUi(o.m)}
             className={`rounded-2xl border-2 p-2.5 text-start transition-colors ${on ? "border-brand bg-brand-light" : "border-line hover:bg-canvas"}`}>
-            <Preview mode={o.m} />
+            <Preview mode={o.m} color={color} />
             <span className="mt-2 flex items-center gap-1.5 text-sm font-semibold">{on && <Check className="size-4 text-brand-dark" />}{o.label}</span>
             <span className="block text-[11px] leading-5 text-muted">{o.hint}</span>
           </button>

@@ -29,7 +29,7 @@ export function setUi(mode: UiMode): void {
 }
 
 // ── The new look's accent: green (the default), another colour, or each station's own ──
-export type UiColor = "green" | "blue" | "violet" | "teal" | "rose" | "orange" | "stations";
+export type UiColor = "green" | "blue" | "violet" | "teal" | "rose" | "orange" | "slate" | "stations";
 export const UI_COLORS: { c: UiColor; label: string; swatch: string[] }[] = [
   { c: "green", label: "أخضر", swatch: ["#14733f"] },
   { c: "blue", label: "أزرق", swatch: ["#1d4ed8"] },
@@ -37,6 +37,7 @@ export const UI_COLORS: { c: UiColor; label: string; swatch: string[] }[] = [
   { c: "teal", label: "فيروزي", swatch: ["#0f766e"] },
   { c: "rose", label: "وردي", swatch: ["#be123c"] },
   { c: "orange", label: "برتقالي", swatch: ["#c2410c"] },
+  { c: "slate", label: "رمادي", swatch: ["#334155"] },
   { c: "stations", label: "ألوان المحطات", swatch: ["#0d9488", "#d97706", "#4f46e5", "#e11d48"] },
 ];
 const isColor = (v: string | null): v is UiColor => !!v && UI_COLORS.some((x) => x.c === v);
