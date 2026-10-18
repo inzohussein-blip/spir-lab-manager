@@ -17,6 +17,8 @@
 import { kvFlush, kvGet, kvSet, kvRemove, kvSyncedEntries as kvAllSynced, isSyncedKey as kvIsSynced, onKvChange, KV_REMOTE_EVENT } from "@/lib/local/kv";
 import { sharedStation, syncMasterOn } from "@/lib/sync/protocol";
 import { todayYmd } from "@/lib/local/util";
+import { STOCK_KEY, mergeStockItem } from "@/lib/local/stockTally";
+import { stockFloor } from "@/lib/local/links";
 
 // Stations this computer keeps to itself («محطة المزامنة ← الإعدادات») stay out of the files both ways.
 const isSyncedKey = (k: string) => kvIsSynced(k) && sharedStation(k);
@@ -216,12 +218,22 @@ export async function importSync(raw: unknown): Promise<ImportResult> {
         const i = arr.findIndex((r) => r.id === id);
         const local = c[ck(coll, id)];
         const lt = i < 0 ? (local?.[1] ? local[0] : -1) : local?.[0] ?? 0;
-        if (!(f.t > lt)) { if (i >= 0) kept++; continue; }
+        // Stock counts add up across computers (./stockTally): the file's totals come in even when
+        // this computer's later change keeps the rest of the item.
+        const stock = coll === STOCK_KEY && !f.del && !!f.d && typeof f.d === "object";
+        if (!(f.t > lt)) {
+          if (i >= 0) {
+            kept++;
+            if (stock) { const m = mergeStockItem(arr[i], f.d, stockFloor); if (JSON.stringify(m) !== JSON.stringify(arr[i])) { arr[i] = m; dirty = true; } }
+          }
+          continue;
+        }
         if (f.del) {
           if (i >= 0) { arr.splice(i, 1); removed++; dirty = true; }
         } else if (f.d && typeof f.d === "object" && (f.d as Rec).id === id) {
-          if (i < 0) { arr.push(f.d as Rec); added++; dirty = true; }
-          else if (JSON.stringify(arr[i]) !== JSON.stringify(f.d)) { arr[i] = f.d as Rec; updated++; dirty = true; }
+          const d = stock && i >= 0 ? mergeStockItem(f.d as Rec, arr[i], stockFloor) : (f.d as Rec);
+          if (i < 0) { arr.push(d); added++; dirty = true; }
+          else if (JSON.stringify(arr[i]) !== JSON.stringify(d)) { arr[i] = d; updated++; dirty = true; }
         } else continue;
         c[ck(coll, id)] = [f.t, f.del ? 1 : 0];
       }

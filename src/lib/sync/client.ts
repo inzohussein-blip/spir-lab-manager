@@ -20,6 +20,8 @@ import { PULL_LIMIT, PUSH_LIMIT, PULL_BYTES, PUSH_BYTES, COMPANY_SYNC_KEY, compa
 // Stations this computer keeps to itself («محطة المزامنة ← الإعدادات») are neither sent nor received.
 const isSyncedKey = (k: string) => kvIsSynced(k) && sharedStation(k);
 const kvSyncedEntries = () => kvAllSynced().filter(([k]) => sharedStation(k));
+import { STOCK_KEY, mergeStockItem, tallyAhead } from "@/lib/local/stockTally";
+import { stockFloor } from "@/lib/local/links";
 import { SupaError, supaProbe, supaPull, supaPush, supaRefresh, supaSignIn, type SupaSession } from "./supabase";
 
 // ── Local bookkeeping (IndexedDB "lab-sync": outbox + meta) ──────────────────
@@ -326,9 +328,13 @@ function applyRows(coll: string, rows: SyncRow[], pending: Map<string, OutEntry>
   const cur = kvGet(coll);
   let whole: SyncRow | null = null;
   const recs: SyncRow[] = [];
+  // Stock counts add up across devices (lib/local/stockTally): the other device's totals come in
+  // even when this device's later change wins the rest of the item.
+  const stock = coll === STOCK_KEY;
+  const tallies: SyncRow[] = [];
   for (const r of rows) {
     const p = pending.get(okey(coll, r.id));
-    if (p && p.mtime > r.mtime) continue; // this device's own later change wins; it is sent next
+    if (p && p.mtime > r.mtime) { if (stock && !r.deleted) tallies.push(r); continue; } // this device's own later change wins; it is sent next
     if (p) { done.push(p); pending.delete(okey(coll, r.id)); }
     if (r.id === "_") whole = r; else recs.push(r);
   }
@@ -339,14 +345,26 @@ function applyRows(coll: string, rows: SyncRow[], pending: Map<string, OutEntry>
     try { mine = cur == null ? null : JSON.parse(cur); } catch { /* not JSON */ }
     next = whole.deleted ? null : d && typeof d === "object" && typeof d.__raw === "string" ? d.__raw : JSON.stringify(keepMedia(whole.data, mine));
   }
-  if (recs.length) {
+  if (recs.length || tallies.length) {
     let arr: { id?: string }[] = [];
     try { const x = next == null ? [] : JSON.parse(next); if (Array.isArray(x)) arr = x; } catch { /* start a list */ }
     for (const r of recs) {
       const i = arr.findIndex((e) => e && e.id === r.id);
       if (r.deleted) { if (i >= 0) arr.splice(i, 1); }
-      else if (i >= 0) arr[i] = keepMedia(r.data, arr[i]) as { id: string };
+      else if (i >= 0) {
+        const mine = arr[i];
+        arr[i] = keepMedia(r.data, mine) as { id: string };
+        if (stock) {
+          arr[i] = mergeStockItem(arr[i], mine, stockFloor);
+          // This device has totals the other lacks: send the item back (merged) so all get them.
+          if (tallyAhead(mine, r.data)) resend.push({ coll, id: r.id, mtime: now() });
+        }
+      }
       else arr.splice(Math.min(Math.max(0, r.ord), arr.length), 0, r.data as { id: string });
+    }
+    for (const r of tallies) {
+      const i = arr.findIndex((e) => e && e.id === r.id);
+      if (i >= 0) arr[i] = mergeStockItem(arr[i], r.data, stockFloor);
     }
     next = JSON.stringify(arr);
   }
@@ -354,6 +372,8 @@ function applyRows(coll: string, rows: SyncRow[], pending: Map<string, OutEntry>
   kvApply(coll, next);
   return true;
 }
+/** Stock items this device sends back after merging (see applyRows). */
+const resend: OutEntry[] = [];
 
 async function pullInto(ad: Adapter, st: State): Promise<number> {
   const pending = new Map((await outboxAll()).map((e) => [okey(e.coll, e.id), e]));
@@ -368,6 +388,7 @@ async function pullInto(ad: Adapter, st: State): Promise<number> {
     for (const r of rows) if (isSyncedKey(r.coll)) (byColl.get(r.coll) ?? byColl.set(r.coll, []).get(r.coll)!).push(r);
     for (const [coll, rs] of byColl) if (applyRows(coll, rs, pending, done)) applied += rs.length;
     if (done.length) await outboxDone(done);
+    if (resend.length) { await outboxPut(resend.splice(0)); }
     since = Math.max(since, ...rows.map((r) => Number(r.rev) || 0));
     st.cursor = Math.max(st.cursor, since);
     await metaSet(STATE_KEY, st);

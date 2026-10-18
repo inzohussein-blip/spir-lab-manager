@@ -71,7 +71,7 @@ const TAG = Date.now().toString(36).slice(-5);
   await c.click('[data-testid="collect-save"]');
   await c.waitForSelector('[data-testid="collect-done"]', { timeout: 20000 });
   const acc = (await c.locator('[data-testid="collect-done"] .font-mono').innerText()).trim();
-  ok(/^LAB-\d{8}-[0-9A-F]{4}$/.test(acc), `saved and sent to the lab (${acc})`);
+  ok(/^LAB-\d{8}-\d{3,}$/.test(acc), `saved and sent to the lab, numbered as in the lab station (${acc})`);
   await c.click('[data-testid="collect-receipt"]');
   await c.waitForSelector('#report-sheet', { timeout: 20000 });
   ok(num(await c.locator('[data-testid="receipt-total"]').innerText()) === 35 && num(await c.locator('[data-testid="receipt-paid"]').innerText()) === 20

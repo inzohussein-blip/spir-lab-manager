@@ -66,6 +66,20 @@ const A = 'مختبر أ ' + TAG, BB = 'مختبر ب ' + TAG;
   ok(!lb.includes(SA1) && !lb.includes(SA2), 'lab B\'s computer has none of A\'s records');
   ok(!l1.includes(SB) && !l2.includes(SB), 'lab A\'s computers have none of B\'s');
 
+  // ── A1 and A2 change one item's count at the same time: the changes add up (3 − 1 + 4 = 6) ──
+  const setQty = async (p, q) => {
+    await p.goto(B + '/store/items'); await p.waitForSelector('[data-testid="items-list"] tbody tr', { timeout: 20000 });
+    await p.click(`button[aria-label="تعديل ${SA1}"]`);
+    await p.fill('[data-testid="item-form"] input[aria-label="الكمية"]', String(q));
+    await p.click('button:has-text("حفظ التعديل")');
+  };
+  await Promise.all([setQty(a1, 2), setQty(a2, 7)]);
+  await a1.waitForTimeout(800);
+  await syncNow(a1); await syncNow(a2); await syncNow(a1); await syncNow(a2);
+  const qOf = async (p) => ((await kv(p, 'station.stock.v1')) || []).find((s) => s.name === SA1)?.qty;
+  const q1 = await qOf(a1), q2 = await qOf(a2);
+  ok(q1 === 6 && q2 === 6, `two computers' changes to one count add up over the network (A1 ${q1}, A2 ${q2})`);
+
   // ── The server: signed license only, and only its own lab ──
   const proof = (p) => p.evaluate(() => { const s = JSON.parse(localStorage.getItem('local.license.v1') || 'null'); const dev = localStorage.getItem('local.device.v1'); return { token: s && s.token, device: dev }; });
   const post = (p, url, body) => p.evaluate(async ([url, body]) => { const r = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }); return { status: r.status, body: await r.json().catch(() => null) }; }, [url, body]);

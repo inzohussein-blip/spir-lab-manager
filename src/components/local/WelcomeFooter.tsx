@@ -28,7 +28,7 @@ export function WelcomeFooter() {
     <div className="mt-8 grid items-start gap-4 md:grid-cols-2" data-testid="welcome-footer">
       <div className={card} data-testid="welcome-theme">
         <div className="mb-1 flex items-center gap-2 text-sm font-semibold"><Palette className="size-4 text-brand-dark" /> المظهر</div>
-        <p className="mb-3 text-xs text-muted">فاتح (الافتراضي) أو غامق، أو تلقائي حسب إعداد الجهاز. لصفحة الترحيب ومدير الرموز ولوحة الإدارة؛ ولكل محطة مظهرها من إعداداتها (فاتح افتراضياً).</p>
+        <p className="mb-3 text-xs text-muted">فاتح (الافتراضي) أو غامق، أو تلقائي حسب إعداد الجهاز. لصفحة الترحيب وإدارة الرموز ولوحة الإدارة؛ ولكل محطة مظهرها من إعداداتها (فاتح افتراضياً).</p>
         <SiteThemeSwitch />
         <div className="mt-5 border-t border-line pt-4">
           <div className="mb-1 flex items-center gap-2 text-sm font-semibold"><Palette className="size-4 text-brand-dark" /> الثيم (شكل التصميم)</div>

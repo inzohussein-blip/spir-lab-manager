@@ -11,6 +11,7 @@
  */
 
 import { kvGet, kvSet } from "@/lib/local/kv";
+import { stampStock } from "@/lib/local/stockTally";
 
 function list<T>(key: string): T[] {
   try { const v = JSON.parse(kvGet(key) ?? "[]"); return Array.isArray(v) ? (v as T[]) : []; } catch { return []; }
@@ -117,7 +118,7 @@ export function takeFromStock(id: string | undefined, units = 1, ref?: string): 
   const all = stockItems();
   if (!all.some((s) => s.id === id)) return;
   const next = all.map((s) => (s.id === id ? { ...s, qty: stockFloor(Number(s.qty) - units) } : s));
-  kvSet(K_STOCK, JSON.stringify(next));
+  kvSet(K_STOCK, JSON.stringify(stampStock(all, next)));
   logStockMoves(all, next, "qc", ref);
 }
 

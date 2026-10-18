@@ -80,6 +80,22 @@ const { B, ok, launch, done, kv, resetLocal } = require('./lib.cjs');
   ok(after.find((s) => s.name === SA)?.qty === 42 && num(r4, 'حُدّث') >= 1, `C takes the later change to SA (${r4.replace(/\s+/g, ' ')})`);
   ok(!after.some((s) => s.name === SC) && num(r4, 'حُذف') >= 1, 'and the deletion of SC');
 
+  // ── Both computers change SA's count before syncing: the changes add up (42 − 2 + 10 = 50) ──
+  const setQty = async (p, q) => {
+    await p.goto(B + '/store/items'); await p.waitForSelector('[data-testid="items-list"] tbody tr', { timeout: 20000 });
+    await p.click(`button[aria-label="تعديل ${SA}"]`);
+    await p.fill('[data-testid="item-form"] input[aria-label="الكمية"]', String(q));
+    await p.click('button:has-text("حفظ التعديل")'); await p.waitForTimeout(600);
+  };
+  await setQty(A, 40); await setQty(C, 52);
+  const fA = await exportFrom(A), fC = await exportFrom(C);
+  await importInto(C, fA); await importInto(A, fC);
+  const qa = (await stock(A)).find((s) => s.name === SA)?.qty, qc = (await stock(C)).find((s) => s.name === SA)?.qty;
+  ok(qa === 50 && qc === 50, `two computers' changes to one count add up (A ${qa}, C ${qc})`);
+  await importInto(C, fA); await importInto(A, fC);
+  const qa2 = (await stock(A)).find((s) => s.name === SA)?.qty, qc2 = (await stock(C)).find((s) => s.name === SA)?.qty;
+  ok(qa2 === 50 && qc2 === 50, `the same files again change no count (A ${qa2}, C ${qc2})`);
+
   // ── Settings: a station kept to this computer stays out of the file ──
   await C.goto(B + '/sync/settings#shared'); await C.waitForSelector('[data-testid="sync-stations"]', { timeout: 20000 });
   await C.uncheck('input[aria-label="مشاركة المخزن والمشتريات"]');

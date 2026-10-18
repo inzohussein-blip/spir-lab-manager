@@ -5,15 +5,8 @@ import { revalidatePath } from "next/cache";
 import { query, queryOne } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
 import { ensureDesk } from "@/lib/desk/schema";
+import { accessionPrefix, accessionSql } from "@/lib/accession";
 
-function accessionNo(): string {
-  const d = new Date();
-  const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(
-    d.getDate()
-  ).padStart(2, "0")}`;
-  const suffix = Math.random().toString(16).slice(2, 6).toUpperCase();
-  return `LAB-${ymd}-${suffix}`;
-}
 
 /** Create an order (visit) with the selected tests. Reagent stock is deducted
  *  automatically by the DB trigger on each inserted order item (section 3).
@@ -36,8 +29,8 @@ export async function createOrder(formData: FormData): Promise<{ orderId: string
   const order = await queryOne<{ id: string }>(
     `insert into test_orders
        (patient_id, status, accession_no, referrer_id, payment_status, payment_method)
-     values ($1, 'in_progress', $2, $3, $4, $5) returning id`,
-    [patientId, accessionNo(), referrerId, paymentStatus, paymentMethod]
+     values ($1, 'in_progress', ${accessionSql("$2")}, $3, $4, $5) returning id`,
+    [patientId, accessionPrefix(), referrerId, paymentStatus, paymentMethod]
   );
   const orderId = order!.id;
 

@@ -125,7 +125,7 @@ function BackupCard() {
     const f = e.target.files?.[0];
     e.target.value = "";
     if (!f) return;
-    if (!window.confirm("سيتم استبدال كل بيانات محطة التدريب (الفحوصات والتيوبات والأدوات والصور) بمحتوى الملف. متابعة؟")) return;
+    if (!window.confirm("سيتم استبدال كل بيانات محطة التدريب والمعلومات (الفحوصات والتيوبات والأدوات والصور) بمحتوى الملف. متابعة؟")) return;
     setBusy(true);
     try {
       const ok = await importBackup(JSON.parse(await f.text()));
@@ -198,7 +198,7 @@ export default function TrainingSettingsPage() {
   // everything else on this page needs the edit PIN.
   return (
     <SettingsLayout
-      title="إعدادات محطة التدريب"
+      title="إعدادات محطة التدريب والمعلومات"
       icon={<Settings className="size-6 text-brand" />}
       sections={[
         {

@@ -9,6 +9,7 @@ import { query, queryOne } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { ensureDesk } from "@/lib/desk/schema";
+import { accessionPrefix, accessionSql } from "@/lib/accession";
 import { labOrder, labRules } from "@/lib/desk/data";
 import { publishForReferrer, publishCode, revokeCode, type CodeRow } from "@/lib/desk/doctors";
 import { ensureOps } from "@/lib/desk/schema";
@@ -28,11 +29,6 @@ async function who(...roles: string[]) {
   return u.role === "admin" || roles.includes(u.role) ? u : null;
 }
 
-function accessionNo(): string {
-  const d = new Date();
-  const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
-  return `LAB-${ymd}-${Math.random().toString(16).slice(2, 6).toUpperCase()}`;
-}
 function invoiceNo(): string {
   const d = new Date();
   const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
@@ -92,13 +88,12 @@ export async function collectSample(input: {
   const paid = Math.min(money(input.paid), total);
   const method = METHODS.includes(String(input.method)) ? String(input.method) : "cash";
   const status = paid >= total && total > 0 ? "paid" : paid > 0 ? "partial" : total === 0 ? "paid" : "unpaid";
-  const accession = accessionNo();
-  const order = await queryOne<{ id: string }>(
+  const order = await queryOne<{ id: string; accession_no: string }>(
     `insert into test_orders (patient_id, status, accession_no, referrer_id, payment_status, payment_method, source, discount, total_amount, notes, created_by)
-     values ($1, 'pending', $2, $3, $4, $5, 'collect', $6, $7, $8, $9) returning id`,
-    [pid, accession, input.referrerId || null, status, status === "unpaid" ? null : method, discount, total, input.notes?.trim().slice(0, 500) || null, u.id]
+     values ($1, 'pending', ${accessionSql("$2")}, $3, $4, $5, 'collect', $6, $7, $8, $9) returning id, accession_no`,
+    [pid, accessionPrefix(), input.referrerId || null, status, status === "unpaid" ? null : method, discount, total, input.notes?.trim().slice(0, 500) || null, u.id]
   );
-  const orderId = order!.id;
+  const orderId = order!.id, accession = order!.accession_no;
   for (const t of tests) await query(`insert into test_order_items (order_id, test_id, price) values ($1, $2, $3)`, [orderId, t.id, t.price]);
   const inv = await queryOne<{ id: string }>(
     `insert into invoices (invoice_no, order_id, patient_id, subtotal, discount, total, paid, status, created_by)
@@ -144,8 +139,8 @@ export async function labNewSample(input: { patient: DeskPatient; testIds: strin
   if (!pid) return { ok: false, error: "اكتب اسم المراجع." };
   const order = await queryOne<{ id: string }>(
     `insert into test_orders (patient_id, status, accession_no, referrer_id, payment_status, source, total_amount, started_at, created_by)
-     values ($1, 'in_progress', $2, $3, 'paid', 'lab', 0, now(), $4) returning id`,
-    [pid, accessionNo(), input.referrerId || null, u.id]
+     values ($1, 'in_progress', ${accessionSql("$2")}, $3, 'paid', 'lab', 0, now(), $4) returning id`,
+    [pid, accessionPrefix(), input.referrerId || null, u.id]
   );
   for (const t of tests) await query(`insert into test_order_items (order_id, test_id, price) values ($1, $2, 0)`, [order!.id, t.id]);
   await logAudit("order.created", "order", order!.id, { tests: tests.length, source: "lab" });

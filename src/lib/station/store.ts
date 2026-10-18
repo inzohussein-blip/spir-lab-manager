@@ -8,6 +8,7 @@
  */
 
 import { kvGet, kvSet, kvBytes, kvLarge, storageQuota } from "@/lib/local/kv";
+import { stampStock, type StockTally } from "@/lib/local/stockTally";
 import { stockFloor, stockOptions, logStockMoves, type MoveReason } from "@/lib/local/links";
 import { clearOldDefault } from "@/lib/local/util";
 import { DEFAULT_TESTS } from "./defaultTests";
@@ -124,6 +125,8 @@ export interface StockItem {
   barcode?: string;
   /** The device it is used on (written with the purchase that brought it, «المشتريات ← الجهاز»). */
   device?: string;
+  /** How the count adds up across the lab's computers (lib/local/stockTally) — kept by saveStock. */
+  tally?: StockTally;
 }
 /** A supply the examiner issues by hand (see StockItem.byHand). */
 export const isByHand = (s: StockItem): boolean => s.byHand === true || s.perVisit === true;
@@ -641,10 +644,11 @@ export function getStock(): StockItem[] {
   return read<StockItem[]>(K_STOCK, []);
 }
 /** Save the stock room; count changes are recorded in the movement log with their reason. */
-export function saveStock(list: StockItem[], reason: MoveReason = "edit", ref?: string): void {
+export function saveStock(list: StockItem[], reason: MoveReason = "edit", ref?: string): boolean {
   const before = getStock();
-  write(K_STOCK, list);
+  const ok = write(K_STOCK, stampStock(before, list));
   logStockMoves(before, list, reason, ref);
+  return ok;
 }
 /** Units each reagent gives to the tests newly ordered on a visit: one per linked test. Supplies
  *  issued by hand (tubes, syringes…) are left to the examiner. */
@@ -885,7 +889,9 @@ export function importBackup(data: unknown): boolean {
     if (b.panels) ok = write(K_PANELS, b.panels) && ok;
     if (b.settings) ok = write(K_SETTINGS, b.settings) && ok;
     if (b.patients) ok = write(K_PATIENTS, b.patients) && ok;
-    if (b.stock) ok = write(K_STOCK, b.stock) && ok;
+    // The stock room is shared with «المخزن والمشتريات» (its backup holds it too): restored the
+    // same way from either, with the change in the movement log.
+    if (Array.isArray(b.stock)) ok = saveStock(b.stock, "edit", "استعادة نسخة احتياطية") && ok;
     if (b.doctors) ok = write(K_DOCTORS, b.doctors) && ok;
     if (b.forms && typeof b.forms === "object") ok = write(K_FORMS, b.forms) && ok;
     return ok;

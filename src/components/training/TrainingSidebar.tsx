@@ -77,11 +77,11 @@ export function TrainingSidebar() {
 
   const isActive = (it: NavItem) =>
     it.exact ? pathname === it.href || pathname.startsWith("/training/test") : pathname.startsWith(it.href);
-  const current = SECTIONS.flatMap((s) => s.items).find(isActive)?.label ?? "محطة التدريب";
+  const current = SECTIONS.flatMap((s) => s.items).find(isActive)?.label ?? "محطة التدريب والمعلومات";
 
   // The new look's top bar searches this menu (its numbers are counts, not alerts).
   useEffect(() => {
-    setShellNav({ app: "محطة التدريب", links: SECTIONS.flatMap((sec) => sec.items).filter((it) => canEdit || !EDIT_ONLY.includes(it.href))
+    setShellNav({ app: "محطة التدريب والمعلومات", links: SECTIONS.flatMap((sec) => sec.items).filter((it) => canEdit || !EDIT_ONLY.includes(it.href))
       .map((it) => ({ href: it.href, label: it.label, hint: it.hint, icon: it.icon, n: 0 })) });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- EDIT_ONLY is fixed
   }, [canEdit]);
@@ -122,7 +122,7 @@ export function TrainingSidebar() {
               <GraduationCap className="size-[22px]" />
             </span>
             <div className="min-w-0 flex-1 leading-tight">
-              <div className="truncate text-[15px] font-bold">محطة التدريب</div>
+              <div className="truncate text-[15px] font-bold">محطة التدريب والمعلومات</div>
               <div className="mt-1 inline-flex rounded-full bg-brand-light px-2 py-0.5 text-[10px] font-medium text-brand-dark">والمعلومات — عصارة الخبرة</div>
             </div>
             <SideCollapseButton onClick={() => setCollapsed(true)} />

@@ -30,7 +30,7 @@ export default function QcSettingsPage() {
   }
   async function onImport(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0]; e.target.value = "";
-    if (!f || !window.confirm("سيتم استبدال كل بيانات محطة الجودة بمحتوى الملف. متابعة؟")) return;
+    if (!f || !window.confirm("سيتم استبدال كل بيانات محطة الجودة والأجهزة بمحتوى الملف. متابعة؟")) return;
     try {
       const ok = importBackup(JSON.parse(await f.text()));
       setMsg(ok ? "تمت الاستعادة بنجاح." : "الملف ليس نسخة احتياطية لمحطة الجودة.");
@@ -40,7 +40,7 @@ export default function QcSettingsPage() {
 
   return (
     <SettingsLayout
-      title="إعدادات محطة الجودة"
+      title="إعدادات محطة الجودة والأجهزة"
       icon={<Settings className="size-6 text-brand" />}
       sections={[
         {
