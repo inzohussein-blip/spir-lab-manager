@@ -9,7 +9,7 @@ import {
 import {
   labLoadOrder, labNewSample, labAddTests, labRemoveTest, labSaveResults, labStart, labVerify, labReopen, deskDeliver, ackCritical, labFind, notifyReady,
 } from "@/app/actions/desk";
-import { flagFor, rangeLabel, resultDelta, localYmd, type StationSettings, type StationTest } from "@/lib/station/store";
+import { flagFor, rangeLabel, resultDelta, localYmd, type StationSettings } from "@/lib/station/store";
 import { computeDerived } from "@/lib/station/derived";
 import { isFormCode, decodeForm, encodeForm, formProgress, formOptionsOf, hlCount, type FormCode } from "@/lib/station/templates";
 import { FormDialog, fillNormals } from "@/components/station/ReportForms";
@@ -17,7 +17,7 @@ import { ReportSheet } from "@/components/station/ReportSheet";
 import { TubeLabels } from "@/components/station/TubeLabel";
 import { loadBarcode } from "@/components/station/Barcode";
 import { sheetPdf, savePdf, openWhatsApp } from "@/lib/station/sharePdf";
-import { STATUS_LABEL, SOURCE_LABEL, type DeskPatient, type DeskTest, type LabOrderData, type LabPrint, type LabRules, type QueueRow } from "@/lib/desk/types";
+import { STATUS_LABEL, SOURCE_LABEL, toStation, type DeskPatient, type DeskTest, type LabOrderData, type LabPrint, type LabRules, type QueueRow } from "@/lib/desk/types";
 import { PatientBox, TestPicker, EMPTY_PATIENT, field, Elapsed } from "./DeskParts";
 import { LabSettingsDialog } from "./LabSettings";
 
@@ -27,11 +27,6 @@ const TABS = [
   { id: "done", label: "معتمدة اليوم", match: (r: QueueRow) => r.status === "completed" || r.status === "delivered" },
 ] as const;
 const QUAL = ["Positive", "Negative", "+", "++", "+++"];
-
-const toStation = (t: DeskTest): StationTest => ({
-  id: t.id, code: t.code || undefined, name_ar: t.name_ar, name_en: t.name_en ?? undefined, category: t.category ?? undefined,
-  sample_type: t.sample_type ?? undefined, unit: t.unit ?? undefined, normal: t.normal,
-});
 
 function FlagPill({ f }: { f: "H" | "L" | "N" | null }) {
   if (!f) return null;

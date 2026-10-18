@@ -81,6 +81,24 @@ const TAG = Date.now().toString(36).slice(-5);
   // 600000 − one absent day (600000 ÷ 30 = 20000) − 50000 advance = 530000 (more if today's attendance falls in another month — no).
   ok(num(await p.locator('[data-testid="payroll-row"]', { hasText: who }).locator('[data-testid="payroll-net"]').innerText()) === 530000, 'payroll: salary − absence − advance = 530,000');
 
+  // ── «جدول المناوبات الأسبوعي» ──
+  await p.goto(B + '/staff/schedule'); await p.waitForSelector('[data-testid="schedule-table"]', { timeout: 20000 });
+  const shiftsThere = await Promise.all(['صباحي', 'مسائي', 'ليلي'].map((n) => p.locator(`[data-testid="shift-types"] [data-shift="${n}"]`).count()));
+  ok(shiftsThere.every((n) => n === 1), 'schedule: the usual three shifts are there at first');
+  const morning = await p.locator(`select[aria-label="${who} — السبت"] option`, { hasText: 'صباحي' }).getAttribute('value');
+  await p.selectOption(`select[aria-label="${who} — السبت"]`, morning);
+  await p.selectOption(`select[aria-label="${who} — الجمعة"]`, 'off');
+  await p.waitForTimeout(1200);
+  await p.reload(); await p.waitForSelector('[data-testid="schedule-table"]', { timeout: 20000 });
+  ok(await p.inputValue(`select[aria-label="${who} — السبت"]`) === morning && await p.inputValue(`select[aria-label="${who} — الجمعة"]`) === 'off', 'schedule: a shift and a day off are kept after reloading');
+  ok(Number(await p.locator('[data-testid="schedule-counts"] tr', { hasText: 'صباحي' }).locator('td').nth(1).innerText()) >= 1, 'schedule: Saturday counts the person on the morning shift');
+  await p.fill('[data-testid="shift-new"] input[name="name"]', 'جزئي ' + TAG);
+  await p.fill('[data-testid="shift-new"] input[name="start"]', '10:00'); await p.fill('[data-testid="shift-new"] input[name="end"]', '13:00');
+  await p.click('[data-testid="shift-new"] button'); await p.waitForSelector(`[data-shift="جزئي ${TAG}"]`, { timeout: 15000 });
+  ok(await p.locator(`select[aria-label="${who} — الأحد"] option`, { hasText: 'جزئي ' + TAG }).count() === 1, 'schedule: a new shift with its hours is offered in the table');
+  await p.click(`button[aria-label="حذف جزئي ${TAG}"]`); await p.waitForTimeout(1500);
+  ok(await p.locator(`[data-shift="جزئي ${TAG}"]`).count() === 0, 'schedule: a shift can be removed');
+
   // ── Stock: kit, reagent per test, stocktake, moves ──
   const item = 'كاشف السكر ' + TAG;
   await p.goto(B + '/inventory');

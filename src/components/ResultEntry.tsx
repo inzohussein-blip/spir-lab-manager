@@ -2,9 +2,16 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Check, Save, WifiOff } from "lucide-react";
+import { Check, Save, WifiOff, ClipboardList } from "lucide-react";
 import { useOffline } from "@/components/offline/OfflineProvider";
 import { formPlain } from "@/lib/station/formPlain";
+import { isFormCode, decodeForm, encodeForm, formProgress, type FormCode, type FormOptions, type FormValues } from "@/lib/station/templates";
+import { FormDialog } from "@/components/station/ReportForms";
+
+/** Written results offered while typing (as at the lab station and «نافذة المختبر»). */
+const QUAL = ["Positive", "Negative", "+", "++", "+++"];
+/** Arabic-Indic digits and comma typed on an Arabic keyboard → 1 2 3 and a dot. */
+const latin = (v: string) => v.replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660)).replace(/[٫,]/g, ".").trim();
 
 const field =
   "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
@@ -61,10 +68,13 @@ export function ResultEntry({
   item,
   orderId,
   patientId,
+  formOpts,
 }: {
   item: any;
   orderId: string;
   patientId: string;
+  /** «نافذة المختبر ← الإعدادات»'s options for the report forms (GUE, GSE, semen, C&S…). */
+  formOpts?: FormOptions;
 }) {
   const { submitResult, online } = useOffline();
   const [pending, start] = useTransition();
@@ -74,7 +84,12 @@ export function ResultEntry({
     item.physical_inspection != null || item.microscopic != null;
   const [saved, setSaved] = useState(hadValue);
 
-  const [num, setNum] = useState(item.value_numeric ?? "");
+  // A number or a written result (Positive, a titer…): one field, saved as whichever it is.
+  const [num, setNum] = useState<string>(item.value_text != null ? String(item.value_text) : item.value_numeric != null ? String(item.value_numeric) : "");
+  // A report form (GUE, GSE, semen, C&S…): filled in the lab station's form, kept as written text.
+  const form = !item.is_special && isFormCode(item.code ?? undefined) ? (item.code as FormCode) : null;
+  const [formValues, setFormValues] = useState<FormValues>(() => (form ? decodeForm(item.value_text ?? "") : {}));
+  const [formOpen, setFormOpen] = useState(false);
   const [phys, setPhys] = useState({
     color: item.physical_inspection?.color ?? "",
     appearance: item.physical_inspection?.appearance ?? "",
@@ -90,7 +105,9 @@ export function ResultEntry({
 
   const low = item.normal_low != null ? Number(item.normal_low) : null;
   const high = item.normal_high != null ? Number(item.normal_high) : null;
-  const flag = item.is_special ? null : previewFlag(String(num), low, high);
+  const typed = latin(String(num));
+  const isNumber = typed !== "" && Number.isFinite(Number(typed));
+  const flag = item.is_special || form || !isNumber ? null : previewFlag(typed, low, high);
   const rangeText =
     low != null || high != null
       ? `${low ?? "…"}–${high ?? "…"}${item.unit ? ` ${item.unit}` : ""}`
@@ -114,8 +131,17 @@ export function ResultEntry({
         mic_crystals: mic.crystals,
         mic_mucus: mic.mucus,
       });
+    } else if (form) {
+      const text = encodeForm(formValues);
+      if (!text) { toast.error("املأ النموذج أولاً."); return; }
+      fields.value_text = text;
+    } else if (isNumber) {
+      fields.value_numeric = typed;
+    } else if (typed) {
+      fields.value_text = typed;
     } else {
-      fields.value_numeric = String(num);
+      toast.error("اكتب النتيجة أولاً.");
+      return;
     }
     start(async () => {
       const r = await submitResult(fields, `نتيجة: ${item.name_ar}`);
@@ -125,23 +151,9 @@ export function ResultEntry({
     });
   }
 
-  // A written result (Positive, a titer, a report form…) entered in «نافذة المختبر»: shown here as it
-  // is — this page only takes numbers, and saving from it would replace the result.
-  if (!item.is_special && item.value_text != null) {
-    return (
-      <div className="rounded-2xl border border-brand/40 bg-surface p-5 shadow-[var(--shadow-card)]" data-testid="result-text">
-        <div className="mb-2 flex items-center gap-2">
-          <span className="grid size-5 place-items-center rounded-full bg-brand text-white"><Check className="size-3" strokeWidth={3} /></span>
-          <span className="font-semibold">{item.name_ar}</span>
-        </div>
-        <div className="rounded-lg bg-canvas px-3 py-2 text-sm font-semibold" dir="auto">{formPlain(item.value_text)}</div>
-        <p className="mt-2 text-xs text-muted">نتيجة نصية من «نافذة المختبر» — تُعدَّل هناك.</p>
-      </div>
-    );
-  }
-
   return (
     <div
+      data-result={item.name_ar}
       className={`rounded-2xl border bg-surface p-5 shadow-[var(--shadow-card)] transition-colors ${
         saved ? "border-brand/40" : "border-line"
       }`}
@@ -155,7 +167,7 @@ export function ResultEntry({
           )}
           <span className="font-semibold">{item.name_ar}</span>
         </div>
-        {!item.is_special && (
+        {!item.is_special && !form && (
           <div className="flex items-center gap-2 text-xs text-muted">
             <span>النطاق الطبيعي: {rangeText}</span>
             <FlagPill flag={flag} />
@@ -184,13 +196,30 @@ export function ResultEntry({
             </div>
           </fieldset>
         </div>
+      ) : form ? (
+        <div data-testid="result-form">
+          <div className="rounded-lg bg-canvas px-3 py-2 text-sm" dir="auto">
+            {encodeForm(formValues) ? formPlain(encodeForm(formValues)) : <span className="text-muted">لم يُملأ النموذج بعد</span>}
+          </div>
+          <button type="button" onClick={() => setFormOpen(true)} data-testid="result-form-open"
+            className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-sm hover:bg-canvas">
+            <ClipboardList className="size-4" /> {encodeForm(formValues) ? "تعديل النموذج" : "تعبئة النموذج"}
+            <span className="text-xs text-muted">({formProgress(form, formValues).filled}/{formProgress(form, formValues).total})</span>
+          </button>
+          {formOpen && (
+            <FormDialog code={form} testName={item.name_ar} values={formValues} opts={formOpts ?? { diagnosis: false, autoCalc: false, hideEmpty: false, testedOnly: false, boldAbnormal: false, highlight: false }}
+              onChange={(v) => { setFormValues(v); setSaved(false); }} onClose={() => setFormOpen(false)} />
+          )}
+        </div>
       ) : (
         <div className="relative">
           <input
-            type="number"
-            step="any"
-            inputMode="decimal"
-            placeholder="أدخل النتيجة الرقمية"
+            type="text"
+            inputMode={/^[\d٠-٩.,٫-]*$/.test(String(num)) ? "decimal" : "text"}
+            list={`qual-${item.item_id}`}
+            placeholder="النتيجة: رقم، أو Positive / Negative / +"
+            aria-label={`نتيجة ${item.name_ar}`}
+            dir="ltr"
             value={num}
             onChange={(e) => {
               setNum(e.target.value);
@@ -206,6 +235,7 @@ export function ResultEntry({
               {item.unit}
             </span>
           )}
+          <datalist id={`qual-${item.item_id}`}>{QUAL.map((q) => <option key={q} value={q} />)}</datalist>
         </div>
       )}
 
@@ -213,6 +243,7 @@ export function ResultEntry({
         <button
           onClick={save}
           disabled={pending}
+          data-testid="result-save"
           className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3.5 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-60"
         >
           {online ? <Save className="size-4" /> : <WifiOff className="size-4" />}

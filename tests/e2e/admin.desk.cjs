@@ -168,6 +168,51 @@ const TAG = Date.now().toString(36).slice(-5);
   await a.uncheck('[data-testid="lab-settings-dialog"] input[aria-label="اعتماد ثانٍ"]');
   await a.click('[data-testid="lab-settings-save"]'); await a.waitForTimeout(1000);
 
+  // ── «سجل العيّنات»: written results and report forms on the order page; its report with the lab's print options ──
+  const gueName = 'إدرار عام ' + TAG;
+  await a.goto(B + '/tests');
+  await a.fill('input[name="name_ar"]', gueName); await a.fill('input[name="code"]', 'GUE');
+  await a.click('button:has-text("إضافة الفحص")'); await a.waitForTimeout(1500);
+  await a.goto(B + '/lab'); await a.click('[data-testid="lab-new"]');
+  await a.fill('[data-testid="lab-new-dialog"] input[aria-label="اسم المراجع"]', pname.slice(0, 12));
+  await a.click(`[data-testid="desk-patient-hits"] button:has-text("${pname}")`);
+  await a.click('[data-testid="lab-new-dialog"] [data-testid="desk-test"]:has-text("الهيموغلوبين")');
+  const gueOffered = await a.locator(`[data-testid="lab-new-dialog"] [data-testid="desk-test"]:has-text("${gueName}")`).count() === 1;
+  if (gueOffered) await a.click(`[data-testid="lab-new-dialog"] [data-testid="desk-test"]:has-text("${gueName}")`);
+  await a.click('[data-testid="lab-new-save"]'); await a.waitForSelector('[data-testid="lab-order"]', { timeout: 20000 });
+  const acc3 = (await a.locator('[data-testid="lab-order"] .font-mono').first().innerText()).trim();
+  await a.goto(B + '/orders?q=' + encodeURIComponent(acc3));
+  const orderHref = await a.locator('tr', { hasText: acc3 }).locator('a[href^="/orders/"]').first().getAttribute('href');
+  await a.goto(B + orderHref); await a.waitForSelector('input[aria-label="نتيجة الهيموغلوبين"]', { timeout: 20000 });
+  await a.fill('input[aria-label="نتيجة الهيموغلوبين"]', 'Positive');
+  await a.click('[data-result="الهيموغلوبين"] [data-testid="result-save"]');
+  await a.waitForTimeout(2000); await a.reload(); await a.waitForSelector('input[aria-label="نتيجة الهيموغلوبين"]', { timeout: 20000 });
+  ok(await a.inputValue('input[aria-label="نتيجة الهيموغلوبين"]') === 'Positive', 'order page: a written result (Positive) is entered and kept');
+  ok(gueOffered && await a.locator('[data-testid="result-form-open"]').count() === 1, 'order page: a report-form test (GUE) opens its form here');
+  if (gueOffered) {
+    await a.click('[data-testid="result-form-open"]');
+    const dlg = a.locator('div[role=dialog]');
+    await dlg.locator('input[aria-label="Color"]').click();
+    await dlg.locator('li button:has-text("Dark Yellow")').first().click();
+    await dlg.locator('button:has-text("تم")').click();
+    await a.click(`[data-result="${gueName}"] [data-testid="result-save"]`);
+    await a.waitForTimeout(2000); await a.reload(); await a.waitForSelector('[data-testid="result-form"]', { timeout: 20000 });
+    ok((await a.locator('[data-testid="result-form-open"]').innerText()).includes('تعديل النموذج'), '…and the filled form is saved');
+  }
+  await a.goto(B + orderHref + '/report?look=lab'); await a.waitForSelector('[data-testid="order-station-report"] #report-sheet', { timeout: 20000 });
+  const st = await a.locator('#report-sheet').innerText();
+  ok(st.includes(pname) && st.includes(acc3) && st.includes('Positive'), 'the order\'s report with the lab\'s print options: patient, sample number, results');
+  await a.goto(B + orderHref + '/report'); await a.waitForSelector('[data-testid="report-look"]', { timeout: 20000 });
+  ok(await a.locator('[data-testid="order-station-report"]').count() === 0, '…the panel\'s own look stays the default');
+  await a.goto(B + '/lab'); await a.click('[data-testid="lab-settings"]');
+  await a.check('[data-testid="lab-settings-dialog"] input[aria-label="تقرير «سجل العيّنات» بهذه الخيارات أيضاً"]');
+  await a.click('[data-testid="lab-settings-save"]'); await a.waitForTimeout(1500);
+  await a.goto(B + orderHref + '/report'); await a.waitForSelector('[data-testid="report-look"]', { timeout: 20000 });
+  ok(await a.locator('[data-testid="order-station-report"]').count() === 1, 'with the setting on, the order\'s report opens with the lab\'s print options');
+  await a.goto(B + '/lab'); await a.click('[data-testid="lab-settings"]');
+  await a.uncheck('[data-testid="lab-settings-dialog"] input[aria-label="تقرير «سجل العيّنات» بهذه الخيارات أيضاً"]');
+  await a.click('[data-testid="lab-settings-save"]'); await a.waitForTimeout(1000);
+
   ok(errs.length === 0, `no page errors${errs.length ? ': ' + errs.join(' | ') : ''}`);
   await b.close();
   done('admin.desk');

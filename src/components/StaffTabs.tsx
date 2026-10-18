@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 const TABS = [
-  ["/staff", "الكادر والبدلاء"], ["/staff/attendance", "الحضور والانصراف"], ["/staff/leaves", "الإجازات والسُّلف"], ["/staff/payroll", "الرواتب"],
+  ["/staff", "الكادر والبدلاء"], ["/staff/schedule", "جدول المناوبات"], ["/staff/attendance", "الحضور والانصراف"], ["/staff/leaves", "الإجازات والسُّلف"], ["/staff/payroll", "الرواتب"],
 ] as const;
 
 /** The staff section's pages. */

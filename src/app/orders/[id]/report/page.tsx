@@ -12,6 +12,8 @@ import { formPlain } from "@/lib/station/formPlain";
 import { PrintButton } from "@/components/PrintButton";
 import { WhatsAppButton } from "@/components/WhatsAppButton";
 import { ReportImageButton } from "@/components/ReportImageButton";
+import { OrderStationReport } from "@/components/desk/OrderStationReport";
+import { deskCatalog, labOrder, labPrint } from "@/lib/desk/data";
 
 export const dynamic = "force-dynamic";
 
@@ -64,7 +66,7 @@ async function getReportToken(orderId: string, patientId: string) {
 export default async function ReportPage(
   props: {
     params: Promise<{ id: string }>;
-    searchParams: Promise<{ lang?: string }>;
+    searchParams: Promise<{ lang?: string; look?: string }>;
   }
 ) {
   const params = await props.params;
@@ -78,6 +80,29 @@ export default async function ReportPage(
   );
   if (!order) notFound();
   const identity = await getLabIdentity();
+  // Which look: the lab station's print options («نافذة المختبر ← الإعدادات»), or the panel's own report.
+  const print = await labPrint();
+  const labDefault = print.orderReport === "lab";
+  const useLab = sp.look === "lab" || (sp.look !== "panel" && labDefault);
+  const lookSwitch = (
+    <div className="inline-flex overflow-hidden rounded-lg border border-line text-sm" data-testid="report-look">
+      <Link href="?look=panel" replace aria-current={!useLab ? "true" : undefined} className={`px-3 py-2 ${!useLab ? "bg-brand text-white" : "hover:bg-canvas"}`}>شكل لوحة الإدارة</Link>
+      <Link href="?look=lab" replace aria-current={useLab ? "true" : undefined} className={`px-3 py-2 ${useLab ? "bg-brand text-white" : "hover:bg-canvas"}`}>بخيارات طباعة المختبر</Link>
+    </div>
+  );
+  if (useLab) {
+    const [lab, tests] = await Promise.all([labOrder(order.id), deskCatalog()]);
+    if (!lab) notFound();
+    return (
+      <div>
+        <div className="no-print mb-3">{lookSwitch}</div>
+        <OrderStationReport order={lab} tests={tests} print={print}
+          letterhead={{ name: labName(identity), subtitle: identity.subtitle, footer: identity.footer, logo: identity.logo }} />
+      </div>
+    );
+  }
+  // The language links keep the panel's look when the lab's is the default.
+  const lookQ = labDefault ? "&look=panel" : "";
   // The lab's report look: colours, signature and stamp, and the language (this print can switch).
   const look = await getReportLook();
   const lang: "ar" | "en" = sp.lang === "en" || sp.lang === "ar" ? sp.lang : look.lang;
@@ -132,11 +157,12 @@ export default async function ReportPage(
   return (
     <div>
       <div className="no-print mb-4 flex flex-wrap gap-2">
+        {lookSwitch}
         <PrintButton />
         {/* This print's language (Settings → «شكل تقرير النتائج» sets the one it opens in) */}
         <div className="inline-flex overflow-hidden rounded-lg border border-line text-sm" data-testid="report-lang">
-          <Link href="?lang=ar" replace aria-current={!en ? "true" : undefined} className={`px-3 py-2 ${!en ? "bg-brand text-white" : "hover:bg-canvas"}`}>العربية</Link>
-          <Link href="?lang=en" replace aria-current={en ? "true" : undefined} className={`px-3 py-2 ${en ? "bg-brand text-white" : "hover:bg-canvas"}`}>English</Link>
+          <Link href={`?lang=ar${lookQ}`} replace aria-current={!en ? "true" : undefined} className={`px-3 py-2 ${!en ? "bg-brand text-white" : "hover:bg-canvas"}`}>العربية</Link>
+          <Link href={`?lang=en${lookQ}`} replace aria-current={en ? "true" : undefined} className={`px-3 py-2 ${en ? "bg-brand text-white" : "hover:bg-canvas"}`}>English</Link>
         </div>
         <ReportImageButton targetId="report-sheet" fileName={order.accession_no || "report"} />
         {order.phone && <WhatsAppButton orderId={order.id} />}

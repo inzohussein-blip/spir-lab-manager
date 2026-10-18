@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { query } from "@/lib/db";
-import { ensureOps } from "@/lib/desk/schema";
+import { ensureOps, ensureSchedule } from "@/lib/desk/schema";
 import { hasRole } from "@/lib/auth/guard";
 
 export async function addStaff(formData: FormData): Promise<void> {
@@ -139,4 +139,50 @@ export async function setWorkStart(formData: FormData): Promise<void> {
     [/^\d{2}:\d{2}$/.test(t) ? t : ""]
   );
   revalidatePath("/staff/attendance");
+}
+
+// ── «جدول المناوبات الأسبوعي» (migration 0032) ──────────────────────────────────────
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const hmOk = (t: string) => /^\d{2}:\d{2}$/.test(t);
+
+/** Add or change a shift: its name and hours (a night shift may end the next morning). */
+export async function saveShiftType(formData: FormData): Promise<void> {
+  if (!(await hasRole())) return;
+  await ensureSchedule();
+  const id = String(formData.get("id") || "");
+  const name = String(formData.get("name") || "").trim().slice(0, 40);
+  const start = String(formData.get("start") || ""), end = String(formData.get("end") || "");
+  if (!name) return;
+  const times = [hmOk(start) ? start : null, hmOk(end) ? end : null];
+  if (UUID.test(id)) await query(`update shift_types set name = $2, start_time = $3, end_time = $4 where id = $1`, [id, name, ...times]);
+  else await query(`insert into shift_types (name, start_time, end_time, sort) values ($1, $2, $3, (select coalesce(max(sort), 0) + 1 from shift_types))`, [name, ...times]);
+  revalidatePath("/staff/schedule");
+}
+
+/** Remove a shift (the days set to it become empty). */
+export async function deleteShiftType(formData: FormData): Promise<void> {
+  if (!(await hasRole())) return;
+  await ensureSchedule();
+  const id = String(formData.get("id") || "");
+  if (!UUID.test(id)) return;
+  await query(`delete from shift_types where id = $1`, [id]);
+  revalidatePath("/staff/schedule");
+}
+
+/** One person's day in the weekly schedule: a shift's id, "off" (عطلة), or "" (none). */
+export async function setScheduleCell(staffId: string, weekday: number, value: string): Promise<{ ok: boolean }> {
+  if (!(await hasRole())) return { ok: false };
+  await ensureSchedule();
+  const day = Math.round(Number(weekday));
+  if (!UUID.test(staffId) || !(day >= 0 && day <= 6)) return { ok: false };
+  if (value === "") await query(`delete from staff_schedule where staff_id = $1 and weekday = $2`, [staffId, day]);
+  else if (value === "off" || UUID.test(value)) {
+    await query(
+      `insert into staff_schedule (staff_id, weekday, shift_id, is_off) values ($1, $2, $3, $4)
+       on conflict (staff_id, weekday) do update set shift_id = excluded.shift_id, is_off = excluded.is_off`,
+      [staffId, day, value === "off" ? null : value, value === "off"]
+    );
+  } else return { ok: false };
+  revalidatePath("/staff/schedule");
+  return { ok: true };
 }
