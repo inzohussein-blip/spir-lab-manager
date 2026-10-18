@@ -5,16 +5,25 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   FlaskConical, ClipboardPlus, ListChecks, FileText, Plus, Settings, Home,
-  Archive, Menu, X, ChevronLeft, Trash2, type LucideIcon,
+  Archive, Menu, X, ChevronLeft, Trash2, Gauge, BarChart3, KanbanSquare, type LucideIcon,
 } from "lucide-react";
 import { getPages, savePages, getVisits, requestPersistentStorage, uid, TRASH_DAYS, type StationPage } from "@/lib/station/store";
 import { cn, fmtDate } from "@/lib/utils";
-import { setShellNav } from "@/lib/local/ui";
+import { setShellNav, useUi } from "@/lib/local/ui";
 import { useSideCollapsed, SideCollapseButton, SideReopenButton } from "@/components/local/SideCollapse";
 
-interface NavItem { href: string; label: string; hint: string; icon: LucideIcon }
+/** `ui: "new"`: only in the new look (its dashboard pages, as in spir-supply-manager). */
+interface NavItem { href: string; label: string; hint: string; icon: LucideIcon; ui?: "new" }
 
 const SECTIONS: { title: string; items: NavItem[] }[] = [
+  {
+    title: "نظرة عامة",
+    items: [
+      { href: "/station/dashboard", label: "لوحة التحكم", hint: "اليوم والأسبوع والشهر", icon: Gauge, ui: "new" },
+      { href: "/station/analytics", label: "التحليلات", hint: "الاتجاه والفحوصات والأطباء والنشاط", icon: BarChart3, ui: "new" },
+      { href: "/station/tasks", label: "لوحة المهام", hint: "بانتظار النتائج وجاهزة للتسليم", icon: KanbanSquare, ui: "new" },
+    ],
+  },
   {
     title: "العمل اليومي",
     items: [
@@ -118,10 +127,14 @@ export function StationSidebar() {
     router.push(`/station/page/${p.id}`);
   }
 
+  // The new look's own pages are left out of the classic menu.
+  const ui = useUi();
+  const sections = ui === "new" ? SECTIONS : SECTIONS.map((sec) => ({ ...sec, items: sec.items.filter((it) => it.ui !== "new") })).filter((sec) => sec.items.length);
+
   const isActive = (href: string) =>
     href === "/station" ? pathname === "/station" : pathname.startsWith(href);
 
-  const current = SECTIONS.flatMap((s) => s.items).find((it) => isActive(it.href))?.label
+  const current = sections.flatMap((s) => s.items).find((it) => isActive(it.href))?.label
     ?? pages.find((p) => pathname === `/station/page/${p.id}`)?.title
     ?? "محطة المختبر";
 
@@ -133,10 +146,10 @@ export function StationSidebar() {
   }, [pathname]);
 
   // The new look's top bar searches this menu and lists its numbers as alerts.
-  const shellKey = `${todayCount}|${pages.map((p) => `${p.id}:${p.title}`).join()}`;
+  const shellKey = `${ui}|${todayCount}|${pages.map((p) => `${p.id}:${p.title}`).join()}`;
   useEffect(() => {
     setShellNav({ app: "محطة المختبر", links: [
-      ...SECTIONS.flatMap((sec) => sec.items).map((it) => ({ href: it.href, label: it.label, hint: it.hint, icon: it.icon, n: it.href === "/station/visits" ? todayCount : 0 })),
+      ...sections.flatMap((sec) => sec.items).map((it) => ({ href: it.href, label: it.label, hint: it.hint, icon: it.icon, n: it.href === "/station/visits" ? todayCount : 0 })),
       ...pages.map((p) => ({ href: `/station/page/${p.id}`, label: p.title, hint: "واجهة مخصّصة", icon: FileText })),
     ] });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- shellKey sums up what is shown
@@ -208,7 +221,7 @@ export function StationSidebar() {
         </div>
 
         <nav className="flex flex-1 flex-col gap-4 overflow-y-auto px-3 pb-3">
-          {SECTIONS.map((sec) => (
+          {sections.map((sec) => (
             <div key={sec.title}>
               <div className="ui-side-title mb-1.5 flex items-center gap-2 px-2.5 text-[11px] font-semibold text-muted">
                 {sec.title}

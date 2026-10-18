@@ -2,7 +2,7 @@ import { OfflineReady } from "@/components/local/OfflineReady";
 import { ActivationGate } from "@/components/local/ActivationGate";
 import { ACTIVATION_SCRIPT } from "@/lib/local/activation";
 import Link from "next/link";
-import { Beaker, ShoppingCart, GraduationCap, ShieldCheck, Users, ArrowLeft, Phone, RefreshCw, Info, MessagesSquare } from "lucide-react";
+import { Beaker, ShoppingCart, GraduationCap, ShieldCheck, Users, ArrowLeft, Phone, RefreshCw, Info, MessagesSquare, Gauge } from "lucide-react";
 import { LicensedLink, AdminPanelCard } from "@/components/local/WelcomeLicense";
 import { WelcomeAccount } from "@/components/local/WelcomeAccount";
 import { WelcomeFooter } from "@/components/local/WelcomeFooter";
@@ -37,6 +37,18 @@ export default function WelcomePage() {
 
         {/* Cards */}
         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+          {/* The new look's dashboard (only in that look; the lab station's «لوحة التحكم») */}
+          <LicensedLink module="station" href="/station/dashboard" className="ui-only-new group relative overflow-hidden rounded-[1.75rem] bg-gradient-to-br from-[var(--ui-a,#14733f)] to-[var(--ui-deep,#0b4527)] p-6 text-white shadow-[var(--shadow-card)] md:col-span-2 xl:col-span-3">
+            <svg className="pointer-events-none absolute inset-0 size-full opacity-[0.1]" aria-hidden><defs><pattern id="wl-wave" width="30" height="30" patternUnits="userSpaceOnUse"><path d="M0 15 Q7.5 0 15 15 T30 15" fill="none" stroke="#fff" strokeWidth="1" /></pattern></defs><rect width="100%" height="100%" fill="url(#wl-wave)" /></svg>
+            <div className="relative flex flex-wrap items-center gap-5">
+              <span className="grid size-14 place-items-center rounded-2xl bg-white/15"><Gauge className="size-7" /></span>
+              <div className="min-w-0 flex-1">
+                <div className="text-2xl font-extrabold">لوحة التحكم</div>
+                <p className="mt-1 text-sm text-white/80">زيارات اليوم والأسبوع والشهر، والنتائج المنتظرة والجاهزة للتسليم، والتحليلات، ولوحة المهام — من بيانات هذا الجهاز.</p>
+              </div>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-[var(--ui-a-dark,#0e5530)] group-hover:brightness-95">الدخول <ArrowLeft className="size-4" /></span>
+            </div>
+          </LicensedLink>
           {/* Full admin panel — opens only when this device's lab code includes it */}
           <AdminPanelCard />
 
