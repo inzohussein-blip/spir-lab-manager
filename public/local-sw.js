@@ -9,7 +9,8 @@
      costs the site nothing (the pages hold no data: it is all in the browser). Before that,
      or for a page not saved, from the server.
    - Moving between saved pages: the page loads afresh from the saved copy instead of asking
-     the server for its data (and nothing is fetched ahead for links).
+     the server for its data (and nothing is fetched ahead for links) — except inside
+     «محطة التواصل», whose live connections need the page to stay (see the fetch handler).
    - When online, a page asks for a check: /api/build (a static file) says which version the
      site serves; if it is newer it is downloaded in the background into a new cache, switched
      atomically, and the page is told an update is ready (the old version keeps working until then). */
@@ -71,10 +72,14 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
 
   // Client-side navigation data (RSC). To a saved station page: refused at once, so Next.js
-  // loads the page afresh — from the saved copy. Otherwise online: normal; offline or very slow:
-  // fail fast, the same way.
+  // loads the page afresh — from the saved copy; fetching ahead for links is refused too.
+  // «محطة التواصل» keeps moving in-page (its direct connections live in the page's memory, and
+  // a page load would cut them): from the server, as before — but nothing fetched ahead.
+  // Otherwise online: normal; offline or very slow: fail fast, the same way.
   if (req.headers.get("RSC") === "1" || url.searchParams.has("_rsc")) {
-    event.respondWith(isLocal(url.pathname) ? savedOr(url, () => rscFetch(req)) : rscFetch(req));
+    const ahead = req.headers.get("Next-Router-Prefetch") === "1";
+    const live = !ahead && (url.pathname === "/connect" || url.pathname.startsWith("/connect/"));
+    event.respondWith(isLocal(url.pathname) && !live ? savedOr(url, () => rscFetch(req)) : rscFetch(req));
     return;
   }
   if (req.mode === "navigate") {
