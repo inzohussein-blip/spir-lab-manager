@@ -1,0 +1,51 @@
+# Firebase App Hosting — the standby copy of the site (docs/FIREBASE_STANDBY.md).
+# Vercel ignores this file. Every value here must match the main site's (Vercel) settings.
+
+runConfig:
+  # 0: free while idle, the first visit after a quiet spell waits a few seconds.
+  # 1: always ready (billed all the time) — set it while the standby is serving.
+  minInstances: 0
+  maxInstances: 3
+  concurrency: 80
+  cpu: 1
+  memoryMiB: 1024
+
+env:
+  # ── Secrets (Secret Manager): create each once with
+  #    firebase apphosting:secrets:set <NAME>
+  #    using the SAME value as on Vercel. A listed secret that does not exist stops the rollout.
+  - variable: DATABASE_URL            # the lab panel's database — the same one as Vercel's
+    secret: DATABASE_URL
+  - variable: AUTH_SECRET             # sessions, and the seal of the codes' signing key
+    secret: AUTH_SECRET
+  - variable: LICENSE_ADMIN_PASSWORD  # «إدارة الرموز»
+    secret: LICENSE_ADMIN_PASSWORD
+  - variable: NEXT_SERVER_ACTIONS_ENCRYPTION_KEY  # so a page from one site can post to the other
+    secret: NEXT_SERVER_ACTIONS_ENCRYPTION_KEY
+
+  # ── Only if Vercel has them too (remove the # and create the secret first) ──
+  # - variable: LICENSE_DATABASE_URL  # the codes' own database
+  #   secret: LICENSE_DATABASE_URL
+  # - variable: WHATSAPP_CLOUD_TOKEN
+  #   secret: WHATSAPP_CLOUD_TOKEN
+  # - variable: WHATSAPP_PHONE_ID
+  #   secret: WHATSAPP_PHONE_ID
+  # - variable: ANTHROPIC_API_KEY
+  #   secret: ANTHROPIC_API_KEY
+
+  # ── Plain settings: every NEXT_PUBLIC_ value exactly as on Vercel (they are part of the
+  #    build's id: different values make the stations take the switch for an update) ──
+  # - variable: NEXT_PUBLIC_BASE_URL
+  #   value: https://lab.example.com
+  #   availability: [BUILD, RUNTIME]
+  # - variable: NEXT_PUBLIC_STATION_SYNC
+  #   value: "1"
+  #   availability: [BUILD, RUNTIME]
+  # - variable: STATION_ACTIVATION_CONTACT
+  #   value: "07xxxxxxxxx"
+
+  - variable: NEXT_TELEMETRY_DISABLED
+    value: "1"
+  # Small connection pools: each running copy opens its own connections to the database.
+  - variable: PGPOOL_MAX
+    value: "5"

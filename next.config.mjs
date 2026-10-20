@@ -1,9 +1,22 @@
-import { randomBytes } from "node:crypto";
-import { existsSync, readdirSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 
-// One id per build, written into every page as <meta name="lab-build">: the stations'
-// offline copy (public/local-sw.js) compares it to know when a newer version is out.
-const LAB_BUILD = process.env.VERCEL_DEPLOYMENT_ID || process.env.VERCEL_GIT_COMMIT_SHA || randomBytes(8).toString("hex");
+// One id per version of the code, written into every page as <meta name="lab-build">: the
+// stations' offline copy (public/local-sw.js) compares it to know when a newer version is out.
+// It is worked out from the code itself (and the NEXT_PUBLIC_ settings), so the main site
+// (Vercel) and the standby one (Firebase, docs/FIREBASE_STANDBY.md) built from the same commit
+// carry the same id: switching between them is not taken for an update. LAB_BUILD overrides it.
+const LAB_BUILD = (process.env.LAB_BUILD ?? "").trim() || (() => {
+  const h = createHash("sha256");
+  const walk = (p) => {
+    if (!existsSync(p)) return;
+    if (statSync(p).isDirectory()) { for (const f of readdirSync(p).sort()) walk(`${p}/${f}`); return; }
+    h.update(p); h.update(readFileSync(p));
+  };
+  for (const p of ["src", "public", "supabase", "package-lock.json", "next.config.mjs"]) walk(p);
+  for (const [k, v] of Object.entries(process.env).filter(([k]) => k.startsWith("NEXT_PUBLIC_")).sort()) h.update(`${k}=${v}`);
+  return h.digest("hex").slice(0, 16);
+})();
 // The version people see (welcome page, code manager): when this build was made, Baghdad time.
 const LAB_VERSION = (() => {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -29,6 +42,8 @@ const LAB_STATIC_IMAGES = (() => {
 const nextConfig = {
   reactStrictMode: true,
   env: { LAB_BUILD, LAB_VERSION, LAB_STATIC_IMAGES },
+  // The same id for Next's own files, so a page from one site keeps working on the other.
+  generateBuildId: async () => LAB_BUILD,
   // PGlite ships a WASM Postgres; keep it (and node-postgres) out of the
   // bundler so they load as normal Node dependencies at runtime.
   serverExternalPackages: [

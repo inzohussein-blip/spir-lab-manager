@@ -13,6 +13,7 @@
 > خطة المشروع الأصلية ومواصفاته في [`docs/PROJECT_REFERENCE.md`](docs/PROJECT_REFERENCE.md)
 > و[`docs/Laboratory_App_Specification.pdf`](docs/Laboratory_App_Specification.pdf).
 > استمرارية العمل إذا توقف الموقع: [`docs/CONTINUITY.md`](docs/CONTINUITY.md).
+> استضافة احتياطية على Firebase بالعنوان نفسه إذا توقف Vercel: [`docs/FIREBASE_STANDBY.md`](docs/FIREBASE_STANDBY.md).
 
 ## أجزاء المنصة
 
@@ -300,6 +301,7 @@
   - «حالة الخدمة» (`/about/status`): ما يعمل الآن على الجهاز، وما يبقى يعمل إن توقف الموقع وبدائله.
   - النسخة المحلية على حاسوب المختبر (`scripts/local/start-lab.cmd` / `start-lab.sh`)، و`Dockerfile` لاستضافة بديلة.
   - الدليل الكامل وما يفعله المالك مسبقاً (النطاق الخاص أولاً): [`docs/CONTINUITY.md`](docs/CONTINUITY.md).
+  - موقع احتياطي على Firebase App Hosting (`apphosting.yaml`) بالقاعدة والعنوان نفسيهما: [`docs/FIREBASE_STANDBY.md`](docs/FIREBASE_STANDBY.md).
 - **قسم «قواعد البيانات»:** ربط قاعدة كل مختبر بواجهة لكل مزوّد (Neon / Supabase /
   Railway / PostgreSQL آخر) مع تعليماته، وفحص الاتصال، وإعادة كلمة مرور المدير.
 - **قسم «الإعدادات العامة»:**
