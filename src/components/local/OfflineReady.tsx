@@ -14,6 +14,10 @@ const RECHECK_EVERY = 30 * 60 * 1000; // while a page stays open
 /** After a failed or unanswered attempt, try again sooner (then back to RECHECK_EVERY). */
 const RETRY_AFTER = [15_000, 60_000, 5 * 60_000];
 const NO_ANSWER = 60_000; // the worker says nothing for this long → treat as failed
+/** Once saved, opening another page checks for a newer version at most this often. */
+const OPEN_GAP = 5 * 60 * 1000;
+const CHECKED_KEY = "local-offline-checked";
+const lsGet = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
 
 /** Build id of the code running in this page (<meta name="lab-build">, else Next 14's inline data). */
 function pageBuild(): string | null {
@@ -95,11 +99,13 @@ export function OfflineReady() {
     };
     navigator.serviceWorker.addEventListener("message", onMsg);
 
-    // Look for a newer version: on every page open, every 30 minutes while open, and
-    // when the connection comes back. One small request; nothing happens offline.
+    // Look for a newer version: on opening a page (at most every OPEN_GAP once saved), every
+    // 30 minutes while open, and when the connection comes back. One small request to a static
+    // file; nothing happens offline.
     let reg: ServiceWorkerRegistration | undefined;
     const check = async () => {
       if (!alive || !navigator.onLine) return;
+      try { localStorage.setItem(CHECKED_KEY, String(Date.now())); } catch { /* ignore */ }
       try {
         reg?.update().catch(() => {}); // also refresh the worker script itself
         const sw = await activeWorker(reg);
@@ -111,7 +117,9 @@ export function OfflineReady() {
       try {
         await Promise.all(SCOPES.map((scope) => navigator.serviceWorker.register("/local-sw.js", { scope })));
         reg = await navigator.serviceWorker.getRegistration(location.pathname);
-        await check();
+        // Saved already and checked a moment ago (moving between pages): the timer checks later.
+        const saved = !!lsGet("local-offline-ready") && !!navigator.serviceWorker.controller;
+        if (!saved || Date.now() - Number(lsGet(CHECKED_KEY) || 0) > OPEN_GAP) await check();
       } catch {
         /* unsupported / private window — the stations still work online */
       }

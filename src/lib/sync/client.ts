@@ -315,6 +315,7 @@ function onChange(k: string, prev: string | null, next: string | null, origin: K
   base.set(k, neu);
   if (!changed.length) return;
   queue.push(...changed);
+  busy = true;
   setStatus({ pending: status.pending + changed.length });
   void flushQueue();
   soon();
@@ -436,6 +437,21 @@ async function pushFrom(ad: Adapter, st: State) {
 
 let running: Promise<void> | null = null;
 let timer: ReturnType<typeof setTimeout> | null = null;
+
+// ── How often the timer syncs: every 30 seconds while records move (here or on the other
+// devices), slowing down to every 5 minutes while nothing does — so a quiet lab sends few
+// requests to the site. A change on this device still syncs within seconds (soon()), and so
+// does coming back to the page or online.
+const AUTO_STEPS = [30_000, 60_000, 2 * 60_000, 5 * 60_000];
+let quiet = 0;
+let nextAuto = 0;
+/** Something was received or sent in the round that just ran (or this device changed a record). */
+let busy = false;
+function afterRound() {
+  quiet = busy ? 0 : Math.min(quiet + 1, AUTO_STEPS.length - 1);
+  busy = false;
+  nextAuto = Date.now() + AUTO_STEPS[quiet];
+}
 function soon(ms = 2000) {
   if (timer) clearTimeout(timer);
   timer = setTimeout(() => { timer = null; void syncNow(); }, ms);
@@ -490,8 +506,10 @@ export function syncNow(): Promise<void> {
           else { setStatus({ state: "needs_join", remoteRecords: records, error: undefined }); return; }
         }
         setStatus({ state: "syncing", error: undefined });
-        await pullInto(ad, st);
+        const got = await pullInto(ad, st);
+        const sent = (await outboxAll()).length;
         await pushFrom(ad, st);
+        if (got || sent) busy = true;
         st.lastSync = Date.now();
         await metaSet(STATE_KEY, st);
         setStatus({ state: "ok", lastSync: st.lastSync, error: undefined });
@@ -502,6 +520,7 @@ export function syncNow(): Promise<void> {
     const locks = typeof navigator !== "undefined" ? (navigator as Navigator & { locks?: LockManager }).locks : undefined;
     if (locks) await locks.request("lab-sync", { ifAvailable: true }, async (lock) => { if (lock) await work(); });
     else await work();
+    afterRound();
     if (status.link) void reportStatus();
   })().finally(() => { running = null; });
   return running;
@@ -679,10 +698,10 @@ export async function startSync(): Promise<void> {
   window.addEventListener("online", () => soon(500));
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") soon(500); });
   setInterval(() => {
-    if (document.visibilityState !== "visible") return;
+    if (document.visibilityState !== "visible" || Date.now() < nextAuto) return;
     if (Date.now() - clockAt > 3600_000) void measureClock();
     void syncNow();
-  }, 30_000);
+  }, 15_000);
   // The code manager may have linked (or changed) this lab's database: ask now and then.
   void refreshLicense(false, 30 * 60_000).finally(() => { void syncNow(); });
   if (!link) void syncNow();

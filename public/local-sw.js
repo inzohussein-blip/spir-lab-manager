@@ -5,11 +5,14 @@
      so the app is downloaded once.
    - On the first online visit the whole app (every station page + its scripts, styles,
      icons and the bundled Arabic font) is saved. After that pages open without internet.
-   - Pages: online → the latest version from the server (so updates show at once);
-     no internet, or no answer within a few seconds → the saved copy.
-   - When online, a page asks for a check: if the server has a newer build it is
-     downloaded in the background into a new cache, switched atomically, and the page
-     is told an update is ready (the old version keeps working until then). */
+   - Pages: once saved, always from the saved copy — online too — so opening a station page
+     costs the site nothing (the pages hold no data: it is all in the browser). Before that,
+     or for a page not saved, from the server.
+   - Moving between saved pages: the page loads afresh from the saved copy instead of asking
+     the server for its data (and nothing is fetched ahead for links).
+   - When online, a page asks for a check: /api/build (a static file) says which version the
+     site serves; if it is newer it is downloaded in the background into a new cache, switched
+     atomically, and the page is told an update is ready (the old version keeps working until then). */
 
 const META_CACHE = "local-meta";
 const PREFIX = "local-app-";
@@ -67,10 +70,11 @@ self.addEventListener("fetch", (event) => {
 
   if (url.origin !== self.location.origin) return;
 
-  // Client-side navigation data (RSC). Online: normal. Offline or very slow: fail fast,
-  // so Next.js falls back to a full page load — which is then served from the cache.
+  // Client-side navigation data (RSC). To a saved station page: refused at once, so Next.js
+  // loads the page afresh — from the saved copy. Otherwise online: normal; offline or very slow:
+  // fail fast, the same way.
   if (req.headers.get("RSC") === "1" || url.searchParams.has("_rsc")) {
-    event.respondWith(rscFetch(req));
+    event.respondWith(isLocal(url.pathname) ? savedOr(url, () => rscFetch(req)) : rscFetch(req));
     return;
   }
   if (req.mode === "navigate") {
@@ -82,6 +86,13 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(cacheFirst(req));
   }
 });
+
+/** A saved station page answers without the network: the RSC request fails (→ a page load). */
+async function savedOr(url, otherwise) {
+  const meta = await getMeta();
+  const cached = meta ? await (await caches.open(meta.cache)).match(pageKey(url.pathname)) : undefined;
+  return cached ? Response.error() : otherwise();
+}
 
 async function rscFetch(req) {
   if (self.navigator && self.navigator.onLine === false) return Response.error();
@@ -100,6 +111,8 @@ const withTimeout = (p, ms) => Promise.race([p, new Promise((_, reject) => setTi
 async function navigate(req, url) {
   const meta = await getMeta();
   const cached = meta ? await (await caches.open(meta.cache)).match(pageKey(url.pathname)) : undefined;
+  // Saved: the saved copy, without asking the server (newer versions come through prepare()).
+  if (cached) return cached;
   if (!(self.navigator && self.navigator.onLine === false)) {
     try {
       // With a saved copy, don't keep the user waiting on a slow connection.
@@ -159,6 +172,16 @@ const buildIdOf = (html) => {
 
 async function prepare(tell) {
   const meta = await getMeta();
+  // Which version the site serves (a static file): the same as the saved one → nothing to do.
+  // A site without it (older) answers 404 → the full check below.
+  if (meta) {
+    try {
+      const r = await fetch("/api/build", { cache: "no-store", credentials: "same-origin" });
+      if (r.ok && (await r.text()).trim() === meta.build) return { status: "ready" };
+    } catch {
+      return { status: "ready" }; // offline: keep using what we have
+    }
+  }
   let first;
   try {
     const res = await fetch("/welcome", { cache: "no-store", credentials: "same-origin" });
