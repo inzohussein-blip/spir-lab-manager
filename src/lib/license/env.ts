@@ -21,9 +21,11 @@ export function licenseStorage(): "license-db" | "app-db" | "embedded" {
   if (licenseDbUrl()) return "license-db";
   return (process.env.DATABASE_URL ?? "").trim() ? "app-db" : "embedded";
 }
-/** Codes need a database that survives restarts; on Vercel and on Firebase App Hosting / Cloud
- *  Run (K_SERVICE) the embedded one does not — its folder is wiped with every restart. */
-const throwAwayDisk = () => !!process.env.VERCEL || !!process.env.K_SERVICE;
+/** Codes need a database that survives restarts; on Vercel, Netlify (its functions run on AWS
+ *  Lambda) and Firebase App Hosting / Cloud Run (K_SERVICE) the embedded one does not — its folder
+ *  is wiped with every restart. */
+const throwAwayDisk = () =>
+  !!process.env.VERCEL || !!process.env.NETLIFY || !!process.env.AWS_LAMBDA_FUNCTION_NAME || !!process.env.K_SERVICE;
 export const durableStorage = () => !!licenseDbUrl() || !!(process.env.DATABASE_URL ?? "").trim() || !throwAwayDisk();
 export const passwordSet = () => !!(process.env.LICENSE_ADMIN_PASSWORD ?? "").trim();
 /** On only with the owner's password AND durable storage — never locks devices on a throw-away database. */
