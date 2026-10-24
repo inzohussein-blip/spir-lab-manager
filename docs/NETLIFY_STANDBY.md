@@ -57,7 +57,12 @@
    - `BACKUP` = عنوان Netlify، مثل `https://spir-lab-manager.netlify.app`
 4. افتح `https://spir-lab.<اسمك>.workers.dev/__failover`: يجب أن يظهر `"ok": true` للاثنين.
 
-(أو من سطر الأوامر: عدّل العنوانين في `deploy/failover-worker/wrangler.toml` ثم `npx wrangler deploy` من ذلك المجلد.)
+**إن ربطت الـ Worker بمستودع GitHub** (Workers Builds) ليُنشر مع كل رفع: Worker → Settings → **Build** واجعل
+**Root directory** = `deploy/failover-worker` و**Deploy command** = `npx wrangler deploy`. وتأكد أن اسم الـ Worker هو
+نفسه `name` في `deploy/failover-worker/wrangler.toml` (حالياً `spir-lab-manager`) — عدّل أحدهما ليتطابقا، وإلا يفشل البناء.
+المتغيران `PRIMARY` و`BACKUP` يبقيان في لوحة Cloudflare ولا يمسحهما النشر (`keep_vars`).
+
+(أو من سطر الأوامر: `npx wrangler deploy` من المجلد `deploy/failover-worker`، ثم المتغيران في اللوحة.)
 
 لاحقاً إن اشتريت نطاقاً: Worker → Settings → **Domains & Routes** وأضفه — الـ Worker نفسه يخدمه. لكن تغيير العنوان
 مرة أخرى يعني نقل العملاء مرة أخرى (الخطوة 3)، فالأفضل اختيار العنوان النهائي من البداية.

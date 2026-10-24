@@ -1,13 +1,16 @@
 # Cloudflare Worker: one address in front of the main site and its standby (docs/NETLIFY_STANDBY.md).
-# Deploy from this folder with:  npx wrangler deploy
-# Or paste worker.mjs into a new Worker in the Cloudflare dashboard and set the two variables there.
+#
+# Built by Cloudflare from GitHub (Workers Builds): in the Worker's Settings → Build set
+#   Root directory = deploy/failover-worker      Deploy command = npx wrangler deploy
+# Or from this folder:  npx wrangler deploy
+#
+# The name must be the Worker's name in Cloudflare (a build from GitHub stops when they differ).
 
-name = "spir-lab"
+name = "spir-lab-manager"
 main = "worker.mjs"
 compatibility_date = "2026-10-01"
 workers_dev = true
 
-[vars]
-# The two copies of the site, without a trailing slash. Replace with your own addresses.
-PRIMARY = "https://spir-lab-manager.vercel.app"
-BACKUP = "https://spir-lab-manager.netlify.app"
+# PRIMARY and BACKUP (the two sites' addresses) are set in the dashboard: Worker → Settings →
+# Variables and Secrets. keep_vars stops each deploy from removing them.
+keep_vars = true
