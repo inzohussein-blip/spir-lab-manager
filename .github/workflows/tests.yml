@@ -47,6 +47,9 @@ jobs:
       - name: Lint (errors fail; warnings are listed)
         run: npm run -s lint
 
+      - name: Unit tests (the failover Worker in front of the two sites)
+        run: npm test
+
       - name: Test image for the project image library (not committed)
         run: node tests/e2e/make-test-image.cjs
 

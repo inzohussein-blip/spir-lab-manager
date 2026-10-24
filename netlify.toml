@@ -1,0 +1,12 @@
+# Netlify — the free standby copy of the site (docs/NETLIFY_STANDBY.md). Vercel ignores this file.
+# Netlify recognises Next.js and runs it with its own Next.js runtime; nothing else is needed here.
+# Every environment variable must match the main site's (Vercel) — set them in Netlify's
+# Site configuration → Environment variables, never in this file.
+
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "22"
+  NEXT_TELEMETRY_DISABLED = "1"
