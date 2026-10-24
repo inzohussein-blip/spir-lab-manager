@@ -220,7 +220,7 @@ export interface OwnerPrefs {
   doctorsOn: boolean;
 }
 export const DEFAULT_PREFS: OwnerPrefs = {
-  defaultDays: 365, defaultModules: [...DEFAULT_MODULES], trialDays: 7, soonDays: 14, continuityDays: 0, adminNeedsOwnDb: true,
+  defaultDays: 365, defaultModules: [...DEFAULT_MODULES], trialDays: 7, soonDays: 14, continuityDays: 90, adminNeedsOwnDb: true,
   multiDevice: false, selfSignup: false, errorLog: false, dataExport: false, connectRelay: false, connectPublic: true, doctorsOn: true,
 };
 const within = (v: unknown, min: number, max: number, dflt: number) => {
