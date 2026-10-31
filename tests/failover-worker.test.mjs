@@ -6,8 +6,8 @@ import http from "node:http";
 import { route, resetState, DOWN_MS } from "../deploy/failover-worker/worker.mjs";
 
 const FRONT = "https://spir-lab.example.workers.dev";
-const mode = { primary: "ok", backup: "ok" };
-const seen = { primary: [], backup: [] };
+const mode = { primary: "ok", backup: "ok", backup2: "ok" };
+const seen = { primary: [], backup: [], backup2: [] };
 
 function site(name) {
   return http.createServer((req, res) => {
@@ -25,7 +25,7 @@ function site(name) {
     });
   });
 }
-const servers = { primary: site("primary"), backup: site("backup") };
+const servers = { primary: site("primary"), backup: site("backup"), backup2: site("backup2") };
 const env = {};
 before(async () => {
   for (const [k, s] of Object.entries(servers)) await new Promise((r) => s.listen(0, "127.0.0.1", r));
@@ -33,7 +33,11 @@ before(async () => {
   env.BACKUP = `http://127.0.0.1:${servers.backup.address().port}/`;
 });
 after(() => { for (const s of Object.values(servers)) s.close(); });
-beforeEach(() => { mode.primary = "ok"; mode.backup = "ok"; seen.primary = []; seen.backup = []; resetState(); });
+beforeEach(() => {
+  for (const k of Object.keys(mode)) { mode[k] = "ok"; seen[k] = []; }
+  delete env.BACKUP2; resetState();
+});
+const withBackup2 = () => { env.BACKUP2 = `http://127.0.0.1:${servers.backup2.address().port}`; };
 
 const get = (path, now) => route(new Request(FRONT + path), env, now);
 
@@ -97,10 +101,48 @@ test("both out of reach: a clear 503", async () => {
   assert.equal(r.status, 503);
 });
 
+test("a second standby (BACKUP2) answers when the first two cannot", async () => {
+  withBackup2();
+  mode.primary = "503"; mode.backup = "503";
+  const r = await route(new Request(FRONT + "/api/x", { method: "POST", body: "saved" }), env);
+  assert.equal(await r.text(), "backup2:POST:saved");
+  assert.equal(r.headers.get("x-served-by"), "backup2");
+  assert.equal(seen.backup2.length, 1, "sent once");
+});
+
+test("the second standby is not asked while the first one answers", async () => {
+  withBackup2();
+  mode.primary = "503";
+  assert.equal(await (await get("/")).text(), "backup:GET:");
+  assert.equal(seen.backup2.length, 0);
+});
+
+test("sites that failed lately are tried last, then in their place again", async () => {
+  withBackup2();
+  const saved = { ...env };
+  env.PRIMARY = "http://127.0.0.1:9"; env.BACKUP = "http://127.0.0.1:9";
+  const t = Date.now();
+  assert.equal((await get("/a", t)).headers.get("x-served-by"), "backup2");
+  Object.assign(env, saved);
+  assert.equal((await get("/b", t + 1000)).headers.get("x-served-by"), "backup2", "the two that failed rest for a while");
+  assert.equal((await get("/c", t + DOWN_MS + 1000)).headers.get("x-served-by"), "primary");
+});
+
+test("all of them failing with a hosting error: the last answer is passed on", async () => {
+  withBackup2();
+  mode.primary = "503"; mode.backup = "503"; mode.backup2 = "503";
+  const r = await get("/");
+  assert.equal(r.status, 503);
+  assert.equal(r.headers.get("x-served-by"), "backup2");
+});
+
 test("/__failover reports both sites", async () => {
   mode.backup = "503";
   const r = await get("/__failover");
   const j = await r.json();
   assert.equal(j.primary.ok, true);
   assert.equal(j.backup.ok, false);
+  assert.equal(j.backup2, undefined, "no second standby set");
+  withBackup2();
+  assert.equal((await (await get("/__failover")).json()).backup2.ok, true);
 });

@@ -14,6 +14,7 @@
 > و[`docs/Laboratory_App_Specification.pdf`](docs/Laboratory_App_Specification.pdf).
 > استمرارية العمل إذا توقف الموقع: [`docs/CONTINUITY.md`](docs/CONTINUITY.md).
 > موقعان مجانيان (Vercel وNetlify) بعنوان واحد ينتقل وحده إلى الاحتياطي إذا توقف الأساسي: [`docs/NETLIFY_STANDBY.md`](docs/NETLIFY_STANDBY.md).
+> وموقع ثالث على جهازك أو على خادم مستأجر خلف العنوان نفسه: [`docs/SELF_HOST_STANDBY.md`](docs/SELF_HOST_STANDBY.md).
 > استضافة احتياطية على Firebase بالعنوان نفسه إذا توقف Vercel: [`docs/FIREBASE_STANDBY.md`](docs/FIREBASE_STANDBY.md).
 
 ## أجزاء المنصة

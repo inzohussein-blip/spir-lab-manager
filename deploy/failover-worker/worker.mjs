@@ -1,29 +1,30 @@
 /**
- * One address in front of two copies of the site (docs/NETLIFY_STANDBY.md): every request goes to
- * the main site (PRIMARY, e.g. Vercel) and, when it does not answer, to the standby (BACKUP, e.g.
- * Netlify). Clients keep the Worker's address, so what each browser keeps (the stations' data, the
- * device's activation, the sign-in) stays where it is whichever site answers.
+ * One address in front of several copies of the site (docs/NETLIFY_STANDBY.md): every request goes
+ * to the main site (PRIMARY, e.g. Vercel) and, when it does not answer, to the standby (BACKUP, e.g.
+ * Netlify), then to the second standby (BACKUP2, e.g. your own computer or a rented server —
+ * docs/SELF_HOST_STANDBY.md). Clients keep the Worker's address, so what each browser keeps (the
+ * stations' data, the device's activation, the sign-in) stays where it is whichever site answers.
  *
  * Runs on Cloudflare Workers (free plan: a *.workers.dev address, 100,000 requests a day).
- * Settings (Worker → Settings → Variables): PRIMARY and BACKUP — the two sites' addresses.
+ * Settings (Worker → Settings → Variables): PRIMARY, BACKUP and (optional) BACKUP2 — the sites' addresses.
  *
- * When does it switch? When the main site cannot be reached, takes longer than TIMEOUT_MS to start
+ * When does it switch? When a site cannot be reached, takes longer than TIMEOUT_MS to start
  * answering, or answers with a hosting error (502 / 503 / 504, or Vercel's own error page). A page
  * error of the app itself (any other status) is passed on as it is: the standby, with the same code
- * and database, would give the same answer. After a failure the standby is tried first for
- * DOWN_MS, then the main site again.
+ * and database, would give the same answer. A site that failed is tried last for DOWN_MS, then in
+ * its place again.
  *
- * A POST (saving, signing in…) goes to the standby only when the main site could not have taken it:
- * no connection, or a hosting error. After a timeout it is not sent twice.
+ * A POST (saving, signing in…) goes to the next site only when the one before could not have taken
+ * it: no connection, or a hosting error. After a timeout it is not sent twice.
  */
 
 export const TIMEOUT_MS = 15_000;
 export const DOWN_MS = 60_000;
 const RETRY_STATUS = new Set([502, 503, 504]);
 
-/** The main site's last failure (per Worker instance; each instance learns on its own). */
-let primaryDownUntil = 0;
-export const resetState = () => { primaryDownUntil = 0; };
+/** Each site's last failure (per Worker instance; each instance learns on its own). */
+let downUntil = {};
+export const resetState = () => { downUntil = {}; };
 
 const trim = (u) => String(u || "").trim().replace(/\/+$/, "");
 
@@ -66,48 +67,53 @@ function relay(res, origin, front, served) {
 }
 
 export async function route(req, env, now = Date.now()) {
-  const primary = trim(env.PRIMARY), backup = trim(env.BACKUP);
   const front = new URL(req.url);
-  if (!primary) return new Response("PRIMARY is not set (Worker → Settings → Variables).", { status: 500 });
+  const sites = [["primary", trim(env.PRIMARY)], ["backup", trim(env.BACKUP)], ["backup2", trim(env.BACKUP2)]].filter(([, o]) => o);
+  if (!trim(env.PRIMARY)) return new Response("PRIMARY is not set (Worker → Settings → Variables).", { status: 500 });
+  const resting = (name) => now < (downUntil[name] ?? 0);
 
-  // Which site answers now, both of them at once (for the owner, and for an uptime monitor).
+  // Which site answers now, all of them at once (for the owner, and for an uptime monitor).
   if (front.pathname === "/__failover") {
     const probe = async (o) => {
-      if (!o) return null;
       const t = Date.now();
       try { const r = await fetch(o + "/api/time", { signal: AbortSignal.timeout(8000) }); return { ok: r.ok, status: r.status, ms: Date.now() - t }; }
       catch (e) { return { ok: false, error: String(e && e.name || e), ms: Date.now() - t }; }
     };
-    const [p, b] = await Promise.all([probe(primary), probe(backup)]);
-    return Response.json({ primary: p, backup: b, primaryResting: now < primaryDownUntil }, { headers: { "cache-control": "no-store" } });
+    const out = { primary: null, backup: null };
+    await Promise.all(sites.map(async ([name, o]) => { out[name] = { ...(await probe(o)), resting: resting(name) }; }));
+    return Response.json({ ...out, primaryResting: resting("primary") }, { headers: { "cache-control": "no-store" } });
   }
 
   const safe = req.method === "GET" || req.method === "HEAD";
-  // The body is read once so it can be sent again to the standby.
+  // The body is read once so it can be sent again to the next site.
   const body = safe ? undefined : await req.arrayBuffer();
-  const order = backup && now < primaryDownUntil ? [[backup, "backup"], [primary, "primary"]] : [[primary, "primary"], [backup, "backup"]];
+  // The sites in their order, the ones that failed lately at the end.
+  const order = [...sites.filter(([n]) => !resting(n)), ...sites.filter(([n]) => resting(n))];
   let last = null;
   for (let i = 0; i < order.length; i++) {
-    const [origin, served] = order[i];
-    if (!origin) continue;
-    const isLast = i === order.length - 1 || !order[i + 1][0];
+    const [served, origin] = order[i];
+    const isLast = i === order.length - 1;
     try {
       const res = await forward(origin, req, body, front, TIMEOUT_MS);
-      if (!hostingFailed(res) || isLast) {
-        if (served === "primary" && !hostingFailed(res)) primaryDownUntil = 0;
+      if (!hostingFailed(res)) {
+        downUntil[served] = 0;
         return relay(res, origin, front, served);
       }
-      if (served === "primary") primaryDownUntil = now + DOWN_MS;
-      last = res;
+      downUntil[served] = now + DOWN_MS;
+      if (isLast) return relay(res, origin, front, served);
+      last = [res, origin, served];
     } catch (e) {
-      if (served === "primary") primaryDownUntil = now + DOWN_MS;
+      downUntil[served] = now + DOWN_MS;
       // A POST that timed out may have been done already: not sent again.
       const timedOut = e === "timeout" || (e && (e.name === "AbortError" || e.name === "TimeoutError"));
       if (!safe && timedOut) return new Response("The site took too long to answer. Check before trying again.", { status: 504, headers: { "x-served-by": served } });
-      if (isLast) return new Response("Both copies of the site are out of reach. The stations keep working on this device.", { status: 503, headers: { "retry-after": "30", "x-served-by": served } });
+      if (isLast) {
+        if (last) return relay(last[0], last[1], front, last[2]);
+        return new Response("Every copy of the site is out of reach. The stations keep working on this device.", { status: 503, headers: { "retry-after": "30", "x-served-by": served } });
+      }
     }
   }
-  return last ? relay(last, order[order.length - 1][0], front, "backup") : new Response("No site answered.", { status: 503 });
+  return new Response("No site answered.", { status: 503 });
 }
 
 export default {

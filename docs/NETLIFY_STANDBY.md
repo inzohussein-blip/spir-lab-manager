@@ -22,6 +22,7 @@
 - خطأ من التطبيق نفسه لا يُحوَّل: الاحتياطي بالكود والقاعدة نفسيهما سيعطي الجواب نفسه.
 - الحفظ (POST) يُرسل للاحتياطي فقط إذا لم يصل للأساسي أصلاً، فلا يُحفظ شيء مرتين.
 - `/__failover` على عنوان الـ Worker يعرض حال الموقعين الآن.
+- موقع ثالث اختياري (`BACKUP2`) على جهازك أو على خادم مستأجر: [`SELF_HOST_STANDBY.md`](SELF_HOST_STANDBY.md).
 
 ## الخطوة 1 — الموقع الاحتياطي على Netlify
 1. من [app.netlify.com](https://app.netlify.com): **Add new project → Import an existing project → GitHub**،

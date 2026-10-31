@@ -5,6 +5,10 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
+# The public settings are written into the pages, and into the version id: the same values as the
+# main site, or this copy counts as another version (deploy/standby-server passes them from its .env).
+ARG NEXT_PUBLIC_BASE_URL=""
+ARG NEXT_PUBLIC_STATION_SYNC=""
 RUN NEXT_TELEMETRY_DISABLED=1 npm run build
 ENV NODE_ENV=production PORT=3000 PGLITE_DATA_DIR=/data NEXT_TELEMETRY_DISABLED=1
 VOLUME /data

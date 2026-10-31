@@ -8,13 +8,18 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 // carry the same id: switching between them is not taken for an update. LAB_BUILD overrides it.
 const LAB_BUILD = (process.env.LAB_BUILD ?? "").trim() || (() => {
   const h = createHash("sha256");
+  // Only the NEXT_PUBLIC_ settings the code uses, and only when set: the ones a host adds by itself
+  // (Vercel's NEXT_PUBLIC_VERCEL_URL changes with every deployment) would give each site its own id.
+  const used = new Set();
   const walk = (p) => {
     if (!existsSync(p)) return;
     if (statSync(p).isDirectory()) { for (const f of readdirSync(p).sort()) walk(`${p}/${f}`); return; }
-    h.update(p); h.update(readFileSync(p));
+    const data = readFileSync(p);
+    h.update(p); h.update(data);
+    if (p.startsWith("src/")) for (const m of data.toString("latin1").matchAll(/NEXT_PUBLIC_[A-Z0-9_]+/g)) used.add(m[0]);
   };
   for (const p of ["src", "public", "supabase", "package-lock.json", "next.config.mjs"]) walk(p);
-  for (const [k, v] of Object.entries(process.env).filter(([k]) => k.startsWith("NEXT_PUBLIC_")).sort()) h.update(`${k}=${v}`);
+  for (const k of [...used].sort()) if (process.env[k]) h.update(`${k}=${process.env[k]}`);
   return h.digest("hex").slice(0, 16);
 })();
 // The version people see (welcome page, code manager): when this build was made, Baghdad time.
